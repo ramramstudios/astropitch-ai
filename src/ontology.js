@@ -1,13 +1,9 @@
 /**
  * The AstroPitch ontology.
  *
- * Derived from AstroPitch.sql, whose `Sun.sunPitch` column contains the thesis:
- *
- *     "aries = A, house = timbre (9th house: travel, philosophy)"
- *
- * The zodiac has 12 signs of 30 degrees. An octave has 12 semitones. The SQL's
- * Zodiac table walks chromatically from Aries (A, 440Hz) to Pisces (G#, 830.61Hz),
- * so the mapping is exact and lossless:
+ * The mapping begins with a simple correspondence: the zodiac has 12 signs of
+ * 30 degrees, and an octave has 12 semitones. Walking chromatically from Aries
+ * (A, 440 Hz) to Pisces (G#, 830.61 Hz) makes the mapping exact and lossless:
  *
  *     30 degrees of ecliptic longitude == 1 semitone
  *     one trip around the zodiac       == one octave
@@ -112,8 +108,8 @@ export const SIGNS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Houses — timbre. Meanings are taken verbatim from the SQL's House table;
-// each one is translated into a synthesis recipe in audio/voices.js.
+// Houses — timbre. Each archetype is translated into a synthesis recipe in
+// audio/voices.js.
 // ---------------------------------------------------------------------------
 
 export const HOUSES = [
@@ -132,9 +128,8 @@ export const HOUSES = [
 ];
 
 // ---------------------------------------------------------------------------
-// Bodies — register and role in the mix.
-// The SQL modelled Sun / Moon / Ascendant as first-class tables; they stay the
-// loudest three voices here.
+// Bodies — register and role in the mix. Sun, Moon, and Ascendant are the
+// loudest three voices.
 // ---------------------------------------------------------------------------
 
 export const BODIES = [

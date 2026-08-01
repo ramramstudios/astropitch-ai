@@ -246,8 +246,8 @@
             <input type="range" id="refA" min="392" max="466" step="1" value="440">
           </label>
           <p class="note">
-            The Zodiac table in the original database pinned Aries to A 440.
-            Everything else follows from wherever you put A.
+            Aries begins at the reference A. Everything else follows from
+            wherever you put that A.
           </p>
         </div>
 
@@ -297,16 +297,89 @@
 
       <h3>The mapping</h3>
       <p>
-        The original AstroPitch database gave every sign a pitch: Aries A 440,
-        Taurus A♯, Gemini B, and so on up to Pisces G♯. That is a chromatic
-        scale laid around a circle — twelve signs of 30° against twelve
-        semitones. So the conversion is not a lookup table, it is arithmetic:
+        Aries begins at A 440, Taurus at A♯, Gemini at B, and so on up to
+        Pisces at G♯. This lays a chromatic scale around the zodiac: twelve
+        signs of 30° against twelve semitones. The conversion is arithmetic:
       </p>
       <p class="formula">frequency = A × 2<sup>(longitude / 360)</sup></p>
       <p>
         One trip around the zodiac is one octave. A planet at 14°22′ Aries is
         not "an A" — it is an A raised by 29 cents, and you can hear it.
       </p>
+
+      <h3>Chart as notation</h3>
+      <p>
+        The same mapping can be read on a staff. First, two placements make an
+        aspect dyad; add a third placement and the three pitch classes can make
+        a triad. A full chart is the larger voicing that results when every
+        sounding body keeps its own register.
+      </p>
+      <figure class="notation-figure">
+        <svg viewBox="0 0 600 520" role="img" aria-labelledby="notationTitle notationDesc">
+          <title id="notationTitle">AstroPitch notation examples</title>
+          <desc id="notationDesc">An A and C dyad for an Aries-Cancer square, an A minor triad made by adding Scorpio E, and an eleven-voice chart voicing across a grand staff.</desc>
+          <defs>
+            <g id="staff">
+              <path class="notation-line" d="M44 0H560 M44 12H560 M44 24H560 M44 36H560 M44 48H560" />
+            </g>
+            <g id="note">
+              <ellipse class="notation-notehead" cx="0" cy="0" rx="7" ry="5.2" transform="rotate(-18)" />
+              <path class="notation-stem" d="M6 -1V-37" />
+            </g>
+          </defs>
+
+          <text class="notation-heading" x="44" y="20">1 · aspect dyad</text>
+          <text class="notation-detail" x="556" y="20" text-anchor="end">Aries 0° + Cancer 0° = A–C</text>
+          <use href="#staff" y="48" />
+          <use href="#note" x="250" y="78" />
+          <use href="#note" x="350" y="66" />
+          <text class="notation-label" x="250" y="117" text-anchor="middle">A</text>
+          <text class="notation-label" x="350" y="117" text-anchor="middle">C</text>
+          <path class="notation-bracket" d="M250 132V138H350V132" />
+          <text class="notation-detail" x="300" y="153" text-anchor="middle">square → minor third</text>
+
+          <text class="notation-heading" x="44" y="190">2 · three placements, voiced together</text>
+          <text class="notation-detail" x="556" y="190" text-anchor="end">+ Scorpio 0° = E</text>
+          <use href="#staff" y="218" />
+          <use href="#note" x="300" y="248" />
+          <use href="#note" x="300" y="236" />
+          <use href="#note" x="300" y="224" />
+          <text class="notation-label" x="324" y="251">A</text>
+          <text class="notation-label" x="324" y="239">C</text>
+          <text class="notation-label" x="324" y="227">E</text>
+          <text class="notation-detail" x="300" y="290" text-anchor="middle">A minor triad</text>
+
+          <text class="notation-heading" x="44" y="326">3 · full chart voicing</text>
+          <text class="notation-detail" x="556" y="326" text-anchor="end">11 sounding bodies across several octaves</text>
+          <use href="#staff" y="350" />
+          <use href="#staff" y="428" />
+          <path class="notation-brace" d="M31 350C16 350 16 374 31 389C16 404 16 428 31 476" />
+          <path class="notation-line" d="M44 338H560 M44 488H560" />
+
+          <use href="#note" x="278" y="488" />
+          <use href="#note" x="292" y="452" />
+          <use href="#note" x="306" y="428" />
+          <use href="#note" x="320" y="416" />
+          <use href="#note" x="334" y="458" />
+          <use href="#note" x="348" y="446" />
+          <use href="#note" x="362" y="434" />
+          <use href="#note" x="376" y="422" />
+          <use href="#note" x="390" y="410" />
+          <use href="#note" x="404" y="386" />
+          <use href="#note" x="418" y="374" />
+
+          <text class="notation-detail" x="300" y="507" text-anchor="middle">Pl  Sa  Mo  Ma</text>
+          <text class="notation-detail" x="432" y="507" text-anchor="middle">Asc  Su  Ve  Ju  Ne  Me  Ur</text>
+        </svg>
+        <figcaption>
+          The first two examples use exact sign beginnings for clarity: 90° is
+          three semitones, and adding Scorpio's E completes A–C–E. The chart
+          staff is schematic rather than a particular natal chart. In Bloom,
+          its eleven voices form a chordal aggregate, but body registers spread
+          that aggregate across several octaves instead of crushing it into one
+          eleven-note cluster.
+        </figcaption>
+      </figure>
 
       <h3>Why aspects are intervals</h3>
       <p>
@@ -319,27 +392,49 @@
         trine landing on a major third.
       </p>
 
-      <h3>What makes the timbre</h3>
-      <p>
-        A note in the database was <em>sign + house</em>, and one of its rows
-        reads <em>"aries = A, house = timbre"</em>. That is the whole design:
-      </p>
+      <h3>How to read a placement</h3>
+      <p>A placement is one instrument assembled from several independent layers:</p>
       <ul class="plain">
-        <li><strong>Sign → pitch.</strong> Continuous in ecliptic longitude.</li>
-        <li><strong>Element → material.</strong> The oscillator stack, harmonic
-          content, noise layer and body resonance. Fire is dense and driven,
-          Earth is low-order and wooden, Air is hollow with audible breath,
-          Water is detuned and never still.</li>
-        <li><strong>House → gesture.</strong> How the material is played:
-          the 2nd is struck, the 5th sings, the 6th runs to a clock, the 7th
-          is doubled, the 11th is an inharmonic bell, the 12th arrives before
-          it begins.</li>
-        <li><strong>Modality → phrasing.</strong> Cardinal strikes and moves on,
-          fixed holds, mutable wavers.</li>
-        <li><strong>Planet → register and role.</strong> Saturn two octaves
-          down carrying structure, Mercury an octave up, the Sun, Moon and
-          Ascendant loudest.</li>
+        <li><strong>Sign + exact degree → pitch.</strong> The fundamental moves
+          continuously with longitude in equal temperament: a degree is 3⅓
+          cents. Sign also supplies element and modality.</li>
+        <li><strong>Element → material.</strong> Fire is bright and driven;
+          Earth is low-order, wooden, and sub-heavy; Air is hollow, breathy,
+          and wide; Water is detuned, drifting, and wet.</li>
+        <li><strong>House → gesture.</strong> It performs that material. The
+          2nd is struck, 3rd speaks with a flutter, 4th is muffled and close,
+          5th sings, 6th is gated, 7th is doubled, 11th is an inharmonic bell,
+          and 12th swells in before it arrives.</li>
+        <li><strong>Modality → phrasing.</strong> Cardinal begins immediately,
+          fixed sustains, mutable carries the most movement and vibrato.</li>
+        <li><strong>Planetary body → register and role.</strong> It uses the
+          same sign × house instrument but changes octave and prominence:
+          Moon and Mars sit an octave down, Mercury and Uranus an octave up,
+          Saturn and Pluto two octaves down. Sun, Moon, and Ascendant anchor
+          the mix.</li>
       </ul>
+
+      <h3>Same sign, different house</h3>
+      <p>
+        Moon in Virgo is mutable Earth in either house: a D-region, wooden,
+        low-order sound, voiced one octave down for the Moon. In the <strong>3rd
+        house</strong>, its bright transient, extra noise, short contour, and
+        brief flutter make it speak. In the <strong>4th house</strong>, the same
+        material starts softer and darker, with less noise and more sub, so it
+        sounds muffled, close, and warm. The house changes articulation,
+        spectral envelope, density, and space—not Virgo's material or the
+        Moon's register.
+      </p>
+
+      <h3>What aspects change</h3>
+      <p>
+        Aspects do not alter an individual voice's oscillator recipe. They make
+        two placements an interval when heard together; the aspect list above
+        gives those intervals. During an aspect audition both bodies use the
+        same octave, so the interval is direct. Tighter aspects are treated as
+        more important: they rise first in the contact list and make their
+        bodies surface more often in Drone mode.
+      </p>
 
       <h3>The astronomy</h3>
       <p>
@@ -368,7 +463,7 @@
       </ul>
 
       <p class="colophon">
-        Best with headphones. Built from a 2021 phpMyAdmin dump.
+        Best with headphones.
       </p>
     </div>
   </div>

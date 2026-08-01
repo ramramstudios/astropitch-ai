@@ -8,9 +8,9 @@ API.
 
 ## The idea
 
-The original AstroPitch database gave every sign a pitch — Aries A 440, Taurus
-A♯, Gemini B, on up to Pisces G♯. That is a chromatic scale wrapped around a
-circle. Twelve signs of 30° against twelve semitones:
+Each sign occupies a pitch region — Aries begins at A 440, Taurus at A♯,
+Gemini at B, and so on up to Pisces at G♯. That is a chromatic scale wrapped
+around a circle: twelve signs of 30° against twelve semitones.
 
 ```
 30° of ecliptic longitude  ==  1 semitone
@@ -38,30 +38,128 @@ assumptions:
 The tritone landing on the opposition is a happy accident. So is the major third
 landing on the trine.
 
-## What makes the sound
+## What makes a placement sound the way it does
 
-One row of the old `Sun` table reads `aries = A, house = timbre`. That line is
-the whole architecture. Four independent axes compose into one voice:
+A placement is a stack of independent musical decisions. The sign supplies the
+pitch region, element supplies the source material, house supplies the
+performance gesture, modality supplies basic phrasing, and the planetary body
+places the result in the ensemble. Aspects describe relationships between
+placements; they do not replace either placement's instrument.
 
-| Axis         | Controls | What it actually does                                                     |
-|--------------|----------|---------------------------------------------------------------------------|
-| **Sign**     | pitch    | Continuous in longitude, so degrees within a sign are audible             |
-| **Element**  | material | Oscillator stack, harmonic content, noise layer, body resonance, drift    |
-| **House**    | gesture  | How that material is played — struck, sung, gated, doubled, blurred       |
-| **Modality** | phrasing | Envelope length, and how much the voice moves while it sounds             |
-| **Planet**   | register | Octave and role in the mix; Saturn two octaves down, Mercury one up       |
+| Layer | Comes from | What it changes in sound |
+|---|---|---|
+| **Pitch** | Sign + exact degree | Fundamental pitch. In equal temperament, each degree raises it by 3⅓ cents; pitch-tracking filters and resonant body move with it. |
+| **Material** | Element | Oscillator stack, harmonic density, noise, sub, resonance, spectral tilt, drift, and default space. |
+| **Gesture** | House | Attack and filter contours, plus behavior such as gating, glide, doubling, or FM. |
+| **Phrasing** | Modality | Base ADSR contour and vibrato amount, multiplied by the house gesture. |
+| **Register / role** | Planetary body | Octave, gain, arrangement priority, and stereo position—not a separate timbre recipe. |
+| **Relationship** | Aspects | The interval two placements form, and the importance or activity of that pairing. |
 
-Element is the matter, house is the form. Fire is three sawtooths beating against
-each other into soft clipping; Earth is triangles over a sub with everything
-above the fourth partial rolled off; Air is hollow odd harmonics with a column of
-band-passed breath tracking the pitch; Water is sine cores held apart by detune,
-slow filter drift and low-index FM.
+In brief: **the sign gives the note and its substance; the house gives that
+substance a way of being played; the body says where it sits in the texture;
+aspects say how it sounds with the other voices.**
 
-The house then decides how you play it. The 2nd is struck. The 5th scoops up to
-pitch and sings. The 6th runs to a clock. The 7th is doubled and panned apart.
-The 11th is an inharmonic FM bell. The 12th arrives before it begins.
+### Sign, element, and modality
 
-That is 12 × 12 × 3 distinct instruments, none of them samples.
+The sign is not a single preset. It supplies a pitch region, an element, and a
+modality. In equal temperament, moving from 0° to 30° within a sign raises the
+fundamental by a semitone. In Just and Pythagorean modes, AstroPitch
+intentionally quantises to the sign pitch class, so degree no longer changes the
+tuned fundamental.
+
+| Element | Heard as | Synthesis material |
+|---|---|---|
+| **Fire** | bright, dense, urgent | Beating saws and square wave, sharp high-passed attack noise, soft clipping, bright tilt |
+| **Earth** | weighty, wooden, contained | Triangles and sines over a strong sub, rolled-off upper partials, box resonance |
+| **Air** | hollow, breathy, wide | Odd-rich pulse material, octave shadow, pitch-tracking band-passed breath, broad stereo image |
+| **Water** | smooth, unstable, submerged | Detuned sine/triangle core, slow filter drift, low-index FM, long reverb tail |
+
+| Modality | Heard as | Base phrasing |
+|---|---|---|
+| **Cardinal** | initiating | Near-instant onset, lower sustain, shorter decay |
+| **Fixed** | held | Slower onset, high sustain, long release |
+| **Mutable** | changing | Moderate onset and sustain, with the most base vibrato |
+
+### House: the performance gesture
+
+Houses act on the element's material; they do not replace it. A house can alter
+an envelope or filter, change noise or sub weight, widen the image, or add a
+time-based behavior.
+
+| House | Instruction | Audible result |
+|---|---|---|
+| 1st | Dry, immediate, narrow | Naked and forward |
+| 2nd | Strike; more noise and sub; rapid decay | Physical, percussive mass |
+| 3rd | Hard transient and brief 11 Hz flutter | Quick, articulate, speech-like attack |
+| 4th | Slow, muffled onset; less noise, more sub | Warm, interior, heard through a wall |
+| 5th | Pitch scoop and delayed vibrato | Sung, expressive, showy |
+| 6th | Strict 8 Hz amplitude gate | Measured, clocked pulse |
+| 7th | Delayed, panned 9-cent double | A paired voice, slightly apart |
+| 8th | Extra sub and drive; slow filter opening | Growling and transforming over time |
+| 9th | Slow contour, wide image, strong reverb/delay | Distant, expansive horizon |
+| 10th | Filter overshoot and added drive | Brass-like, declarative projection |
+| 11th | Inharmonic FM | Metallic, synthetic bell |
+| 12th | Very long swell, glide, mostly reflected sound | Dissolved, pre-echoing arrival |
+
+### Planetary body: register and orchestration
+
+The body identifies the part in the ensemble. A Moon, Sun, or Mercury in the
+same sign and house starts with the same element × house × modality instrument;
+the body shifts its octave, changes its mix weight, and gives it a role. The Sun,
+Moon, and Ascendant are the loudest anchors, while outer planets are more
+atmospheric. Low bodies are also trimmed for headroom.
+
+| Body | Register relative to the sign pitch | Role |
+|---|---:|---|
+| Ascendant / Sun | unshifted | outward voice / fundamental |
+| Moon / Mars | one octave down | body beneath the tone / transient |
+| Mercury / Uranus | one octave up | fast upper partial / interruption |
+| Venus / Jupiter / Neptune | unshifted | consonance / expansion / wash |
+| Saturn / Pluto | two octaves down | structural bass / underlying drone |
+
+The Midheaven is displayed as an angle and target pitch, but does not sound as a
+standalone voice.
+
+### Example: Moon in Virgo, 3rd house vs. 4th house
+
+Assume the same exact Virgo degree. Virgo is mutable Earth, so both placements
+begin with the same D-region pitch, triangle/sine material, box resonance,
+strong low end, and mutable movement. As the Moon, both are voiced one octave
+down and given anchor-level prominence.
+
+| Same Moon in Virgo | House changes | Result |
+|---|---|---|
+| **3rd house** | Fast bright filter attack, doubled attack noise, short envelope, brief 11 Hz flutter, and extra delay | A low, wooden voice that speaks: tactile consonant, quick flutter, short decay |
+| **4th house** | Slow attack, low filter starting point, less noise, reinforced sub, narrower stereo, little delay | A low, wooden voice heard inside a room: muffled, weighty, close, and warm |
+
+Virgo remains Earth and the Moon remains low and prominent. The house changes
+**articulation, spectral envelope, density, and space**—the same instrument is
+made to speak or to settle into the room.
+
+### Aspects: interval and interaction
+
+An aspect does not overwrite either placement's timbre. It becomes audible when
+the two placements are heard together: angular distance becomes an interval.
+During the aspect audition, both bodies are temporarily brought to the same
+octave, so the interval is literal rather than hidden by normal orchestration.
+
+| Aspect | Angle | Interval | Playback meaning |
+|---|---:|---|---|
+| Conjunction | 0° | unison | Near pitches beat at a rate set by their orb; exact is fused |
+| Sextile | 60° | major second | Close, stepwise two-note relation |
+| Square | 90° | minor third | Compact, darker third |
+| Trine | 120° | major third | Bright, stable third |
+| Quincunx | 150° | perfect fourth | Open fourth |
+| Opposition | 180° | tritone | The most unstable interval in this mapping |
+
+Exactness affects importance rather than any individual oscillator setting:
+exact contacts are ordered first, and in Drone mode bodies with tighter aspects
+surface more often. In an overlay, the strongest eight cross-chart contacts
+determine which bodies sound, so aspects also shape the texture's density.
+
+This yields 12 sign pitch/material combinations × 12 house gestures × 3 modal
+phrasings, before body register and relationships are applied. These are
+synthesized combinations, not samples.
 
 ## Chart inputs
 
@@ -235,5 +333,4 @@ src/
     wheel.js         SVG chart wheel + circular oscilloscope
     app.js           wiring
     starfield.js
-docs/AstroPitch.sql  the 2021 phpMyAdmin dump this is built from
 ```

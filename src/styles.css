@@ -1071,6 +1071,69 @@ body.is-modal-open { overflow: hidden; }
   text-align: center;
 }
 
+.notation-figure {
+  margin: 0 0 1.4rem;
+  padding: 1rem;
+  border: 1px solid var(--ink);
+  background: #f4f3ee;
+}
+
+.notation-figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--ink);
+}
+
+.notation-line,
+.notation-stem,
+.notation-bracket,
+.notation-brace {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.15;
+  vector-effect: non-scaling-stroke;
+}
+
+.notation-brace { stroke-width: 1.5; }
+
+.notation-notehead {
+  fill: currentColor;
+  stroke: none;
+}
+
+.notation-heading,
+.notation-detail,
+.notation-label {
+  fill: currentColor;
+  font-family: var(--mono);
+}
+
+.notation-heading {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.notation-detail {
+  fill: var(--graphite);
+  font-size: 8.6px;
+  letter-spacing: 0.025em;
+}
+
+.notation-label {
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.notation-figure figcaption {
+  margin-top: 0.8rem;
+  color: var(--graphite);
+  font-family: var(--serif);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 .modal-card ul.plain,
 .modal-card ul.aspect-key {
   margin: 0 0 1rem;
