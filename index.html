@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AstroPitch</title>
   <meta name="description" content="A natal chart synthesiser. 30 degrees of zodiac is one semitone, so aspects are intervals. Sign sets pitch, house sets gesture, element sets material.">
+  <script>
+    try {
+      if (localStorage.getItem('astropitch.theme') === 'dark') {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    } catch { /* The default light theme still works when storage is unavailable. */ }
+  </script>
   <link rel="stylesheet" href="src/styles.css">
   <link rel="icon" href="favicon.ico?v=6" sizes="any">
 </head>
@@ -27,7 +34,10 @@
     <section class="wheel-panel">
       <div class="wheel-kicker">
         <span>FIG. 01</span>
-        <button class="chart-help" id="aboutBtn" aria-haspopup="dialog">How it works ↗</button>
+        <div class="wheel-actions">
+          <button class="chart-help" id="settingsBtn" aria-haspopup="dialog">Settings</button>
+          <button class="chart-help" id="aboutBtn" aria-haspopup="dialog">How it works ↗</button>
+        </div>
       </div>
       <div class="wheel-holder" id="wheelHolder"></div>
 
@@ -478,6 +488,26 @@
       <p class="colophon">
         Best with headphones.
       </p>
+    </div>
+  </div>
+
+  <div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+    <div class="modal-card modal-card--settings">
+      <button class="modal-close" id="settingsClose" aria-label="Close settings">×</button>
+      <h2 id="settingsTitle">Settings</h2>
+      <div class="settings-list">
+        <div class="settings-item">
+          <div>
+            <h3>Dark mode</h3>
+            <p>Dark mode reverses the monochrome palette.</p>
+          </div>
+          <label class="theme-toggle">
+            <span class="sr-only">Dark mode</span>
+            <input type="checkbox" id="darkMode" role="switch">
+            <span aria-hidden="true"></span>
+          </label>
+        </div>
+      </div>
     </div>
   </div>
 

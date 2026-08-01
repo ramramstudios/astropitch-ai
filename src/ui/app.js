@@ -64,6 +64,7 @@ const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
 // so clearing one never silently rewrites the other.
 const DESIGN_KEY = 'astropitch.design.v1';
 const DESIGN_VERSION = 1;
+const THEME_KEY = 'astropitch.theme';
 
 const SOURCES = ['birth', 'signs', 'designer'];
 
@@ -164,6 +165,7 @@ function boot() {
   wireSoundControls();
   wireWheel();
   wireModal();
+  wireSettings();
   wireSidebar();
   wireKeyboard();
   applySource(state.source);
@@ -761,6 +763,55 @@ function wireModal() {
   });
 }
 
+function wireSettings() {
+  const modal = $('#settingsModal');
+  const card = modal.querySelector('.modal-card');
+  const toggle = $('#darkMode');
+  let returnTo = null;
+
+  const applyTheme = (theme) => {
+    const dark = theme === 'dark';
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    toggle.checked = dark;
+    try { localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light'); } catch { /* session-only preference */ }
+  };
+
+  const open = () => {
+    returnTo = document.activeElement;
+    modal.hidden = false;
+    document.body.classList.add('is-modal-open');
+    $('#settingsClose').focus();
+  };
+
+  const close = () => {
+    modal.hidden = true;
+    document.body.classList.remove('is-modal-open');
+    (returnTo ?? $('#settingsBtn')).focus();
+  };
+
+  toggle.checked = document.documentElement.dataset.theme === 'dark';
+  $('#settingsBtn').addEventListener('click', open);
+  $('#settingsClose').addEventListener('click', close);
+  toggle.addEventListener('change', () => applyTheme(toggle.checked ? 'dark' : 'light'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (modal.hidden) return;
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key !== 'Tab') return;
+    const focusable = card.querySelectorAll('button, [href], input, select, [tabindex]:not([tabindex="-1"])');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
@@ -807,7 +858,7 @@ function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
     const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (!$('#aboutModal').hidden) return;
+    if (!$('#aboutModal').hidden || !$('#settingsModal').hidden) return;
     if (e.key === '[' || e.key === ']') {
       collapseSide();
       return;

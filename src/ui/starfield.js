@@ -35,7 +35,11 @@ export class Starfield {
     const alpha = 0.045 + Math.min(0.025, this.level * 0.16);
 
     ctx.save();
-    ctx.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
+    // Keep the construction grid in the foreground colour so it remains a
+    // quiet line on either side of the monochrome theme switch.
+    const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = ink || '#0b0b0b';
     ctx.lineWidth = 1;
 
     for (let y = -20; y < h + 40; y += 72) {
