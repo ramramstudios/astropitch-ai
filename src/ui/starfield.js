@@ -47,18 +47,14 @@ export class Starfield {
     }
 
     // Radial construction lines, as if the natal wheel continued off page.
+    // They stop well short of the chart: rings and spokes drawn behind a ring
+    // and spoke diagram read as a second wheel and fight the one you are using.
+    const clear = Math.min(w, h) * 0.44;
     for (let i = 0; i < 24; i++) {
       const angle = (i / 24) * Math.PI * 2;
       ctx.beginPath();
-      ctx.moveTo(vx, vy);
+      ctx.moveTo(vx + Math.cos(angle) * clear, vy + Math.sin(angle) * clear);
       ctx.lineTo(vx + Math.cos(angle) * maxR, vy + Math.sin(angle) * maxR);
-      ctx.stroke();
-    }
-
-    // A few broad drafting circles keep the geometry visible around the wheel.
-    for (let radius = 180; radius < maxR; radius += 220) {
-      ctx.beginPath();
-      ctx.arc(vx, vy, radius, 0, Math.PI * 2);
       ctx.stroke();
     }
 

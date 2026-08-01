@@ -11,24 +11,23 @@
 <body>
   <canvas id="stars" aria-hidden="true"></canvas>
 
-  <header class="masthead">
-    <div class="masthead-top">
-      <a class="wordmark" href="#" aria-label="AstroPitch home">
-        <span class="wordmark-orbit" aria-hidden="true">☉</span>
-        <h1>Astro—Pitch</h1>
-      </a>
-      <nav class="utility-nav" aria-label="Primary navigation">
-        <span>Natal chart synthesiser · A 440</span>
-        <button class="nav-link" id="aboutBtn" aria-haspopup="dialog">How it works ↗</button>
-      </nav>
-    </div>
-  </header>
+  <main class="stage" id="stage">
+    <button
+      type="button"
+      class="side-rail"
+      id="sideToggle"
+      aria-controls="sidePanel"
+      aria-expanded="true"
+      aria-label="Hide the controls panel"
+      title="Hide the controls — wider wheel">
+      <span class="side-rail-icon" aria-hidden="true">‹</span>
+      <span class="side-rail-label" aria-hidden="true">Controls</span>
+    </button>
 
-  <main class="stage">
     <section class="wheel-panel">
-      <div class="wheel-kicker" aria-hidden="true">
+      <div class="wheel-kicker">
         <span>FIG. 01</span>
-        <span>INTERACTIVE NATAL SCORE</span>
+        <button class="chart-help" id="aboutBtn" aria-haspopup="dialog">How it works ↗</button>
       </div>
       <div class="wheel-holder" id="wheelHolder"></div>
 
@@ -37,17 +36,17 @@
       </div>
     </section>
 
-    <aside class="side">
-      <nav class="tabs" role="tablist">
-        <button role="tab" class="tab is-active" data-tab="chart" aria-selected="true">Chart</button>
-        <button role="tab" class="tab" data-tab="placements" aria-selected="false">Placements</button>
-        <button role="tab" class="tab" data-tab="aspects" aria-selected="false">Aspects</button>
-        <button role="tab" class="tab" data-tab="overlay" aria-selected="false">Overlay</button>
-        <button role="tab" class="tab" data-tab="sound" aria-selected="false">Sound</button>
+    <aside class="side" id="sidePanel">
+      <nav class="tabs" role="tablist" aria-label="Chart controls">
+        <button type="button" role="tab" class="tab is-active" id="tab-chart" data-tab="chart" aria-selected="true" aria-controls="panel-chart">Chart</button>
+        <button type="button" role="tab" class="tab" id="tab-placements" data-tab="placements" aria-selected="false" aria-controls="panel-placements" tabindex="-1">Placements</button>
+        <button type="button" role="tab" class="tab" id="tab-aspects" data-tab="aspects" aria-selected="false" aria-controls="panel-aspects" tabindex="-1">Aspects</button>
+        <button type="button" role="tab" class="tab" id="tab-overlay" data-tab="overlay" aria-selected="false" aria-controls="panel-overlay" tabindex="-1">Overlay</button>
+        <button type="button" role="tab" class="tab" id="tab-sound" data-tab="sound" aria-selected="false" aria-controls="panel-sound" tabindex="-1">Sound</button>
       </nav>
 
       <!-- ---------------- Chart ---------------- -->
-      <section class="tabpanel is-active" data-panel="chart">
+      <section class="tabpanel is-active" id="panel-chart" role="tabpanel" aria-labelledby="tab-chart" tabindex="0" data-panel="chart">
         <div class="seg" role="group" aria-label="Chart source">
           <button class="seg-btn is-active" data-source="birth">Birth data</button>
           <button class="seg-btn" data-source="signs">Just the signs</button>
@@ -123,7 +122,7 @@
       </section>
 
       <!-- ---------------- Placements ---------------- -->
-      <section class="tabpanel" data-panel="placements">
+      <section class="tabpanel" id="panel-placements" role="tabpanel" aria-labelledby="tab-placements" tabindex="0" data-panel="placements">
         <p class="panel-lede">
           Sign gives the pitch. House gives the gesture. Element gives the
           material. Click a row to hear that one voice alone.
@@ -139,7 +138,7 @@
       </section>
 
       <!-- ---------------- Aspects ---------------- -->
-      <section class="tabpanel" data-panel="aspects">
+      <section class="tabpanel" id="panel-aspects" role="tabpanel" aria-labelledby="tab-aspects" tabindex="0" data-panel="aspects">
         <p class="panel-lede">
           Divide the angle by 30 and you have the interval. Click to hear the
           two bodies together in the same octave.
@@ -155,7 +154,7 @@
       </section>
 
       <!-- ---------------- Overlay ---------------- -->
-      <section class="tabpanel" data-panel="overlay">
+      <section class="tabpanel" id="panel-overlay" role="tabpanel" aria-labelledby="tab-overlay" tabindex="0" data-panel="overlay">
         <p class="panel-lede">
           Two charts in one pitch space. Neither is transposed, so a contact
           between them is the interval it is — and the orb of a conjunction is
@@ -232,7 +231,7 @@
       </section>
 
       <!-- ---------------- Sound ---------------- -->
-      <section class="tabpanel" data-panel="sound">
+      <section class="tabpanel" id="panel-sound" role="tabpanel" aria-labelledby="tab-sound" tabindex="0" data-panel="sound">
         <div class="control-block">
           <label class="field">
             <span>Temperament</span>
@@ -360,6 +359,14 @@
         loop, and a limiter. Each note allocates only its own oscillators and
         gains, and tears them down when it finishes.
       </p>
+      <h3>Keyboard</h3>
+      <ul class="keys">
+        <li><kbd>Space</kbd> play the chart, or stop it</li>
+        <li><kbd>B</kbd> bloom · <kbd>S</kbd> sequence · <kbd>D</kbd> drone</li>
+        <li><kbd>[</kbd> hide or show the controls, for a wider wheel</li>
+        <li><kbd>Esc</kbd> close this</li>
+      </ul>
+
       <p class="colophon">
         Best with headphones. Built from a 2021 phpMyAdmin dump.
       </p>

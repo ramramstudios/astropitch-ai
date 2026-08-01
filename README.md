@@ -166,6 +166,21 @@ Temperament is switchable. Equal keeps the mapping continuous; Just and
 Pythagorean quantise to the sign, which is a different and audible claim about
 what a sign is.
 
+## Using it
+
+The controls panel folds away against the left rail, which is worth doing once
+you have cast the chart: the wheel takes the height it was already asking for,
+and the readout moves into the space the panel left behind, so what you are
+hovering and what it says about it are on screen together. The state is
+remembered between visits.
+
+| Key | |
+| --- | --- |
+| `Space` | play the chart, or stop it |
+| `B` `S` `D` | bloom, sequence, drone |
+| `[` | fold or unfold the controls |
+| `Esc` | close *How it works* |
+
 ## Run locally
 
 This is a static HTML/CSS/JavaScript project, but ES modules need a real origin,

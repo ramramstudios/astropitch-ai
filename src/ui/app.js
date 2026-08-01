@@ -100,6 +100,7 @@ function boot() {
   wireSoundControls();
   wireWheel();
   wireModal();
+  wireSidebar();
   wireKeyboard();
 
   window.addEventListener('resize', onResize);
@@ -241,16 +242,29 @@ function buildAspectKey() {
 // ---------------------------------------------------------------------------
 
 function wireTabs() {
-  for (const tab of $$('.tab')) {
-    tab.addEventListener('click', () => {
-      for (const t of $$('.tab')) {
-        const on = t === tab;
-        t.classList.toggle('is-active', on);
-        t.setAttribute('aria-selected', String(on));
-      }
-      for (const panel of $$('.tabpanel')) {
-        panel.classList.toggle('is-active', panel.dataset.panel === tab.dataset.tab);
-      }
+  const tabs = $$('.tab');
+
+  const select = (tab, focus = false) => {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.classList.toggle('is-active', on);
+      t.setAttribute('aria-selected', String(on));
+      // Roving tabindex: one Tab press reaches the strip, arrows move inside it.
+      t.tabIndex = on ? 0 : -1;
+    }
+    for (const panel of $$('.tabpanel')) {
+      panel.classList.toggle('is-active', panel.dataset.panel === tab.dataset.tab);
+    }
+    if (focus) tab.focus();
+  };
+
+  for (const [i, tab] of tabs.entries()) {
+    tab.addEventListener('click', () => select(tab));
+    tab.addEventListener('keydown', (e) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1, Home: -i, End: tabs.length - 1 - i }[e.key];
+      if (step === undefined) return;
+      e.preventDefault();
+      select(tabs[(i + step + tabs.length) % tabs.length], true);
     });
   }
 }
@@ -470,20 +484,97 @@ function wireWheel() {
 
 function wireModal() {
   const modal = $('#aboutModal');
-  const open = () => { modal.hidden = false; $('#aboutClose').focus(); };
-  const close = () => { modal.hidden = true; $('#aboutBtn').focus(); };
+  const card = modal.querySelector('.modal-card');
+  let returnTo = null;
+
+  const open = () => {
+    returnTo = document.activeElement;
+    modal.hidden = false;
+    document.body.classList.add('is-modal-open');
+    $('#aboutClose').focus();
+  };
+
+  const close = () => {
+    modal.hidden = true;
+    document.body.classList.remove('is-modal-open');
+    (returnTo ?? $('#aboutBtn')).focus();
+  };
+
   $('#aboutBtn').addEventListener('click', open);
   $('#aboutClose').addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modal.hidden) close();
+    if (modal.hidden) return;
+    if (e.key === 'Escape') { close(); return; }
+    // A dialog that lets Tab wander back to the page behind it is a dialog you
+    // can lose, so focus stays in the card until it closes.
+    if (e.key !== 'Tab') return;
+    const focusable = card.querySelectorAll('button, [href], input, select, [tabindex]:not([tabindex="-1"])');
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------------------
+
+const SIDE_KEY = 'astropitch.sideCollapsed';
+
+/** Read/write a preference without caring whether storage exists. */
+function stored(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    localStorage.setItem(key, value);
+  } catch { /* private mode, file:// — the UI works either way */ }
+  return null;
+}
+
+let collapseSide = () => {};
+
+function wireSidebar() {
+  const stage = $('#stage');
+  const toggle = $('#sideToggle');
+  let collapsed = stored(SIDE_KEY) === '1';
+
+  const apply = (next) => {
+    collapsed = next;
+    stage.classList.toggle('is-side-collapsed', collapsed);
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.setAttribute('aria-label', collapsed ? 'Show the controls panel' : 'Hide the controls panel');
+    toggle.title = collapsed ? 'Show the controls' : 'Hide the controls — wider wheel';
+    // The wheel is sized from its box and the scope canvas from the wheel, so
+    // both have to be measured again once the new columns have laid out.
+    requestAnimationFrame(onResize);
+  };
+
+  collapseSide = () => {
+    apply(!collapsed);
+    stored(SIDE_KEY, collapsed ? '1' : '0');
+  };
+
+  toggle.addEventListener('click', collapseSide);
+  apply(collapsed);
 }
 
 function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
     const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!$('#aboutModal').hidden) return;
+    if (e.key === '[' || e.key === ']') {
+      collapseSide();
+      return;
+    }
     if (e.key === ' ') {
       e.preventDefault();
       if (performer.mode) performer.stop();

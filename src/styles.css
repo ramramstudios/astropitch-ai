@@ -33,6 +33,8 @@
   --mono: "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, monospace;
   --symbol: "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", serif;
   --transport-h: 76px;
+  --rail-w: 46px;
+  --column-gap: clamp(2rem, 5vw, 7rem);
 }
 
 * { box-sizing: border-box; }
@@ -87,94 +89,93 @@ select:focus-visible,
 
 .is-hidden { display: none !important; }
 
-/* Masthead ---------------------------------------------------------------- */
+/* Page layout ------------------------------------------------------------- */
 
-.masthead {
-  position: relative;
-  z-index: 2;
-  padding: 0 clamp(1rem, 3.2vw, 3.5rem);
-  border-bottom: 1px solid var(--ink);
-  background: rgba(244, 244, 242, 0.88);
-}
-
-.masthead-top {
-  min-height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-}
-
-.wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.wordmark h1 {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: clamp(1.75rem, 2.8vw, 2.55rem);
-  font-weight: 400;
-  letter-spacing: -0.045em;
-  line-height: 1;
-}
-
-.wordmark-orbit {
-  display: grid;
-  width: 31px;
-  height: 31px;
-  place-items: center;
-  border: 1px solid var(--ink);
-  border-radius: 50%;
-  font-family: var(--symbol);
-  font-size: 1.05rem;
-  line-height: 1;
-}
-
-.utility-nav {
-  display: flex;
-  align-items: center;
-  gap: clamp(1rem, 3vw, 3rem);
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.065em;
-  text-transform: uppercase;
-}
-
-.utility-nav > span { color: var(--muted); }
-
-.nav-link {
+.chart-help {
   appearance: none;
-  padding: 0.25rem 0;
+  padding: 0;
   border: 0;
   border-bottom: 1px solid var(--ink);
   background: transparent;
+  color: var(--ink);
   font: inherit;
-  text-transform: inherit;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
-/* Page layout ------------------------------------------------------------- */
-
+/* The rail keeps its own column in both states, so the toggle never moves out
+   from under the pointer when you use it. */
 .stage {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(330px, 440px) minmax(520px, 1fr);
-  grid-template-areas: "side wheel";
-  gap: clamp(2rem, 5vw, 7rem);
+  grid-template-columns: var(--rail-w) minmax(320px, 430px) minmax(0, 1fr);
+  grid-template-areas: "rail side wheel";
+  column-gap: 0;
+  row-gap: clamp(2rem, 4vw, 3rem);
   align-items: start;
   max-width: 1640px;
   margin: 0 auto;
-  padding: clamp(1rem, 1.8vw, 1.75rem) clamp(1rem, 3.2vw, 3.5rem) calc(var(--transport-h) + 4rem);
+  /* Just enough bottom room to scroll the readout clear of the fixed dock —
+     more than that is dead space you have to travel through. */
+  padding: clamp(1rem, 1.8vw, 1.75rem) clamp(1rem, 3.2vw, 3.5rem) calc(var(--transport-h) + 1.5rem);
 }
+
+.stage.is-side-collapsed {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-areas: "rail wheel";
+}
+
+.stage.is-side-collapsed .side { display: none; }
 
 .wheel-panel {
   grid-area: wheel;
   min-width: 0;
+  /* Column gap as padding: the rail needs to sit flush against the panel it
+     opens, while the wheel keeps its wide gutter. */
+  padding-left: var(--column-gap);
+}
+
+/* Sidebar toggle ---------------------------------------------------------- */
+
+.side-rail {
+  grid-area: rail;
+  position: sticky;
+  top: 1.25rem;
+  z-index: 3;
+  display: flex;
+  width: 30px;
+  align-self: start;
+  justify-self: start;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  appearance: none;
+  padding: 0.6rem 0 0.75rem;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: rgba(244, 244, 242, 0.86);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.side-rail:hover { background: var(--ink); color: #fff; }
+
+.side-rail-icon {
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.is-side-collapsed .side-rail-icon { transform: rotate(180deg); }
+
+.side-rail-label {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
 }
 
 .wheel-kicker {
@@ -195,6 +196,64 @@ select:focus-visible,
   aspect-ratio: 1;
 }
 
+/* Collapsing the panel is only worth doing if the wheel actually grows, so the
+   height cap lifts with it. */
+.stage.is-side-collapsed .wheel-holder {
+  max-width: clamp(360px, calc(100vh - 190px), 1040px);
+  margin-top: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+/* With the panel closed there is room beside the wheel, so the readout moves
+   into it. Stacked below the wheel it fell under the fold on a laptop, which
+   is the one place it cannot be: it is what you read while you hover. */
+@media (min-width: 1200px) {
+  /* Focus mode. The tightened padding is buying vertical room for the wheel,
+     because on a laptop the height is what caps it — what is left then fits
+     between the top edge and the dock without the page scrolling at all. */
+  .stage.is-side-collapsed {
+    padding-top: 0.5rem;
+    padding-bottom: calc(var(--transport-h) + 0.75rem);
+  }
+
+  /* Three columns, and the empty third is doing work: it mirrors the readout
+     so the wheel stays centred on the page instead of being shunted right by
+     it. The middle column is the wheel's own cap, so the gutters are simply
+     whatever is left over. */
+  .stage.is-side-collapsed .wheel-panel {
+    display: grid;
+    grid-template-columns:
+      minmax(190px, 1fr)
+      minmax(0, clamp(360px, calc(100vh - 132px), 1040px))
+      minmax(190px, 1fr);
+    grid-template-areas:
+      "kicker kicker kicker"
+      "readout wheel .";
+    column-gap: clamp(1rem, 2.5vw, 2.5rem);
+    align-items: center;
+    padding-left: 0;
+  }
+
+  .stage.is-side-collapsed .wheel-kicker { grid-area: kicker; }
+
+  .stage.is-side-collapsed .wheel-holder {
+    grid-area: wheel;
+    max-width: 100%;
+    margin-top: 0.35rem;
+    margin-bottom: 0;
+  }
+
+  .stage.is-side-collapsed .readout {
+    grid-area: readout;
+    align-self: center;
+    padding: 0 0 0 1.1rem;
+    border-top: 0;
+    border-bottom: 0;
+    border-left: 1px solid var(--ink);
+    background: none;
+  }
+}
+
 .wheel-svg,
 .wheel-scope {
   position: absolute;
@@ -203,12 +262,26 @@ select:focus-visible,
   height: 100%;
 }
 
-.wheel-scope {
+/* Clean paper under the chart. The backdrop's ruled lines ran straight through
+   the aspect chords, and two sets of thin lines at the same weight is one set
+   too many. */
+.wheel-holder::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%,
+    var(--paper) 0 44.5%, rgba(244, 244, 242, 0) 48.5%);
+  pointer-events: none;
+}
+
+.wheel-scope {
+  z-index: 1;
   pointer-events: none;
   mix-blend-mode: multiply;
 }
-.wheel-svg { z-index: 1; overflow: visible; }
+.wheel-svg { z-index: 2; overflow: visible; }
 
 /* Chart wheel ------------------------------------------------------------- */
 
@@ -942,6 +1015,9 @@ button.stop:disabled { cursor: default; opacity: 0.28; }
 
 .modal[hidden] { display: none; }
 
+/* The page behind a modal should not scroll under it. */
+body.is-modal-open { overflow: hidden; }
+
 .modal-card {
   position: relative;
   width: min(680px, 100%);
@@ -1026,6 +1102,31 @@ ul.aspect-key .ak-name { width: 6.6rem; color: var(--ink); }
 ul.aspect-key .ak-angle { width: 3.4rem; color: var(--muted); }
 ul.aspect-key .ak-int { color: var(--graphite); }
 
+ul.keys {
+  margin: 0 0 1rem;
+  padding-left: 0 !important;
+  list-style: none;
+}
+
+ul.keys li {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.5rem;
+  margin-right: 0.4rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  text-align: center;
+}
+
 .colophon {
   margin-top: 2rem !important;
   padding-top: 1rem;
@@ -1058,22 +1159,26 @@ ul.aspect-key .ak-int { color: var(--graphite); }
 /* Responsive -------------------------------------------------------------- */
 
 @media (max-width: 1040px) {
-  .stage {
+  /* Stacked: the wheel already has the full width, so there is nothing to
+     collapse and the rail would only be in the way. */
+  .stage,
+  .stage.is-side-collapsed {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "wheel" "side";
   }
 
-  .wheel-holder { max-width: min(78vh, 720px); }
+  .side-rail { display: none; }
+  .stage.is-side-collapsed .side { display: flex; }
+  .wheel-panel { padding-left: 0; }
+
+  .wheel-holder,
+  .stage.is-side-collapsed .wheel-holder { max-width: min(78vh, 720px); }
   .side { position: static; max-height: none; }
   .tabpanel { overflow-y: visible; }
 }
 
 @media (max-width: 660px) {
   :root { --transport-h: 112px; }
-
-  .masthead-top { min-height: 64px; }
-  .utility-nav > span { display: none; }
-  .wordmark h1 { font-size: 1.8rem; }
 
   .stage { gap: 2.5rem; padding-top: 1rem; }
   .wheel-kicker { font-size: 0.56rem; }
@@ -1118,8 +1223,7 @@ ul.aspect-key .ak-int { color: var(--graphite); }
 }
 
 @media (max-width: 430px) {
-  .wordmark-orbit { display: none; }
-  .nav-link { font-size: 0.58rem; }
+  .chart-help { font-size: 0.56rem; }
   .tabs { overflow-x: auto; }
   .tab { font-size: 0.55rem; }
   .readout-title .rd-pitch { width: 100%; margin-left: 0; }
