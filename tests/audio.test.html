@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AstroPitch — audio render tests</title>
+  <style>
+    body { font: 13px ui-monospace, Menlo, monospace; background: #0b0819; color: #ddd; padding: 2rem; }
+    .pass { color: #8fbf6a; } .fail { color: #ff6a5d; } .info { color: #8d8fae; }
+    h2 { font-size: 14px; color: #e9cd93; margin: 1.6rem 0 0.5rem; font-weight: 400; }
+    pre { margin: 0.15rem 0; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<h1 style="font-size:16px;font-weight:400">Offline audio render tests</h1>
+<div id="out"></div>
+
+<script type="module">
+import { AudioEngine } from '../src/audio/engine.js';
+import { buildVoiceSpec, Voice } from '../src/audio/voices.js';
+import { frequencyFor } from '../src/audio/tuning.js';
+import { SIGNS } from '../src/ontology.js';
+
+const out = document.getElementById('out');
+let failures = 0;
+
+const log = (cls, msg) => {
+  const pre = document.createElement('pre');
+  pre.className = cls;
+  pre.textContent = msg;
+  out.appendChild(pre);
+};
+const head = (t) => { const h = document.createElement('h2'); h.textContent = t; out.appendChild(h); };
+const check = (label, ok, detail = '') => {
+  if (!ok) failures++;
+  log(ok ? 'pass' : 'fail', `${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
+};
+
+/** Render a scene through the full master chain and measure the result. */
+async function render(seconds, build) {
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+  const engine = new AudioEngine({ context: ctx });
+  build(engine);
+  const buffer = await ctx.startRendering();
+  return analyse(buffer);
+}
+
+/**
+ * Detecting a click is harder than it looks.
+ *
+ * A sample-to-sample difference test flags every bright timbre, because a
+ * sawtooth at 880 Hz legitimately jumps most of full scale once per cycle.
+ * Short-block RMS is no better: at 32 samples a block is a fraction of one
+ * cycle at bass frequencies, so it measures where in the waveform you happened
+ * to look, not the envelope.
+ *
+ * What is unambiguous is a *hard cut*: a sample well above the noise floor
+ * followed immediately by pure digital silence. No oscillator can do that, and
+ * it is exactly what an unramped gain change sounds like.
+ */
+function analyse(buffer) {
+  const stats = { peak: 0, rms: 0, clipped: 0, nonFinite: 0, hardCuts: 0, dc: 0, silentFor: 0 };
+  const LOOKAHEAD = 64;   // 1.3 ms of silence to call it a cut
+  const LOUD = 0.02;      // clearly audible before the cut
+  const SILENT = 5e-4;
+  let sumSq = 0;
+  let sum = 0;
+  let n = 0;
+
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const d = buffer.getChannelData(ch);
+    let runOfSilence = 0;
+    let maxRun = 0;
+
+    for (let i = 0; i < d.length; i++) {
+      const v = d[i];
+      if (!Number.isFinite(v)) { stats.nonFinite++; continue; }
+      const a = Math.abs(v);
+      if (a > stats.peak) stats.peak = a;
+      if (a >= 0.9999) stats.clipped++;
+      sumSq += v * v;
+      sum += v;
+      n++;
+      if (a < 1e-5) { runOfSilence++; if (runOfSilence > maxRun) maxRun = runOfSilence; }
+      else runOfSilence = 0;
+
+      // Loud sample, then nothing at all: a hard cut.
+      if (a > LOUD && i + LOOKAHEAD < d.length) {
+        let quiet = true;
+        for (let k = 1; k <= LOOKAHEAD; k++) {
+          if (Math.abs(d[i + k]) >= SILENT) { quiet = false; break; }
+        }
+        if (quiet) stats.hardCuts++;
+      }
+    }
+    stats.silentFor = Math.max(stats.silentFor, maxRun / buffer.sampleRate);
+  }
+  stats.rms = Math.sqrt(sumSq / n);
+  stats.dc = sum / n;
+  return stats;
+}
+
+const fmt = (s) =>
+  `peak ${s.peak.toFixed(3)}  rms ${s.rms.toFixed(4)}  clipped ${s.clipped}  ` +
+  `hardCuts ${s.hardCuts}  dc ${s.dc.toExponential(1)}  nonFinite ${s.nonFinite}`;
+
+// ---------------------------------------------------------------------------
+
+head('Every element x house combination renders cleanly');
+{
+  let worstPeak = 0;
+  let totalCuts = 0;
+  let cutAt = [];
+  let totalClipped = 0;
+  let totalNonFinite = 0;
+  let silentCombos = [];
+
+  for (let signIndex = 0; signIndex < 12; signIndex++) {
+    const sign = SIGNS[signIndex];
+    for (let house = 1; house <= 12; house++) {
+      const stats = await render(4, (engine) => {
+        const spec = buildVoiceSpec({ element: sign.element, house, modality: sign.modality });
+        const freq = frequencyFor(signIndex * 30 + 15, { octave: 0 });
+        new Voice(engine, spec, { freq, time: 0.05, duration: 2.0, gain: 0.35, pan: 0 });
+      });
+      worstPeak = Math.max(worstPeak, stats.peak);
+      if (stats.hardCuts > 0) { totalCuts += stats.hardCuts; cutAt.push(`${sign.name}/${house}`); }
+      totalClipped += stats.clipped;
+      totalNonFinite += stats.nonFinite;
+      if (stats.rms < 1e-4) silentCombos.push(`${sign.name}/${house}`);
+    }
+  }
+
+  check('no NaN or Infinity in any of the 144 combinations', totalNonFinite === 0, `${totalNonFinite} bad samples`);
+  check('no full-scale clipping', totalClipped === 0, `${totalClipped} clipped samples`);
+  check('peak stays below full scale', worstPeak < 1.0, `worst peak ${worstPeak.toFixed(3)}`);
+  check('no hard cuts (clicks)', totalCuts === 0, `${totalCuts} in ${cutAt.join(', ')}`);
+  check('every combination makes sound', silentCombos.length === 0, silentCombos.join(', '));
+}
+
+head('Envelope endpoints: attack from silence, release to silence');
+{
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 6, sampleRate: 48000 });
+  const engine = new AudioEngine({ context: ctx });
+  const spec = buildVoiceSpec({ element: 'fire', house: 1, modality: 'cardinal' });
+  new Voice(engine, spec, { freq: 440, time: 0.5, duration: 1.5, gain: 0.5, pan: 0 });
+  const buffer = await ctx.startRendering();
+  const d = buffer.getChannelData(0);
+
+  const at = (t) => Math.abs(d[Math.floor(t * 48000)]);
+  let preOnset = 0;
+  for (let i = 0; i < 0.45 * 48000; i++) preOnset = Math.max(preOnset, Math.abs(d[i]));
+  let tail = 0;
+  for (let i = Math.floor(5.5 * 48000); i < d.length; i++) tail = Math.max(tail, Math.abs(d[i]));
+
+  check('silent before the scheduled onset', preOnset < 1e-3, `peak ${preOnset.toExponential(1)}`);
+  check('sounding during the note', at(1.0) > 1e-3, `level ${at(1.0).toFixed(4)}`);
+  check('decayed to near silence after release', tail < 5e-3, `tail ${tail.toExponential(1)}`);
+}
+
+head('A full chart bloom stays within headroom');
+{
+  const stats = await render(14, (engine) => {
+    // Eleven voices entering over ~7s and holding, the worst realistic case.
+    const keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    keys.forEach((i, idx) => {
+      const sign = SIGNS[(i * 5) % 12];
+      const spec = buildVoiceSpec({ element: sign.element, house: (i % 12) + 1, modality: sign.modality });
+      const octave = [0, 0, -1, 1, 0, -1, 0, -2, 1, 0, -2][idx];
+      const freq = frequencyFor(((i * 5) % 12) * 30 + 15, { octave });
+      new Voice(engine, spec, {
+        freq, time: 0.1 + idx * 0.65, duration: 9 - idx * 0.6,
+        gain: 0.22 / Math.sqrt(Math.max(1, (idx + 1) * 0.55)) * 1.35,
+        pan: Math.sin(i),
+      });
+    });
+  });
+  log('info', `      ${fmt(stats)}`);
+  check('no clipping with 11 voices sustaining', stats.clipped === 0, `${stats.clipped} samples`);
+  check('peak below full scale', stats.peak < 0.999, `peak ${stats.peak.toFixed(3)}`);
+  check('peak is actually loud enough to be useful', stats.peak > 0.15, `peak ${stats.peak.toFixed(3)}`);
+  check('no runaway DC offset', Math.abs(stats.dc) < 0.02, `dc ${stats.dc.toExponential(2)}`);
+  check('no hard cuts across the whole arrangement', stats.hardCuts === 0, `${stats.hardCuts}`);
+  check('reverb tail keeps sounding after the last release', stats.silentFor < 3.0, `longest gap ${stats.silentFor.toFixed(2)}s`);
+}
+
+head('Voice teardown: nodes are released, not leaked');
+{
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 4, sampleRate: 48000 });
+  const engine = new AudioEngine({ context: ctx });
+  // A short release, so the teardown deadline lands inside the test's patience.
+  const spec = buildVoiceSpec({ element: 'fire', house: 2, modality: 'cardinal' });
+  const voices = [];
+  for (let i = 0; i < 12; i++) {
+    voices.push(new Voice(engine, spec, { freq: 220 * (1 + i * 0.06), time: 0.02, duration: 0.3, gain: 0.1 }));
+  }
+  check('engine tracks live voices', engine.voices.size > 0, `${engine.voices.size} registered`);
+  await ctx.startRendering();
+  // Teardown hangs off the `ended` event, with a wall-clock fallback for
+  // contexts that never deliver one. An offline render finishes far faster
+  // than real time, so wait out the fallback rather than the audio.
+  await new Promise((r) => setTimeout(r, 2400));
+  const stillHoldingNodes = voices.filter((v) => v.nodes.length > 0).length;
+  check('every voice released its nodes after finishing', stillHoldingNodes === 0, `${stillHoldingNodes} still holding`);
+  check('engine voice registry drained', engine.voices.size === 0, `${engine.voices.size} left`);
+}
+
+head('Voice stealing caps polyphony');
+{
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 3, sampleRate: 48000 });
+  const engine = new AudioEngine({ context: ctx });
+  const spec = buildVoiceSpec({ element: 'air', house: 3, modality: 'fixed' });
+  for (let i = 0; i < 90; i++) {
+    new Voice(engine, spec, { freq: 300 + i * 7, time: 0.01, gain: 0.05 });
+  }
+  check('sounding polyphony capped at maxVoices',
+    engine.activeVoiceCount() <= engine.maxVoices,
+    `${engine.activeVoiceCount()} sounding of ${engine.maxVoices} (${engine.voices.size} incl. fading)`);
+  const buffer = await ctx.startRendering();
+  const s = analyse(buffer);
+  log('info', `      ${fmt(s)}`);
+  check('90 simultaneous requests still do not clip', s.clipped === 0, `${s.clipped} samples`);
+}
+
+head('Reverb impulse response is well formed');
+{
+  // Send a single-sample impulse straight into the reverb send and inspect
+  // what comes back out of the master chain.
+  const stats = await render(6, (e) => {
+    const src = e.ctx.createBufferSource();
+    const b = e.ctx.createBuffer(1, 64, e.ctx.sampleRate);
+    b.getChannelData(0)[0] = 1;
+    src.buffer = b;
+    const g = e.ctx.createGain();
+    g.gain.value = 0.9;
+    src.connect(g);
+    g.connect(e.reverbSend);
+    src.start(0.05);
+  });
+  log('info', `      ${fmt(stats)}`);
+  check('reverb produces a tail', stats.rms > 1e-5, `rms ${stats.rms.toExponential(2)}`);
+  check('reverb does not blow up', stats.peak < 1.0 && stats.nonFinite === 0, `peak ${stats.peak.toFixed(3)}`);
+}
+
+head('Delay feedback is stable (does not self-oscillate)');
+{
+  const stats = await render(12, (e) => {
+    const src = e.ctx.createBufferSource();
+    const b = e.ctx.createBuffer(1, 64, e.ctx.sampleRate);
+    b.getChannelData(0)[0] = 1;
+    src.buffer = b;
+    const g = e.ctx.createGain();
+    g.gain.value = 0.9;
+    src.connect(g);
+    g.connect(e.delaySend);
+    src.start(0.05);
+  });
+  log('info', `      ${fmt(stats)}`);
+  check('delay decays rather than runs away', stats.peak < 1.0 && stats.nonFinite === 0, `peak ${stats.peak.toFixed(3)}`);
+}
+
+head('Tuning');
+{
+  const a440 = frequencyFor(0, { octave: 0, refA: 440 });
+  const taurus = frequencyFor(30, { octave: 0, refA: 440 });
+  const pisces = frequencyFor(330, { octave: 0, refA: 440 });
+  check('Aries 0 degrees is A 440', Math.abs(a440 - 440) < 1e-9, `${a440}`);
+  // 360 degrees IS 0 degrees; the octave is carried by the octave parameter.
+  check('the circle closes on itself', Math.abs(frequencyFor(360, { octave: 0 }) - 440) < 1e-9);
+  check('one octave up is a doubling', Math.abs(frequencyFor(0, { octave: 1 }) - 880) < 1e-9);
+  check('359.99 degrees is just under the octave',
+    Math.abs(frequencyFor(359.99, { octave: 0 }) - 880) / 880 < 2e-5,
+    `${frequencyFor(359.99, { octave: 0 }).toFixed(3)}`);
+  check('Taurus is A#/Bb 466.16', Math.abs(taurus - 466.16) < 0.01, `${taurus.toFixed(2)}`);
+  check('Pisces is G#/Ab 830.61', Math.abs(pisces - 830.61) < 0.01, `${pisces.toFixed(2)}`);
+  const mid = frequencyFor(15, { octave: 0, refA: 440 });
+  check('half a sign is half a semitone', Math.abs(mid - 440 * 2 ** (0.5 / 12)) < 1e-9, `${mid.toFixed(3)}`);
+  const just = frequencyFor(120, { octave: 0, refA: 440, temperament: 'just' });
+  check('just intonation gives a pure 5/4 on the trine', Math.abs(just - 440 * 5 / 4) < 1e-9, `${just.toFixed(3)}`);
+}
+
+// ---------------------------------------------------------------------------
+
+const summary = document.createElement('h2');
+summary.textContent = failures === 0 ? 'ALL AUDIO TESTS PASSED' : `${failures} AUDIO TEST(S) FAILED`;
+summary.style.color = failures === 0 ? '#8fbf6a' : '#ff6a5d';
+out.appendChild(summary);
+window.__testFailures = failures;
+window.__testDone = true;
+</script>
+</body>
+</html>

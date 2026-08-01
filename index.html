@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AstroPitch — the zodiac is a chromatic octave</title>
+  <meta name="description" content="A natal chart synthesiser. 30 degrees of zodiac is one semitone, so aspects are intervals. Sign sets pitch, house sets gesture, element sets material.">
+  <link rel="stylesheet" href="src/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>♈</text></svg>">
+</head>
+<body>
+  <canvas id="stars" aria-hidden="true"></canvas>
+
+  <header class="masthead">
+    <div class="brand">
+      <h1>Astro<span>Pitch</span></h1>
+      <p class="thesis">
+        The zodiac has twelve signs of 30°. An octave has twelve semitones.
+        <strong>30° is one semitone</strong> — so a chart is a chord, and an aspect is an interval.
+      </p>
+    </div>
+    <button class="ghost" id="aboutBtn" aria-haspopup="dialog">How it works</button>
+  </header>
+
+  <main class="stage">
+    <section class="wheel-panel">
+      <div class="wheel-holder" id="wheelHolder"></div>
+
+      <div class="readout" id="readout" aria-live="polite">
+        <p class="readout-hint">Click anything — a sign, a planet, a line across the middle.</p>
+      </div>
+    </section>
+
+    <aside class="side">
+      <nav class="tabs" role="tablist">
+        <button role="tab" class="tab is-active" data-tab="chart" aria-selected="true">Chart</button>
+        <button role="tab" class="tab" data-tab="placements" aria-selected="false">Placements</button>
+        <button role="tab" class="tab" data-tab="aspects" aria-selected="false">Aspects</button>
+        <button role="tab" class="tab" data-tab="sound" aria-selected="false">Sound</button>
+      </nav>
+
+      <!-- ---------------- Chart ---------------- -->
+      <section class="tabpanel is-active" data-panel="chart">
+        <div class="seg" role="group" aria-label="Chart source">
+          <button class="seg-btn is-active" data-source="birth">Birth data</button>
+          <button class="seg-btn" data-source="signs">Just the signs</button>
+        </div>
+
+        <form id="birthForm" class="form">
+          <div class="field-row">
+            <label class="field">
+              <span>Date</span>
+              <input type="date" id="birthDate" value="1982-04-04" required>
+            </label>
+            <label class="field">
+              <span>Time</span>
+              <input type="time" id="birthTime" value="12:36" required>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Place</span>
+            <select id="placePreset"></select>
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Latitude</span>
+              <input type="number" id="lat" value="33.749" step="0.001" min="-90" max="90">
+            </label>
+            <label class="field">
+              <span>Longitude</span>
+              <input type="number" id="lon" value="-84.388" step="0.001" min="-180" max="180">
+            </label>
+            <label class="field narrow">
+              <span>UTC<span class="sr-only"> offset</span></span>
+              <input type="number" id="utcOffset" value="-5" step="0.5" min="-12" max="14">
+            </label>
+          </div>
+
+          <p class="note">
+            Longitude is negative west of Greenwich. Set the UTC offset that was
+            actually in force at that moment — including daylight saving, which
+            no ephemeris can guess for you.
+          </p>
+
+          <label class="field">
+            <span>Houses</span>
+            <select id="houseSystem">
+              <option value="whole">Whole sign — a house is a sign</option>
+              <option value="placidus">Placidus — divided by semi-arc</option>
+              <option value="equal">Equal — 30° from the Ascendant</option>
+            </select>
+          </label>
+
+          <div class="form-actions">
+            <button type="submit" class="primary">Cast chart</button>
+            <button type="button" class="ghost" id="nowBtn">Sky right now</button>
+            <button type="button" class="ghost" id="randomBtn">Random</button>
+          </div>
+        </form>
+
+        <form id="signsForm" class="form is-hidden">
+          <p class="note">
+            No birth time needed. Each body sits at the midpoint of its sign,
+            which is the honest position when the sign is all you know.
+          </p>
+          <div id="signPickers" class="sign-pickers"></div>
+          <div class="form-actions">
+            <button type="submit" class="primary">Cast chart</button>
+            <button type="button" class="ghost" id="randomSignsBtn">Random</button>
+          </div>
+        </form>
+
+        <div class="balance" id="balance"></div>
+      </section>
+
+      <!-- ---------------- Placements ---------------- -->
+      <section class="tabpanel" data-panel="placements">
+        <p class="panel-lede">
+          Sign gives the pitch. House gives the gesture. Element gives the
+          material. Click a row to hear that one voice alone.
+        </p>
+        <div class="table-wrap">
+          <table class="data" id="placementsTable">
+            <thead>
+              <tr><th>Body</th><th>Position</th><th>Ho.</th><th>Pitch</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ---------------- Aspects ---------------- -->
+      <section class="tabpanel" data-panel="aspects">
+        <p class="panel-lede">
+          Divide the angle by 30 and you have the interval. Click to hear the
+          two bodies together in the same octave.
+        </p>
+        <div class="table-wrap">
+          <table class="data" id="aspectsTable">
+            <thead>
+              <tr><th>Pair</th><th>Aspect</th><th>Interval</th><th>Orb</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ---------------- Sound ---------------- -->
+      <section class="tabpanel" data-panel="sound">
+        <div class="control-block">
+          <label class="field">
+            <span>Temperament</span>
+            <select id="temperament"></select>
+          </label>
+          <p class="note" id="temperamentNote"></p>
+        </div>
+
+        <div class="control-block">
+          <label class="field">
+            <span>Reference A — <output id="refAOut">440</output> Hz</span>
+            <input type="range" id="refA" min="392" max="466" step="1" value="440">
+          </label>
+          <p class="note">
+            The Zodiac table in the original database pinned Aries to A 440.
+            Everything else follows from wherever you put A.
+          </p>
+        </div>
+
+        <div class="control-block">
+          <label class="field">
+            <span>Pace — <output id="tempoOut">0.50</output> s</span>
+            <input type="range" id="tempo" min="0.2" max="1.4" step="0.05" value="0.5">
+          </label>
+        </div>
+
+        <h3 class="legend-title">Houses are gestures</h3>
+        <dl class="legend" id="houseLegend"></dl>
+
+        <h3 class="legend-title">Elements are materials</h3>
+        <dl class="legend" id="elementLegend"></dl>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="transport">
+    <div class="transport-main">
+      <button class="play" id="bloomBtn" title="The chart assembles itself into one chord">
+        <span class="play-name">Bloom</span>
+        <span class="play-sub">chart as chord</span>
+      </button>
+      <button class="play" id="sequenceBtn" title="Walk the zodiac from the Ascendant">
+        <span class="play-name">Sequence</span>
+        <span class="play-sub">walk the wheel</span>
+      </button>
+      <button class="play" id="droneBtn" title="Generative sustain driven by your aspects">
+        <span class="play-name">Drone</span>
+        <span class="play-sub">generative</span>
+      </button>
+      <button class="stop" id="stopBtn" disabled>Stop</button>
+    </div>
+    <label class="volume">
+      <span class="sr-only">Volume</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor"/></svg>
+      <input type="range" id="volume" min="0" max="1" step="0.01" value="0.75">
+    </label>
+  </footer>
+
+  <div class="modal" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="aboutClose" aria-label="Close">×</button>
+      <h2 id="aboutTitle">How it works</h2>
+
+      <h3>The mapping</h3>
+      <p>
+        The original AstroPitch database gave every sign a pitch: Aries A 440,
+        Taurus A♯, Gemini B, and so on up to Pisces G♯. That is a chromatic
+        scale laid around a circle — twelve signs of 30° against twelve
+        semitones. So the conversion is not a lookup table, it is arithmetic:
+      </p>
+      <p class="formula">frequency = A × 2<sup>(longitude / 360)</sup></p>
+      <p>
+        One trip around the zodiac is one octave. A planet at 14°22′ Aries is
+        not "an A" — it is an A raised by 29 cents, and you can hear it.
+      </p>
+
+      <h3>Why aspects are intervals</h3>
+      <p>
+        If 30° is a semitone, then every classical aspect is an interval, with
+        no extra assumptions:
+      </p>
+      <ul class="aspect-key" id="aspectKey"></ul>
+      <p>
+        The tritone falling on the opposition is a nice accident. So is the
+        trine landing on a major third.
+      </p>
+
+      <h3>What makes the timbre</h3>
+      <p>
+        A note in the database was <em>sign + house</em>, and one of its rows
+        reads <em>"aries = A, house = timbre"</em>. That is the whole design:
+      </p>
+      <ul class="plain">
+        <li><strong>Sign → pitch.</strong> Continuous in ecliptic longitude.</li>
+        <li><strong>Element → material.</strong> The oscillator stack, harmonic
+          content, noise layer and body resonance. Fire is dense and driven,
+          Earth is low-order and wooden, Air is hollow with audible breath,
+          Water is detuned and never still.</li>
+        <li><strong>House → gesture.</strong> How the material is played:
+          the 2nd is struck, the 5th sings, the 6th runs to a clock, the 7th
+          is doubled, the 11th is an inharmonic bell, the 12th arrives before
+          it begins.</li>
+        <li><strong>Modality → phrasing.</strong> Cardinal strikes and moves on,
+          fixed holds, mutable wavers.</li>
+        <li><strong>Planet → register and role.</strong> Saturn two octaves
+          down carrying structure, Mercury an octave up, the Sun, Moon and
+          Ascendant loudest.</li>
+      </ul>
+
+      <h3>The astronomy</h3>
+      <p>
+        Positions are computed in the browser, with no server and no API. The
+        Sun and Moon follow Meeus (the Moon with its full 60-term longitude
+        series); the planets use JPL's approximate Keplerian elements, good to
+        well under a degree from 1800 to 2050. Houses are whole sign, equal, or
+        Placidus by semi-arc division, falling back to Porphyry inside the
+        polar circles where Placidus has no solution.
+      </p>
+
+      <h3>The sound</h3>
+      <p>
+        Raw Web Audio, no library. One signal graph is built once and reused:
+        a glue compressor, soft-clip saturation, a synthetic stereo reverb whose
+        tail darkens as it decays, a ping-pong delay with a damped feedback
+        loop, and a limiter. Each note allocates only its own oscillators and
+        gains, and tears them down when it finishes.
+      </p>
+      <p class="colophon">
+        Best with headphones. Built from a 2021 phpMyAdmin dump.
+      </p>
+    </div>
+  </div>
+
+  <script type="module" src="src/ui/app.js"></script>
+</body>
+</html>
