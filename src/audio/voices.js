@@ -326,6 +326,12 @@ export class Voice {
     // own state and can free a polyphony slot immediately.
     this.stolen = false;
     this.releaseAt = null;
+    // The designer needs one voice that can follow a body around the wheel.
+    // Keep the AudioParams that are defined by pitch together so retuning is a
+    // small automation change, rather than repeatedly destroying and creating
+    // a whole synthesis graph while the pointer is moving.
+    this.pitchTargets = [];
+    this.pitchControls = null;
     // The source whose ending defines the voice's lifetime. It must be one that
     // is never stopped early — the gate oscillator finishes mid-note, so hanging
     // teardown off "the last source in the array" would cut the note short.
@@ -342,6 +348,7 @@ export class Voice {
     // --- output stage ---
     const panner = ctx.createStereoPanner();
     panner.pan.value = Math.max(-1, Math.min(1, pan * this.spec.width));
+    this.panner = panner;
 
     const vca = ctx.createGain();
     vca.gain.value = 0.0001;
@@ -422,6 +429,18 @@ export class Voice {
     body.connect(filter);
     this.nodes.push(body);
 
+    // Filters normally receive a one-shot envelope. During a live designer
+    // audition their settled values track the note as well, so high and low
+    // positions retain the intended spectral balance while the pitch glides.
+    this.pitchControls = {
+      clampF,
+      body,
+      filter,
+      noiseFilter: null,
+      material,
+      gesture,
+    };
+
     const oscMix = ctx.createGain();
     oscMix.gain.value = 0.28;
     oscMix.connect(body);
@@ -494,6 +513,7 @@ export class Voice {
         } else {
           osc.frequency.setValueAtTime(freq, start);
         }
+        this.pitchTargets.push({ param: osc.frequency, ratio: 1 });
         const g = ctx.createGain();
         g.gain.value = p.gain;
         osc.connect(g);
@@ -521,6 +541,7 @@ export class Voice {
           mod.start(start);
           this.sources.push(mod);
           this.nodes.push(modGain);
+          this.pitchTargets.push({ param: mod.frequency, ratio: this.spec.fm.ratio });
         }
       }
 
@@ -536,6 +557,7 @@ export class Voice {
         sub.start(start);
         this.sources.push(sub);
         this.nodes.push(sg);
+        this.pitchTargets.push({ param: sub.frequency, ratio: 0.5 });
       }
     }
 
@@ -564,6 +586,7 @@ export class Voice {
       this.sources.push(src);
       this.nodes.push(nf, ng);
       this.noiseGain = ng;
+      if (noise.tracks) this.pitchControls.noiseFilter = nf;
     }
 
     // --- amplitude envelope ---
@@ -600,6 +623,47 @@ export class Voice {
     // Register after scheduling a finite duration so the engine sees the
     // voice's final lifetime before assigning its polyphony slot.
     this.engine.register(this);
+  }
+
+  /**
+   * Glide an already-sounding voice to a new fundamental. This is intentionally
+   * used only by the Designer's held audition: a normal placement still gets
+   * its complete one-shot gesture and envelope.
+   */
+  retune({ freq, pan = null, time = null } = {}) {
+    if (this.released || !Number.isFinite(freq) || freq <= 0) return;
+    const { ctx } = this.engine;
+    const t = Math.max(time ?? ctx.currentTime, ctx.currentTime);
+
+    for (const { param, ratio } of this.pitchTargets) {
+      this._smooth(param, freq * ratio, t);
+    }
+
+    const controls = this.pitchControls;
+    if (controls) {
+      const { clampF, material, gesture, body, filter, noiseFilter } = controls;
+      const settled = clampF(
+        freq * material.cutoffMul * gesture.filter.start * (1 + gesture.filter.env * 0.6)
+      );
+      this._smooth(filter.frequency, settled, t);
+      this._smooth(body.frequency, clampF(freq * material.body.ratio), t);
+      if (noiseFilter) this._smooth(noiseFilter.frequency, clampF(freq * material.noise.freq), t);
+    }
+
+    if (pan != null && this.panner) {
+      this._smooth(this.panner.pan, Math.max(-1, Math.min(1, pan * this.spec.width)), t);
+    }
+  }
+
+  /** Avoid audible zippering while keeping a drag responsive at pointer rate. */
+  _smooth(param, value, time) {
+    if (!param || !Number.isFinite(value)) return;
+    // `cancelAndHoldAtTime` preserves the exact in-flight value. Older Safari
+    // lacks it, but cancelling then setting a short target is still click-free
+    // enough for a gesture-rate control.
+    if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(time);
+    else param.cancelScheduledValues(time);
+    param.setTargetAtTime(value, time, 0.018);
   }
 
   /** Schedule the release. Idempotent — the earliest call wins. */

@@ -412,6 +412,7 @@ export class Wheel {
       moved: false,
       frame: 0,
     };
+    this._emit('designerPress', placement.key);
   }
 
   _onPointerMove(event) {
@@ -423,14 +424,17 @@ export class Wheel {
     if (!drag.moved) {
       const dist = Math.hypot(event.clientX - drag.clientX, event.clientY - drag.clientY);
       if (dist < 3) return;
+      const lon = this._longitudeAt(event);
+      if (lon == null) return;
       drag.moved = true;
+      drag.lon = lon;
       this.svg.classList.add('is-dragging');
-      this._emit('designerDragStart', drag.key);
+      this._emit('designerDragStart', drag.key, lon);
+    } else {
+      const lon = this._longitudeAt(event);
+      if (lon == null) return;
+      drag.lon = lon;
     }
-
-    const lon = this._longitudeAt(event);
-    if (lon == null) return;
-    drag.lon = lon;
     if (drag.frame) return;
     drag.frame = requestAnimationFrame(() => {
       if (!this.drag) return;

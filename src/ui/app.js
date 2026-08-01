@@ -327,11 +327,13 @@ function previewDesign(key, longitude) {
   state.chart = designChart(state.subject, design);
   wheel.renderLive(state.chart);
   syncDesignerList(state.chart);
+  performer.updateDesignerPreview(key, longitude);
   showBody(key);
 }
 
 function commitDesign(key, longitude) {
   if (state.source !== 'designer' || !state.subject) return;
+  performer.endDesignerPreview(key);
   setDesign(key, { longitude: norm360(longitude) });
   render();
   showBody(key);
@@ -702,12 +704,19 @@ function wireWheel() {
   wheel.on('hoverBody', (key) => (key == null ? clearReadout() : showBody(key)));
   wheel.on('hoverAspect', (a) => (a == null ? clearReadout() : showAspect(a)));
 
-  wheel.on('designerDragStart', (key) => showBody(key));
+  wheel.on('designerPress', () => { void performer.prepareDesignerPreview(); });
+  wheel.on('designerDragStart', (key, longitude) => {
+    void performer.beginDesignerPreview(key, longitude);
+    showBody(key);
+  });
   wheel.on('designerMove', previewDesign);
   wheel.on('designerCommit', commitDesign);
   // Nothing was written while the drag was live, so putting the body back is
   // just a redraw of what is already stored.
-  wheel.on('designerCancel', () => render());
+  wheel.on('designerCancel', (key) => {
+    performer.endDesignerPreview(key);
+    render();
+  });
 }
 
 function wireModal() {

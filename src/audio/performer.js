@@ -37,6 +37,7 @@ export class Performer {
     this.timers = [];
     this.loopHandle = null;
     this.listeners = new Set();
+    this.designerPreview = null;
   }
 
   onEvent(fn) {
@@ -129,6 +130,74 @@ export class Performer {
     const t = this.engine.now + 0.02;
     this._voiceFor(p, { time: t, duration, gainMul: 1.5 });
     this._emit({ type: 'note', key, time: t });
+  }
+
+  /**
+   * Wake Web Audio during the pointer-down gesture. Browsers are stricter
+   * about starting audio from a move event than from a press, even though the
+   * sound itself does not begin until the drag threshold is crossed.
+   */
+  prepareDesignerPreview() {
+    return this.engine.start();
+  }
+
+  /** Start a held, single-body audition for Designer dragging. */
+  async beginDesignerPreview(key, longitude = null) {
+    const placement = this.chart?.byKey?.[key];
+    if (!placement || placement.silent) return;
+
+    // A moving body is its own audition. Stop an existing transport pass so
+    // it does not mask the pitch being explored.
+    this.stop({ fade: 0.08 });
+    const preview = {
+      key,
+      longitude: Number.isFinite(longitude) ? longitude : placement.longitude,
+      voice: null,
+    };
+    this.designerPreview = preview;
+
+    await this.engine.start();
+    // The user may have released or switched modes while AudioContext resumed.
+    if (this.designerPreview !== preview) return;
+
+    const current = this.chart?.byKey?.[key];
+    if (!current || current.silent) {
+      this.designerPreview = null;
+      return;
+    }
+    const t = this.engine.now + 0.01;
+    preview.voice = this._voiceFor(
+      { ...current, longitude: preview.longitude },
+      { time: t, gainMul: 1.2 }
+    );
+    this._emit({ type: 'note', key, time: t });
+  }
+
+  /** Retune the held Designer audition without rebuilding its audio graph. */
+  updateDesignerPreview(key, longitude) {
+    const preview = this.designerPreview;
+    if (!preview || preview.key !== key || !Number.isFinite(longitude)) return;
+    preview.longitude = longitude;
+    const placement = this.chart?.byKey?.[key];
+    if (!placement || !preview.voice?.retune) return;
+
+    const freq = frequencyFor(longitude, {
+      octave: placement.octave,
+      refA: this.tuning.refA,
+      temperament: this.tuning.temperament,
+    });
+    const pan = Math.sin((longitude * Math.PI) / 180) * 0.8;
+    preview.voice.retune({ freq, pan, time: this.engine.now + 0.004 });
+  }
+
+  /** Release the held Designer audition when the pointer ends or is cancelled. */
+  endDesignerPreview(key = null, { fade = 0.16 } = {}) {
+    const preview = this.designerPreview;
+    if (!preview || (key != null && preview.key !== key)) return;
+    this.designerPreview = null;
+    if (preview.voice && !preview.voice.released) {
+      preview.voice.release(this.engine.now + 0.01, fade);
+    }
   }
 
   async playSign(signIndex, { house = 1, octave = 0, duration = 2.2 } = {}) {
@@ -326,6 +395,9 @@ export class Performer {
 
   stop({ fade = 0.35 } = {}) {
     this.mode = null;
+    // A preview can still be awaiting AudioContext startup. Clearing this
+    // token prevents it from creating a voice after a drop, Escape, or redraw.
+    this.designerPreview = null;
     for (const t of this.timers) clearTimeout(t);
     this.timers.length = 0;
     if (this.loopHandle) clearInterval(this.loopHandle);

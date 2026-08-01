@@ -68,6 +68,30 @@ console.log('--- tempo: BPM controls step length and echo time ---');
   ok('60 BPM maps to a one-second beat', delayTimes[1] === 1, `${delayTimes[1]}s`);
 }
 
+console.log('\n--- designer audition: one held voice follows the dragged longitude ---');
+{
+  const retunes = [];
+  const releases = [];
+  const p = new Performer(engine);
+  p.setChart(A);
+  p._voiceFor = (placement) => ({
+    released: false,
+    retune: (opts) => retunes.push(opts),
+    release: (at, fade) => releases.push({ at, fade }),
+  });
+
+  await p.beginDesignerPreview('venus', 30);
+  p.updateDesignerPreview('venus', 120);
+  p.endDesignerPreview('venus');
+
+  ok('starts the body being dragged', p.designerPreview === null && retunes.length === 1);
+  ok('retunes to its new longitude',
+    Math.abs(retunes[0].freq - 440 * 2 ** (120 / 360)) < 1e-9,
+    `${retunes[0].freq.toFixed(3)} Hz`);
+  ok('updates its wheel-derived pan', Math.abs(retunes[0].pan - Math.sin((120 * Math.PI) / 180) * 0.8) < 1e-9);
+  ok('releases on drop', releases.length === 1);
+}
+
 console.log('--- bloom: one chart unfolds from the solar centre ---');
 {
   const out = await run(A, 'bloom');
