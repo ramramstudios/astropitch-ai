@@ -58,6 +58,16 @@ async function run(chart, mode) {
   return out;
 }
 
+console.log('--- tempo: BPM controls step length and echo time ---');
+{
+  const delayTimes = [];
+  const p = new Performer({ ...engine, setDelayTime: (seconds) => delayTimes.push(seconds) });
+  p.setTempo(120);
+  p.setTempo(60);
+  ok('120 BPM maps to a half-second beat', delayTimes[0] === 0.5, `${delayTimes[0]}s`);
+  ok('60 BPM maps to a one-second beat', delayTimes[1] === 1, `${delayTimes[1]}s`);
+}
+
 console.log('--- bloom: one chart unfolds from the solar centre ---');
 {
   const out = await run(A, 'bloom');

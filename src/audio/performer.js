@@ -31,7 +31,7 @@ export class Performer {
     this.engine = engine;
     this.chart = null;
     this.tuning = { refA: 440, temperament: 'equal' };
-    this.tempo = 0.5; // seconds per step
+    this.tempo = 120; // beats per minute
     this.mode = null;
     this.active = [];
     this.timers = [];
@@ -62,9 +62,9 @@ export class Performer {
     Object.assign(this.tuning, tuning);
   }
 
-  setTempo(seconds) {
-    this.tempo = seconds;
-    this.engine.setDelayTime(seconds);
+  setTempo(bpm) {
+    this.tempo = bpm;
+    this.engine.setDelayTime(60 / bpm);
   }
 
   // -------------------------------------------------------------------------
@@ -235,7 +235,7 @@ export class Performer {
     let t = start;
 
     for (const p of placements) {
-      const dur = lengths[p.modality] * (this.tempo / 0.5);
+      const dur = lengths[p.modality] * (120 / this.tempo);
       this._voiceFor(p, { time: t, duration: dur * 0.92, gainMul: 1.5 });
       this._emitAt({ type: 'note', key: p.key }, t);
       t += dur;

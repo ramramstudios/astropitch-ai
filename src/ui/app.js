@@ -147,7 +147,7 @@ function boot() {
   onResize();
 
   performer.onEvent(onPerformerEvent);
-  performer.setTempo(0.5);
+  performer.setTempo(120);
 
   if (state.source === 'birth') castFromBirthForm();
   else setSubject(chartFromSigns(state.signSelections));
@@ -513,7 +513,7 @@ function wireSoundControls() {
   $('#tempo').addEventListener('input', (e) => {
     const v = Number(e.target.value);
     performer.setTempo(v);
-    $('#tempoOut').textContent = v.toFixed(2);
+    $('#tempoOut').textContent = String(v);
   });
 
   $('#volume').addEventListener('input', (e) => {
