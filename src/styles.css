@@ -320,6 +320,11 @@ select:focus-visible,
   pointer-events: none;
   mix-blend-mode: multiply;
 }
+
+/* Multiply makes the canvas trace disappear into a dark hub; screen keeps the
+   same element-coloured waveform luminous without changing its drawing code. */
+:root[data-theme="dark"] .wheel-scope { mix-blend-mode: screen; }
+
 .wheel-svg { z-index: 2; overflow: visible; }
 
 
