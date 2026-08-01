@@ -700,6 +700,7 @@ function wireWheel() {
   });
 
   wheel.on('body', (key) => {
+    wheel.toggleAspectFocus(key);
     performer.playPlacement(key);
     showBody(key);
   });

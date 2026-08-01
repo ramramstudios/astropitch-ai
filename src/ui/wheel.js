@@ -52,6 +52,7 @@ export class Wheel {
     this.chart = null;
     this.rotation = 0;
     this.handlers = {};
+    this.aspectFocusKey = null;
     this.designer = false;
     this.drag = null;
     // While a body is being dragged the wheel stops turning under it. The
@@ -86,6 +87,9 @@ export class Wheel {
     this.svg.addEventListener('pointerup', (e) => this._onPointerUp(e));
     this.svg.addEventListener('pointercancel', () => this._cancelDrag());
     this.svg.addEventListener('lostpointercapture', () => this._cancelDrag());
+    this.svg.addEventListener('click', (e) => {
+      if (e.target === this.svg) this.clearAspectFocus();
+    });
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this._cancelDrag();
     });
@@ -184,6 +188,21 @@ export class Wheel {
 
   focusBody(key) {
     this.markers?.[key]?.focus();
+  }
+
+  /** Focus the aspect network of one placement; repeating the key clears it. */
+  toggleAspectFocus(key) {
+    this.aspectFocusKey = this.aspectFocusKey === key ? null : key;
+    this._drawAspects();
+    this._drawPlanets();
+    return this.aspectFocusKey;
+  }
+
+  clearAspectFocus() {
+    if (!this.aspectFocusKey) return;
+    this.aspectFocusKey = null;
+    this._drawAspects();
+    this._drawPlanets();
   }
 
   _drawSigns() {
@@ -325,9 +344,13 @@ export class Wheel {
       const [x1, y1] = this._point(a.longitude, R.hub);
       const [x2, y2] = this._point(b.longitude, R.hub);
 
+      const related = !this.aspectFocusKey
+        || asp.a === this.aspectFocusKey
+        || asp.b === this.aspectFocusKey;
       const line = el('line', {
         x1, y1, x2, y2,
-        class: `aspect-line aspect-${asp.name.toLowerCase()}`,
+        class: `aspect-line aspect-${asp.name.toLowerCase()}`
+          + (related ? ' is-related' : ' is-dimmed'),
         stroke: asp.color,
         'stroke-opacity': (0.2 + asp.exactness * 0.6).toFixed(3),
         'stroke-width': (1 + asp.exactness * 2.4).toFixed(2),
@@ -498,7 +521,8 @@ export class Wheel {
           + (p.side ? ` side-${p.side}` : '')
           + (p.silent ? ' is-silent' : '')
           + (draggable ? ' is-draggable' : '')
-          + (held ? ' is-held' : ''),
+          + (held ? ' is-held' : '')
+          + (this.aspectFocusKey === p.key ? ' is-aspect-focus' : ''),
         style: `--planet-tone: ${tone}`,
         'data-body': p.key,
         tabindex: 0,

@@ -426,7 +426,15 @@ select:focus-visible,
 .aspect-line {
   stroke: var(--ink) !important;
   stroke-linecap: round;
-  transition: stroke-opacity 140ms ease, stroke-width 140ms ease;
+  transition: opacity 140ms ease, stroke-opacity 140ms ease, stroke-width 140ms ease;
+}
+
+/* Selecting a placement leaves its own network legible and lets every other
+   chord recede into the paper. */
+.aspect-line.is-dimmed { opacity: 0.08; }
+.aspect-line.is-related {
+  stroke-opacity: 1 !important;
+  stroke-width: 3 !important;
 }
 
 .aspect-sextile,
@@ -496,6 +504,8 @@ select:focus-visible,
 .planet:hover .planet-halo,
 .planet:focus-visible .planet-halo,
 .planet.is-hot .planet-halo { opacity: 0.11; }
+
+.planet.is-aspect-focus .planet-halo { opacity: 0.22; }
 
 .planet.is-sounding .planet-halo { animation: haloPulse 1.1s ease-out; }
 .planet.is-sounding .planet-orb { animation: orbBloom 1.25s cubic-bezier(0.16, 0.84, 0.26, 1); }
