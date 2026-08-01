@@ -1174,7 +1174,8 @@ body.is-modal-open { overflow: hidden; }
   margin: 0 0 1.4rem;
   padding: 1rem;
   border: 1px solid var(--ink);
-  background: #f4f3ee;
+  /* Keep the staff on a distinct, theme-aware sheet from the modal card. */
+  background: var(--paper);
 }
 
 .notation-figure svg {
