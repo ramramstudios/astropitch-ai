@@ -77,6 +77,45 @@ You must supply the UTC offset that was actually in force at the birth moment.
 Historical daylight saving cannot be derived from coordinates, and guessing it
 silently would be worse than asking.
 
+## Two charts at once
+
+The **Overlay** tab plays a chart against the sky right now, or against another
+person's chart.
+
+Neither chart is transposed. Both are tuned by the same rule, so they land in the
+same chromatic octave and a contact between them is the interval it claims to be
+— a cross-chart trine really is a major third. Shifting one chart aside to
+"separate" the two would make every contact a lie.
+
+That shared pitch space pays for itself. A cross-chart conjunction is a unison
+held slightly apart, so its orb is directly audible as the rate at which the two
+tones beat:
+
+| orb | beat at A 440 | what you hear |
+| --- | --- | --- |
+| 8° | 6.8 Hz | roughness |
+| 3° | 2.5 Hz | a tremble |
+| 1° | 0.85 Hz | a slow swell |
+| 0° | — | one fused tone |
+
+What is controlled instead is density. Twenty-two bodies sounding at once is a
+wall, but a relationship is not twenty-two bodies — it is the handful of places
+where the two charts actually touch. Two charts throw around forty aspects
+between them, so the strongest eight are kept and only the bodies involved in
+those sound. In practice that is twelve or thirteen voices rather than
+twenty-two. Bodies that touch nothing in the other chart are still drawn on the
+wheel, dimmed, and listed as silent.
+
+The cut is therefore made by the astrology rather than by a rule that says "only
+ever play the Sun, Moon and Ascendant". A closely interlocked pair comes out
+dense and busy; two strangers come out sparse and open. The texture is the
+reading.
+
+The **Bloom** arrangement pairs like bodies back to back — your Sun, then theirs
+two tenths of a second later — so each contact arrives as an interval rather than
+as two unrelated events. One number summarises the whole thing: the consonance of
+the kept contacts, weighted by how tight each one is.
+
 ## The astronomy
 
 - **Sun** — Meeus ch. 25. Matches the ch. 25 worked example to 0.001°.
@@ -145,7 +184,17 @@ Stop the server with `Ctrl+C` in the terminal where it is running.
 
 ```sh
 node tests/ephemeris.test.mjs    # astronomy vs. Meeus and JPL reference values
+node tests/synastry.test.mjs     # cross-chart contacts, density, harmony score
+node tests/performer.test.mjs    # what the arrangements schedule
 ```
+
+`synastry.test.mjs` pins the claims the overlay depends on: that a merged
+synastry object is shaped exactly like a chart, that neither chart is
+transposed, and that orb converts to beat rate as advertised.
+`performer.test.mjs` stubs voice construction so the arrangement logic can run
+without an `AudioContext`; its sharpest check is that the detune nudge never
+crosses between charts, since there the beating is the signal rather than
+something to be smoothed away.
 
 For the audio, open `tests/audio.test.html` with the server running. It renders
 the graph through an `OfflineAudioContext` and measures the result: all 144
@@ -160,7 +209,7 @@ index.html
 src/
   ontology.js        signs, houses, elements, modalities, bodies, aspects
   ephemeris.js       Sun, Moon, planets, angles, house systems
-  chart.js           longitudes -> placements, aspects, balance
+  chart.js           longitudes -> placements, aspects, balance, synastry
   styles.css
   audio/
     engine.js        the persistent signal graph

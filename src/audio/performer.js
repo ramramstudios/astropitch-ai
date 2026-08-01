@@ -95,22 +95,32 @@ export class Performer {
     return voice;
   }
 
-  /** Nudge bodies that land on nearly the same pitch so they beat instead of cancel. */
+  /**
+   * Nudge bodies that land on nearly the same pitch so they beat instead of
+   * cancel.
+   *
+   * Only ever within one chart. Across two charts the beating *is* the
+   * information — the orb of a cross-chart conjunction is what you hear as the
+   * beat rate — and 7 cents of arbitrary detune is worth about 2° of orb, so
+   * applying this across sides would drown the signal in noise that means
+   * nothing.
+   */
   _detuneMap(placements) {
     const map = {};
     const seen = [];
     for (const p of placements) {
       const semis = p.longitude / 30 + p.octave * 12;
-      const collision = seen.find((s) => Math.abs(s - semis) < 1.2);
+      const collision = seen.find((s) => s.side === p.side && Math.abs(s.semis - semis) < 1.2);
       map[p.key] = collision == null ? 0 : (seen.length % 2 ? 7 : -7);
-      seen.push(semis);
+      seen.push({ semis, side: p.side });
     }
     return map;
   }
 
+  /** Bodies that actually sound: not the Midheaven, and not the untouched. */
   _sounding() {
     if (!this.chart) return [];
-    return this.chart.placements.filter((p) => p.key !== 'mc');
+    return this.chart.placements.filter((p) => p.key !== 'mc' && !p.silent);
   }
 
   // -------------------------------------------------------------------------
@@ -163,32 +173,43 @@ export class Performer {
    * The chart as a chord that assembles itself: rising sign first, because it
    * is the voice you are heard in, then the lights, then the planets in order
    * of speed. Everything holds, then releases together.
+   *
+   * With two charts overlaid the same order runs, but each body is immediately
+   * followed by its opposite number — so Sun lands against Sun, and you hear
+   * the contact as an interval rather than as two unrelated events.
    */
   async bloom() {
     await this._begin('bloom');
-    const order = ['asc', 'sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
+    const ORDER = ['asc', 'sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
     const placements = this._sounding();
     const detunes = this._detuneMap(placements);
-    const byKey = Object.fromEntries(placements.map((p) => [p.key, p]));
 
     // Slower for the anchors, quicker through the inner planets, slowing again
     // for the outers as they settle underneath.
     const gaps = { asc: 0, sun: 1.15, moon: 0.95, mercury: 0.75, venus: 0.55, mars: 0.55, jupiter: 0.6, saturn: 0.7, uranus: 0.55, neptune: 0.7, pluto: 0.8 };
 
+    const baseOf = (p) => p.baseKey ?? p.key;
+    const ordered = placements
+      .slice()
+      .sort((x, y) => ORDER.indexOf(baseOf(x)) - ORDER.indexOf(baseOf(y))
+        || String(x.side ?? '').localeCompare(String(y.side ?? '')));
+
     const start = this.engine.now + 0.08;
     let t = start;
     let count = 0;
+    let prevBase = null;
     const voices = [];
 
-    for (const key of order) {
-      const p = byKey[key];
-      if (!p) continue;
-      t += gaps[key] ?? 0.6;
+    for (const p of ordered) {
+      const base = baseOf(p);
+      // A body's counterpart arrives almost on top of it; a new body waits.
+      t += base === prevBase ? 0.2 : (gaps[base] ?? 0.6);
+      prevBase = base;
       count++;
       // Keep the sum under control as the chord thickens.
       const headroom = 1 / Math.sqrt(Math.max(1, count * 0.55));
-      voices.push(this._voiceFor(p, { time: t, gainMul: headroom * 1.35, detune: detunes[key] }));
-      this._emitAt({ type: 'note', key }, t);
+      voices.push(this._voiceFor(p, { time: t, gainMul: headroom * 1.35, detune: detunes[p.key] }));
+      this._emitAt({ type: 'note', key: p.key }, t);
     }
 
     const hold = t + 3.4;
@@ -221,7 +242,7 @@ export class Performer {
     }
 
     // Land on the Ascendant an octave up, to close the circle.
-    const asc = this.chart.byKey.asc;
+    const asc = this.chart.byKey.asc ?? this.chart.byKey['a:asc'];
     if (asc) {
       this._voiceFor(asc, { time: t + 0.2, duration: 3.0, gainMul: 1.5, octaveShift: 1 });
       this._emitAt({ type: 'note', key: 'asc' }, t + 0.2);
@@ -240,10 +261,17 @@ export class Performer {
     await this._begin('drone');
     const placements = this._sounding();
     const detunes = this._detuneMap(placements);
-    const byKey = Object.fromEntries(placements.map((p) => [p.key, p]));
+    const baseOf = (p) => p.baseKey ?? p.key;
 
-    const anchorKeys = ['asc', 'sun', 'moon', 'saturn', 'pluto'].filter((k) => byKey[k]);
-    const floating = placements.filter((p) => !anchorKeys.includes(p.key));
+    // Two charts overlaid already put two of everything in the bed, so the
+    // anchors drop to the lights and the angle to leave the same room.
+    const anchorBases = this.chart.meta?.synastry
+      ? ['asc', 'sun', 'moon']
+      : ['asc', 'sun', 'moon', 'saturn', 'pluto'];
+    const anchorSet = new Set(anchorBases);
+    const anchorPlacements = placements.filter((p) => anchorSet.has(baseOf(p)));
+    const anchorKeys = new Set(anchorPlacements.map((p) => p.key));
+    const floating = placements.filter((p) => !anchorKeys.has(p.key));
 
     // How active each body is, from the aspects it makes.
     const activity = {};
@@ -255,19 +283,19 @@ export class Performer {
 
     const startAnchors = (at) => {
       const voices = [];
-      anchorKeys.forEach((key, i) => {
-        const v = this._voiceFor(byKey[key], {
+      anchorPlacements.forEach((p, i) => {
+        const v = this._voiceFor(p, {
           time: at + i * 0.9,
-          gainMul: 0.85 / Math.sqrt(anchorKeys.length * 0.5),
-          detune: detunes[key],
+          gainMul: 0.85 / Math.sqrt(anchorPlacements.length * 0.5),
+          detune: detunes[p.key],
         });
         voices.push(v);
-        this._emitAt({ type: 'note', key }, at + i * 0.9);
+        this._emitAt({ type: 'note', key: p.key }, at + i * 0.9);
       });
       return voices;
     };
 
-    let anchors = startAnchors(this.engine.now + 0.08);
+    let bed = startAnchors(this.engine.now + 0.08);
     // Refresh the bed periodically: envelopes are finite and drift accumulates.
     const CYCLE = 24;
 
@@ -275,8 +303,8 @@ export class Performer {
       if (this.mode !== 'drone') return;
       const now = this.engine.now;
       const next = startAnchors(now + 0.5);
-      for (const v of anchors) v.release(now + 2.2);
-      anchors = next;
+      for (const v of bed) v.release(now + 2.2);
+      bed = next;
     };
 
     const shimmer = () => {

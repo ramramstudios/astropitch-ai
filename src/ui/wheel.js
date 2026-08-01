@@ -23,7 +23,8 @@ const R = {
   rim: 486,
   signOuter: 470,
   signInner: 402,
-  glyph: 436,
+  signName: 448,
+  glyph: 418,
   houseOuter: 402,
   houseInner: 330,
   tick: 402,
@@ -51,6 +52,7 @@ export class Wheel {
     this.chart = null;
     this.rotation = 0;
     this.handlers = {};
+    this.scopePalette = [this._scopeColor('air')];
 
     this.svg = el('svg', {
       viewBox: `${VIEW_MIN} ${VIEW_MIN} ${VIEW_SIZE} ${VIEW_SIZE}`,
@@ -81,6 +83,22 @@ export class Wheel {
 
   _emit(event, ...args) {
     this.handlers[event]?.(...args);
+  }
+
+  _scopeColor(element) {
+    const hex = ELEMENTS[element]?.color ?? '#7fd3f0';
+    const value = hex.replace('#', '');
+    return {
+      r: Number.parseInt(value.slice(0, 2), 16),
+      g: Number.parseInt(value.slice(2, 4), 16),
+      b: Number.parseInt(value.slice(4, 6), 16),
+    };
+  }
+
+  /** Use one element hue for a voice, or a two-colour field for an aspect. */
+  setScopeTone(elements) {
+    const tones = (Array.isArray(elements) ? elements : [elements]).filter(Boolean);
+    if (tones.length) this.scopePalette = tones.slice(0, 2).map((element) => this._scopeColor(element));
   }
 
   /** Screen angle in radians for an ecliptic longitude. */
@@ -159,11 +177,28 @@ export class Wheel {
       sector.addEventListener('mouseleave', () => this._emit('hoverSign', null));
       nodes.push(sector);
 
-      const [gx, gy] = this._point(start + 15, R.glyph);
+      const midpoint = start + 15;
+      const [nx, ny] = this._point(midpoint, R.signName);
+      const radialAngle = 180 + (norm360(midpoint) - this.rotation);
+      let tangentAngle = 90 - radialAngle;
+      const normalizedTangent = norm360(tangentAngle);
+      if (normalizedTangent > 90 && normalizedTangent < 270) tangentAngle += 180;
+      nodes.push(
+        el('text', {
+          x: nx, y: ny,
+          class: 'sign-name',
+          transform: `rotate(${tangentAngle} ${nx} ${ny})`,
+          'text-anchor': 'middle',
+          'dominant-baseline': 'central',
+          'pointer-events': 'none',
+        }, sign.name.toUpperCase())
+      );
+
+      const [gx, gy] = this._point(midpoint, R.glyph);
       nodes.push(
         el('text', {
           x: gx, y: gy,
-          class: `sign-glyph element-${sign.element}`,
+          class: 'sign-glyph',
           'text-anchor': 'middle',
           'dominant-baseline': 'central',
           'pointer-events': 'none',
@@ -326,12 +361,17 @@ export class Wheel {
       const [tx2, ty2] = this._point(p.longitude, R.planetTick - 10);
       const [gx, gy] = this._point(shown, radius);
 
+      // In an overlay, the second chart's markers are outlined rather than
+      // filled, and anything that touches nothing in the other chart is dimmed
+      // to show it is present but not sounding.
       const group = el('g', {
-        class: `planet element-${p.element}`,
+        class: `planet element-${p.element}`
+          + (p.side ? ` side-${p.side}` : '')
+          + (p.silent ? ' is-silent' : ''),
         'data-body': p.key,
         tabindex: 0,
         role: 'button',
-        'aria-label': `${p.name} at ${p.label}, house ${p.house}`,
+        'aria-label': `${p.name}${p.side ? `, chart ${p.side.toUpperCase()}` : ''} at ${p.label}, house ${p.house}`,
       });
       group.addEventListener('click', () => this._emit('body', p.key));
       group.addEventListener('keydown', (e) => {
@@ -431,8 +471,20 @@ export class Wheel {
     // Peaks must stay inside the hub or the trace swamps the aspect chords.
     const gain = base * 0.42;
 
-    // Two passes: a wide soft glow, then a crisp line on top.
-    for (const pass of [0, 1]) {
+    const colorAt = (opacity) => {
+      if (this.scopePalette.length === 1) {
+        const { r, g, b } = this.scopePalette[0];
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+      }
+      const gradient = ctx.createLinearGradient(cx - base, cy, cx + base, cy);
+      this.scopePalette.forEach(({ r, g, b }, i, colors) => {
+        gradient.addColorStop(i / (colors.length - 1), `rgba(${r}, ${g}, ${b}, ${opacity})`);
+      });
+      return gradient;
+    };
+
+    // A broad colour bloom, a tighter halo, and a bright technical core.
+    for (const pass of [0, 1, 2]) {
       ctx.beginPath();
       const N = 360;
       for (let i = 0; i <= N; i++) {
@@ -448,12 +500,16 @@ export class Wheel {
       }
       ctx.closePath();
       if (pass === 0) {
-        ctx.strokeStyle = `rgba(196, 168, 255, ${0.1 + level * 0.5})`;
-        ctx.lineWidth = 9 * scale * (1 + level * 3);
-        ctx.filter = `blur(${6 * scale}px)`;
+        ctx.strokeStyle = colorAt(Math.min(0.72, 0.3 + level * 4));
+        ctx.lineWidth = 24 * scale * (1 + level * 2.5);
+        ctx.filter = `blur(${13 * scale}px)`;
+      } else if (pass === 1) {
+        ctx.strokeStyle = colorAt(Math.min(0.92, 0.58 + level * 3));
+        ctx.lineWidth = 8 * scale * (1 + level * 1.5);
+        ctx.filter = `blur(${4 * scale}px)`;
       } else {
-        ctx.strokeStyle = `rgba(240, 233, 255, ${0.5 + level * 0.5})`;
-        ctx.lineWidth = 1.6 * scale;
+        ctx.strokeStyle = colorAt(Math.min(1, 0.9 + level));
+        ctx.lineWidth = 2.5 * scale;
         ctx.filter = 'none';
       }
       ctx.stroke();

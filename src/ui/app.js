@@ -5,8 +5,8 @@
 import {
   SIGNS, HOUSES, ELEMENTS, MODALITIES, ASPECTS, BODIES, SOUNDING_BODIES,
 } from '../ontology.js';
-import { chartFromBirth, chartFromSigns, chartForNow } from '../chart.js';
-import { TEMPERAMENTS } from '../audio/tuning.js';
+import { chartFromBirth, chartFromSigns, chartForNow, makeSynastry } from '../chart.js';
+import { TEMPERAMENTS, frequencyFor } from '../audio/tuning.js';
 import { engine } from '../audio/engine.js';
 import { Performer } from '../audio/performer.js';
 import { Wheel } from './wheel.js';
@@ -62,8 +62,14 @@ const PLACES = [
 // ---------------------------------------------------------------------------
 
 const state = {
+  // The chart you cast. Always a single chart.
+  subject: null,
+  // The chart overlaid on it, or null. Either another person or the sky.
+  partner: null,
+  // What is actually drawn and played: the subject, or the two of them merged.
   chart: null,
   source: 'birth',
+  overlaySource: 'sky',
   tuning: { refA: 440, temperament: 'equal' },
   signSelections: Object.fromEntries(SOUNDING_BODIES.map((k, i) => [k, i % 12])),
 };
@@ -80,7 +86,8 @@ function boot() {
   wheel = new Wheel($('#wheelHolder'));
   starfield = new Starfield($('#stars'));
 
-  buildPlaceOptions();
+  buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 0);
+  buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 10);
   buildSignPickers();
   buildTemperamentOptions();
   buildLegends();
@@ -88,6 +95,7 @@ function boot() {
 
   wireTabs();
   wireForms();
+  wireOverlay();
   wireTransport();
   wireSoundControls();
   wireWheel();
@@ -113,8 +121,8 @@ function onResize() {
 // Static UI construction
 // ---------------------------------------------------------------------------
 
-function buildPlaceOptions() {
-  const select = $('#placePreset');
+function buildPlaceOptions(selectId, fields, defaultIndex) {
+  const select = $(selectId);
   select.replaceChildren(
     ...PLACES.map((p, i) => {
       const opt = document.createElement('option');
@@ -124,16 +132,16 @@ function buildPlaceOptions() {
     }),
     Object.assign(document.createElement('option'), { value: 'custom', textContent: 'Custom coordinates' })
   );
-  select.value = '0';
+  select.value = String(defaultIndex);
   select.addEventListener('change', () => {
     const p = PLACES[Number(select.value)];
     if (!p) return;
-    $('#lat').value = p.lat;
-    $('#lon').value = p.lon;
-    $('#utcOffset').value = p.utc;
+    $(fields.lat).value = p.lat;
+    $(fields.lon).value = p.lon;
+    $(fields.utc).value = p.utc;
   });
   // Typing coordinates by hand should flip the selector to Custom.
-  for (const id of ['#lat', '#lon', '#utcOffset']) {
+  for (const id of [fields.lat, fields.lon, fields.utc]) {
     $(id).addEventListener('input', () => { select.value = 'custom'; });
   }
 }
@@ -248,10 +256,12 @@ function wireTabs() {
 }
 
 function wireForms() {
-  for (const btn of $$('.seg-btn')) {
+  // Matched on the data attribute, not the class — the Overlay panel uses the
+  // same segmented-button styling for a different choice.
+  for (const btn of $$('[data-source]')) {
     btn.addEventListener('click', () => {
       state.source = btn.dataset.source;
-      for (const b of $$('.seg-btn')) b.classList.toggle('is-active', b === btn);
+      for (const b of $$('[data-source]')) b.classList.toggle('is-active', b === btn);
       $('#birthForm').classList.toggle('is-hidden', state.source !== 'birth');
       $('#signsForm').classList.toggle('is-hidden', state.source !== 'signs');
     });
@@ -264,7 +274,7 @@ function wireForms() {
 
   $('#signsForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    setChart(chartFromSigns(state.signSelections));
+    setSubject(chartFromSigns(state.signSelections));
   });
 
   $('#houseSystem').addEventListener('change', () => {
@@ -273,7 +283,7 @@ function wireForms() {
 
   $('#nowBtn').addEventListener('click', () => {
     const place = readPlace();
-    setChart(chartForNow(place, $('#houseSystem').value));
+    setSubject(chartForNow(place, $('#houseSystem').value));
     const now = new Date();
     $('#birthDate').value = now.toISOString().slice(0, 10);
     $('#birthTime').value = now.toISOString().slice(11, 16);
@@ -304,7 +314,7 @@ function wireForms() {
       select.value = String(v);
       state.signSelections[select.dataset.body] = v;
     }
-    setChart(chartFromSigns(state.signSelections));
+    setSubject(chartFromSigns(state.signSelections));
   });
 }
 
@@ -326,7 +336,67 @@ function castFromBirthForm() {
     minute: minute || 0,
     utcOffset: Number($('#utcOffset').value) || 0,
   };
-  setChart(chartFromBirth(birth, readPlace(), $('#houseSystem').value));
+  setSubject(chartFromBirth(birth, readPlace(), $('#houseSystem').value));
+}
+
+// ---------------------------------------------------------------------------
+// Overlay
+// ---------------------------------------------------------------------------
+
+function wireOverlay() {
+  for (const btn of $$('[data-overlay]')) {
+    btn.addEventListener('click', () => {
+      state.overlaySource = btn.dataset.overlay;
+      for (const b of $$('[data-overlay]')) b.classList.toggle('is-active', b === btn);
+      $('#skyForm').classList.toggle('is-hidden', state.overlaySource !== 'sky');
+      $('#partnerForm').classList.toggle('is-hidden', state.overlaySource !== 'person');
+    });
+  }
+
+  $('#skyForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    // The sky is read at the subject's own place, so its angles mean something.
+    setPartner(chartForNow(readPlace(), $('#houseSystem').value), 'the sky now');
+  });
+
+  $('#partnerForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const chart = readPartnerChart();
+    if (chart) setPartner(chart, 'another chart');
+  });
+
+  $('#bRandomBtn').addEventListener('click', () => {
+    const place = PLACES[Math.floor(Math.random() * PLACES.length)];
+    const year = 1930 + Math.floor(Math.random() * 90);
+    const month = 1 + Math.floor(Math.random() * 12);
+    const day = 1 + Math.floor(Math.random() * 28);
+    $('#bDate').value = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    $('#bTime').value = `${String(Math.floor(Math.random() * 24)).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`;
+    $('#bLat').value = place.lat;
+    $('#bLon').value = place.lon;
+    $('#bUtcOffset').value = place.utc;
+    $('#bPlacePreset').value = String(PLACES.indexOf(place));
+    const chart = readPartnerChart();
+    if (chart) setPartner(chart, 'another chart');
+  });
+
+  $('#clearOverlayBtn').addEventListener('click', () => setPartner(null));
+}
+
+function readPartnerChart() {
+  const [year, month, day] = $('#bDate').value.split('-').map(Number);
+  const [hour, minute] = $('#bTime').value.split(':').map(Number);
+  if (!year || !month || !day) return null;
+  return chartFromBirth(
+    {
+      year, month, day,
+      hour: hour || 0,
+      minute: minute || 0,
+      utcOffset: Number($('#bUtcOffset').value) || 0,
+    },
+    { latitude: Number($('#bLat').value) || 0, longitude: Number($('#bLon').value) || 0 },
+    $('#houseSystem').value
+  );
 }
 
 function wireSoundControls() {
@@ -428,15 +498,37 @@ function wireKeyboard() {
 // Chart rendering
 // ---------------------------------------------------------------------------
 
-function setChart(chart) {
-  state.chart = chart;
-  performer.setChart(chart);
+function setSubject(chart) {
+  state.subject = chart;
+  render();
+}
+
+function setPartner(chart, label = null) {
+  state.partner = chart;
+  state.partnerLabel = label;
+  render();
+}
+
+/**
+ * One chart or two. `makeSynastry` returns a chart-shaped object, so
+ * everything downstream — the wheel, the tables, the performer — reads it
+ * without knowing which it has.
+ */
+function render() {
+  if (!state.subject) return;
+  state.chart = state.partner
+    ? makeSynastry(state.subject, state.partner)
+    : state.subject;
+
+  performer.stop();
+  performer.setChart(state.chart);
   performer.setTuning(state.tuning);
-  wheel.render(chart);
+  wheel.render(state.chart);
   wheel.resizeScope();
   renderPlacements();
   renderAspects();
   renderBalance();
+  renderOverlay();
 }
 
 function renderPlacements() {
@@ -447,7 +539,8 @@ function renderPlacements() {
     ...state.chart.placements.map((p) => {
       const tr = document.createElement('tr');
       tr.dataset.body = p.key;
-      tr.className = `element-${p.element}`;
+      // A body that touches nothing in the other chart is listed but not sounded.
+      tr.className = `element-${p.element}${p.silent ? ' is-silent' : ''}`;
 
       const body = document.createElement('td');
       const wrap = document.createElement('span');
@@ -459,6 +552,12 @@ function renderPlacements() {
       const nm = document.createElement('span');
       nm.textContent = p.name;
       wrap.append(g, nm);
+      if (p.side) {
+        const s = document.createElement('span');
+        s.className = 'side-tag';
+        s.textContent = p.side.toUpperCase();
+        wrap.append(s);
+      }
       if (p.retrograde) {
         const r = document.createElement('span');
         r.className = 'retro';
@@ -500,53 +599,131 @@ function renderPlacements() {
   );
 }
 
-function renderAspects() {
-  const tbody = $('#aspectsTable tbody');
-  if (!state.chart) return;
-  const { aspects, byKey } = state.chart;
+/** A body's glyph, tagged with which chart it came from when there are two. */
+function glyphWithSide(p) {
+  const frag = document.createDocumentFragment();
+  frag.append(document.createTextNode(p.glyph));
+  if (p.side) {
+    const tag = document.createElement('span');
+    tag.className = 'side-tag';
+    tag.textContent = p.side.toUpperCase();
+    frag.append(tag);
+  }
+  return frag;
+}
 
-  if (aspects.length === 0) {
+/** One row of the aspect tables. Shared by the natal list and the contacts. */
+function aspectRow(a) {
+  const { byKey } = state.chart;
+  const A = byKey[a.a];
+  const B = byKey[a.b];
+
+  const tr = document.createElement('tr');
+  const pair = document.createElement('td');
+  pair.className = 'cell-pair';
+  pair.append(glyphWithSide(A), document.createTextNode(' '), glyphWithSide(B));
+  pair.title = `${A.name} — ${B.name}`;
+
+  const kind = document.createElement('td');
+  const kg = document.createElement('span');
+  kg.className = 'aspect-glyph';
+  kg.textContent = a.glyph;
+  kg.style.color = a.color;
+  kind.append(kg, document.createTextNode(a.name));
+
+  const interval = document.createElement('td');
+  interval.textContent = a.interval;
+
+  const orb = document.createElement('td');
+  orb.className = 'cell-orb';
+  orb.textContent = `${a.orbDelta.toFixed(1)}°`;
+
+  tr.append(pair, kind, interval, orb);
+  tr.addEventListener('click', () => {
+    performer.playAspect(a);
+    showAspect(a);
+  });
+  tr.addEventListener('mouseenter', () => showAspect(a));
+  tr.addEventListener('mouseleave', clearReadout);
+  return tr;
+}
+
+function fillAspectTable(tbody, list, emptyText) {
+  if (list.length === 0) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
     td.colSpan = 4;
     td.className = 'empty';
-    td.textContent = 'No aspects within orb. A very quiet chart.';
+    td.textContent = emptyText;
     tr.append(td);
     tbody.replaceChildren(tr);
     return;
   }
+  tbody.replaceChildren(...list.map(aspectRow));
+}
 
-  tbody.replaceChildren(
-    ...aspects.map((a) => {
-      const tr = document.createElement('tr');
-      const pair = document.createElement('td');
-      pair.textContent = `${byKey[a.a].glyph} ${byKey[a.b].glyph}`;
-      pair.title = `${byKey[a.a].name} — ${byKey[a.b].name}`;
-
-      const kind = document.createElement('td');
-      const kg = document.createElement('span');
-      kg.className = 'aspect-glyph';
-      kg.textContent = a.glyph;
-      kg.style.color = a.color;
-      kind.append(kg, document.createTextNode(a.name));
-
-      const interval = document.createElement('td');
-      interval.textContent = a.interval;
-
-      const orb = document.createElement('td');
-      orb.className = 'cell-orb';
-      orb.textContent = `${a.orbDelta.toFixed(1)}°`;
-
-      tr.append(pair, kind, interval, orb);
-      tr.addEventListener('click', () => {
-        performer.playAspect(a);
-        showAspect(a);
-      });
-      tr.addEventListener('mouseenter', () => showAspect(a));
-      tr.addEventListener('mouseleave', clearReadout);
-      return tr;
-    })
+function renderAspects() {
+  if (!state.chart) return;
+  fillAspectTable(
+    $('#aspectsTable tbody'),
+    state.chart.aspects,
+    state.chart.meta?.synastry
+      ? 'Nothing within orb between these two charts. They barely touch.'
+      : 'No aspects within orb. A very quiet chart.'
   );
+}
+
+// Where the weighted consonance of the contacts lands. The wording describes
+// the sound, because the sound is the claim — a chart full of trines really is
+// a stack of major thirds.
+const HARMONY_BANDS = [
+  { min: 0.72, name: 'Consonant', line: 'Unisons and thirds carry it. The two charts reinforce each other.' },
+  { min: 0.56, name: 'Warm', line: 'Mostly agreement, with just enough friction to keep it moving.' },
+  { min: 0.42, name: 'Mixed', line: 'Ease and tension in roughly equal measure. It leans where you push it.' },
+  { min: 0.30, name: 'Unsettled', line: 'Audible tension. The chord wants to resolve and never quite does.' },
+  { min: -1, name: 'Dissonant', line: 'Squares and oppositions carry it. This one will not sit still.' },
+];
+
+function renderOverlay() {
+  const holder = $('#verdict');
+  const tbody = $('#contactsTable tbody');
+  const meta = state.chart?.meta;
+  $('#clearOverlayBtn').disabled = !state.partner;
+
+  if (!meta?.synastry) {
+    const hint = document.createElement('p');
+    hint.className = 'note';
+    hint.textContent = 'One chart. Overlay the sky or another person to hear how they sit together.';
+    holder.replaceChildren(hint);
+    tbody.replaceChildren();
+    return;
+  }
+
+  const band = HARMONY_BANDS.find((b) => meta.harmony >= b.min);
+
+  const title = document.createElement('p');
+  title.className = 'verdict-title';
+  title.textContent = band.name;
+
+  const score = document.createElement('span');
+  score.className = 'verdict-score';
+  score.textContent = `${Math.round(meta.harmony * 100)}`;
+  title.append(score);
+
+  const line = document.createElement('p');
+  line.className = 'verdict-line';
+  line.textContent = band.line;
+
+  const counts = document.createElement('p');
+  counts.className = 'verdict-counts';
+  const sounding = state.chart.placements.filter((p) => !p.silent).length;
+  counts.textContent = `${meta.supporting} supporting · ${meta.challenging} challenging · `
+    + `playing the strongest ${state.chart.aspects.length} of ${meta.contacts.length} contacts, `
+    + `${sounding} voices`;
+
+  holder.replaceChildren(title, line, counts);
+
+  fillAspectTable(tbody, state.chart.aspects, 'These two charts barely touch.');
 }
 
 function renderBalance() {
@@ -670,7 +847,7 @@ function showBody(key) {
   const modality = MODALITIES[p.modality];
 
   readoutEl(
-    `${p.name} in ${p.sign.name}`,
+    `${p.name} in ${p.sign.name}${p.side ? ` · chart ${p.side.toUpperCase()}` : ''}`,
     p.glyph,
     element.color,
     state.tuning.temperament === 'equal' ? p.pitch : p.sign.pitch,
@@ -696,31 +873,51 @@ function showAspect(a) {
   const A = chart.byKey[a.a];
   const B = chart.byKey[a.b];
 
+  const side = (p) => (p.side ? ` (${p.side.toUpperCase()})` : '');
+  const body = [
+    document.createTextNode(`${a.separation.toFixed(2)}° apart, which is `),
+    em(`${(a.separation / 30).toFixed(2)} semitones`),
+    document.createTextNode(` — a ${a.interval}, ${a.orbDelta.toFixed(2)}° from exact. `),
+    document.createTextNode(
+      a.consonance > 0.7
+        ? 'Consonant: the two voices reinforce each other.'
+        : a.consonance > 0.3
+          ? 'Unsettled: audible tension that wants to resolve.'
+          : 'Dissonant: the interval will not sit still.'
+    ),
+  ];
+
+  // A conjunction is a unison held slightly apart, so the orb is not a
+  // metaphor here — it is the rate at which the two tones beat against each
+  // other. Exact fuses into one tone; a wide orb rattles.
+  const tags = [`${a.name} · ${a.angle}°`, `${A.pitch} + ${B.pitch}`];
+  if (a.angle === 0) {
+    // Measured off the frequencies actually sounded — playAspect drops both
+    // bodies to the same octave, which is anywhere up to twice the reference A.
+    const at = (p) => frequencyFor(p.longitude, { octave: 0, ...state.tuning });
+    const beat = Math.abs(at(B) - at(A));
+    body.push(document.createTextNode(
+      beat < 0.35
+        ? ' Close enough to fuse: the two tones lock into one.'
+        : ` You hear that orb directly — the two tones beat ${beat.toFixed(1)} times a second.`
+    ));
+    if (beat >= 0.35) tags.push(`${beat.toFixed(1)} Hz beat`);
+  }
+
   readoutEl(
-    `${A.name} ${a.glyph} ${B.name}`,
+    `${A.name}${side(A)} ${a.glyph} ${B.name}${side(B)}`,
     null,
     a.color,
     a.interval,
-    [
-      document.createTextNode(`${a.separation.toFixed(2)}° apart, which is `),
-      em(`${(a.separation / 30).toFixed(2)} semitones`),
-      document.createTextNode(` — a ${a.interval}, ${a.orbDelta.toFixed(2)}° from exact. `),
-      document.createTextNode(
-        a.consonance > 0.7
-          ? 'Consonant: the two voices reinforce each other.'
-          : a.consonance > 0.3
-            ? 'Unsettled: audible tension that wants to resolve.'
-            : 'Dissonant: the interval will not sit still.'
-      ),
-    ],
-    [`${a.name} · ${a.angle}°`, `${A.pitch} + ${B.pitch}`]
+    body,
+    tags
   );
 }
 
 function clearReadout() {
   const hint = document.createElement('p');
   hint.className = 'readout-hint';
-  hint.textContent = 'Click anything — a sign, a planet, a line across the middle.';
+  hint.textContent = 'Select any sign, planet, or aspect to read and hear it.';
   $('#readout').replaceChildren(hint);
 }
 
@@ -733,6 +930,7 @@ const lowerFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 
 function onPerformerEvent(event) {
   if (event.type === 'note') {
+    wheel.setScopeTone(state.chart?.byKey?.[event.key]?.element);
     wheel.pulse(event.key);
     const row = $(`#placementsTable tbody tr[data-body="${event.key}"]`);
     if (row) {
@@ -742,7 +940,12 @@ function onPerformerEvent(event) {
       setTimeout(() => row.classList.remove('is-sounding'), 1200);
     }
   } else if (event.type === 'sign') {
+    wheel.setScopeTone(SIGNS[event.signIndex]?.element);
     wheel.pulseSign(event.signIndex);
+  } else if (event.type === 'aspect') {
+    const a = state.chart?.byKey?.[event.aspect.a];
+    const b = state.chart?.byKey?.[event.aspect.b];
+    wheel.setScopeTone([a?.element, b?.element]);
   } else if (event.type === 'start') {
     $('#stopBtn').disabled = false;
     for (const [sel, mode] of [['#bloomBtn', 'bloom'], ['#sequenceBtn', 'sequence'], ['#droneBtn', 'drone']]) {

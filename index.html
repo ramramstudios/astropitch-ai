@@ -12,22 +12,28 @@
   <canvas id="stars" aria-hidden="true"></canvas>
 
   <header class="masthead">
-    <div class="brand">
-      <h1>Astro<span>Pitch</span></h1>
-      <p class="thesis">
-        The zodiac has twelve signs of 30°. An octave has twelve semitones.
-        <strong>30° is one semitone</strong> — so a chart is a chord, and an aspect is an interval.
-      </p>
+    <div class="masthead-top">
+      <a class="wordmark" href="#" aria-label="AstroPitch home">
+        <span class="wordmark-orbit" aria-hidden="true">☉</span>
+        <h1>Astro—Pitch</h1>
+      </a>
+      <nav class="utility-nav" aria-label="Primary navigation">
+        <span>Natal chart synthesiser · A 440</span>
+        <button class="nav-link" id="aboutBtn" aria-haspopup="dialog">How it works ↗</button>
+      </nav>
     </div>
-    <button class="ghost" id="aboutBtn" aria-haspopup="dialog">How it works</button>
   </header>
 
   <main class="stage">
     <section class="wheel-panel">
+      <div class="wheel-kicker" aria-hidden="true">
+        <span>FIG. 01</span>
+        <span>INTERACTIVE NATAL SCORE</span>
+      </div>
       <div class="wheel-holder" id="wheelHolder"></div>
 
       <div class="readout" id="readout" aria-live="polite">
-        <p class="readout-hint">Click anything — a sign, a planet, a line across the middle.</p>
+        <p class="readout-hint">Select any sign, planet, or aspect to read and hear it.</p>
       </div>
     </section>
 
@@ -36,6 +42,7 @@
         <button role="tab" class="tab is-active" data-tab="chart" aria-selected="true">Chart</button>
         <button role="tab" class="tab" data-tab="placements" aria-selected="false">Placements</button>
         <button role="tab" class="tab" data-tab="aspects" aria-selected="false">Aspects</button>
+        <button role="tab" class="tab" data-tab="overlay" aria-selected="false">Overlay</button>
         <button role="tab" class="tab" data-tab="sound" aria-selected="false">Sound</button>
       </nav>
 
@@ -141,6 +148,83 @@
           <table class="data" id="aspectsTable">
             <thead>
               <tr><th>Pair</th><th>Aspect</th><th>Interval</th><th>Orb</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ---------------- Overlay ---------------- -->
+      <section class="tabpanel" data-panel="overlay">
+        <p class="panel-lede">
+          Two charts in one pitch space. Neither is transposed, so a contact
+          between them is the interval it is — and the orb of a conjunction is
+          what you hear as the beat between the two tones.
+        </p>
+
+        <div class="seg" role="group" aria-label="Overlay against">
+          <button class="seg-btn is-active" data-overlay="sky">The sky now</button>
+          <button class="seg-btn" data-overlay="person">Another person</button>
+        </div>
+
+        <form id="skyForm" class="form">
+          <p class="note">
+            The sky is read for this moment at the chart's own place, so its
+            Ascendant means something. Refresh it to hear the transit move.
+          </p>
+          <div class="form-actions">
+            <button type="submit" class="primary">Overlay the sky</button>
+          </div>
+        </form>
+
+        <form id="partnerForm" class="form is-hidden">
+          <div class="field-row">
+            <label class="field">
+              <span>Date</span>
+              <input type="date" id="bDate" value="1985-09-17">
+            </label>
+            <label class="field">
+              <span>Time</span>
+              <input type="time" id="bTime" value="08:20">
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Place</span>
+            <select id="bPlacePreset"></select>
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Latitude</span>
+              <input type="number" id="bLat" value="51.507" step="0.001" min="-90" max="90">
+            </label>
+            <label class="field">
+              <span>Longitude</span>
+              <input type="number" id="bLon" value="-0.128" step="0.001" min="-180" max="180">
+            </label>
+            <label class="field narrow">
+              <span>UTC<span class="sr-only"> offset</span></span>
+              <input type="number" id="bUtcOffset" value="0" step="0.5" min="-12" max="14">
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="primary">Overlay</button>
+            <button type="button" class="ghost" id="bRandomBtn">Random</button>
+          </div>
+        </form>
+
+        <div class="form-actions">
+          <button type="button" class="ghost" id="clearOverlayBtn" disabled>Back to one chart</button>
+        </div>
+
+        <div class="verdict" id="verdict"></div>
+
+        <div class="table-wrap">
+          <table class="data" id="contactsTable">
+            <thead>
+              <tr><th>Contact</th><th>Aspect</th><th>Interval</th><th>Orb</th></tr>
             </thead>
             <tbody></tbody>
           </table>
