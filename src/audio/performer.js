@@ -83,7 +83,12 @@ export class Performer {
     });
     // Position on the wheel becomes position in the stereo field.
     const pan = Math.sin((p.longitude * Math.PI) / 180) * 0.8;
-    const gain = 0.22 * p.gain * gainMul * loudnessTrim(freq);
+    // Equal-power headroom: however many voices are already sounding, from
+    // whichever playback path put them there, each new one yields enough gain
+    // to keep the sum in check. A lone voice is unaffected (n=1); ten together
+    // each give up about two thirds.
+    const headroom = 1 / Math.sqrt(this.engine.activeVoiceCount() + 1);
+    const gain = 0.22 * p.gain * gainMul * headroom * loudnessTrim(freq);
 
     const voice = new Voice(this.engine, spec, { freq, time, duration, gain, pan, detune });
     this.active.push(voice);
@@ -183,7 +188,6 @@ export class Performer {
 
     const start = this.engine.now + 0.08;
     let t = start;
-    let count = 0;
     let prevBase = null;
     const voices = [];
 
@@ -192,10 +196,8 @@ export class Performer {
       // A body's counterpart arrives almost on top of it; a new body waits.
       t += base === prevBase ? 0.2 : (gaps[base] ?? 0.6);
       prevBase = base;
-      count++;
-      // Keep the sum under control as the chord thickens.
-      const headroom = 1 / Math.sqrt(Math.max(1, count * 0.55));
-      voices.push(this._voiceFor(p, { time: t, gainMul: headroom * 1.35, detune: detunes[p.key] }));
+      // _voiceFor applies its own headroom as the chord thickens.
+      voices.push(this._voiceFor(p, { time: t, detune: detunes[p.key] }));
       this._emitAt({ type: 'note', key: p.key }, t);
     }
 
