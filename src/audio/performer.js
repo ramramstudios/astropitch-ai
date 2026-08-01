@@ -71,7 +71,7 @@ export class Performer {
    * @param {object} p       placement from the chart
    * @param {object} o       { time, duration, gainMul, detune, octaveShift }
    */
-  _voiceFor(p, { time, duration = null, gainMul = 1, detune = 0, octaveShift = 0 } = {}) {
+  _voiceFor(p, { time, duration = null, gainMul = 1, detune = 0, octaveShift = 0, solo = false } = {}) {
     const spec = buildVoiceSpec({
       element: p.element,
       house: p.house,
@@ -88,7 +88,7 @@ export class Performer {
     // whichever playback path put them there, each new one yields enough gain
     // to keep the sum in check. A lone voice is unaffected (n=1); ten together
     // each give up about two thirds.
-    const headroom = 1 / Math.sqrt(this.engine.activeVoiceCount() + 1);
+    const headroom = solo ? 1 : 1 / Math.sqrt(this.engine.activeVoiceCount() + 1);
     const gain = 0.22 * p.gain * gainMul * headroom * loudnessTrim(freq);
 
     const voice = new Voice(this.engine, spec, { freq, time, duration, gain, pan, detune });
@@ -153,6 +153,7 @@ export class Performer {
       key,
       longitude: Number.isFinite(longitude) ? longitude : placement.longitude,
       voice: null,
+      timbre: null,
     };
     this.designerPreview = preview;
 
@@ -166,20 +167,45 @@ export class Performer {
       return;
     }
     const t = this.engine.now + 0.01;
+    preview.timbre = this._designerTimbre(current);
     preview.voice = this._voiceFor(
       { ...current, longitude: preview.longitude },
-      { time: t, gainMul: 1.2 }
+      { time: t, gainMul: 1.2, solo: true }
     );
     this._emit({ type: 'note', key, time: t });
   }
 
-  /** Retune the held Designer audition without rebuilding its audio graph. */
-  updateDesignerPreview(key, longitude) {
+  /** Sign supplies material and phrasing; the current house supplies gesture. */
+  _designerTimbre(placement) {
+    // The index deliberately participates too: each sign crossing gets a
+    // fresh articulation, even when two neighbouring signs share an element
+    // or modality.
+    return [placement.signIndex, placement.element, placement.modality, placement.house].join(':');
+  }
+
+  /** Retune the held Designer audition, changing its voice at a sign boundary. */
+  updateDesignerPreview(key, next) {
     const preview = this.designerPreview;
+    const placement = typeof next === 'object' ? next : this.chart?.byKey?.[key];
+    const longitude = typeof next === 'object' ? next.longitude : next;
     if (!preview || preview.key !== key || !Number.isFinite(longitude)) return;
     preview.longitude = longitude;
-    const placement = this.chart?.byKey?.[key];
     if (!placement || !preview.voice?.retune) return;
+
+    const time = this.engine.now + 0.004;
+    const timbre = this._designerTimbre(placement);
+    if (timbre !== preview.timbre) {
+      // An element/modality change means a different oscillator and envelope
+      // recipe, which cannot be retuned in-place. Crossfade into a fresh held
+      // voice so the drag remains continuous while the sign changes character.
+      preview.voice.release(time, 0.08);
+      preview.voice = this._voiceFor(
+        { ...placement, longitude },
+        { time, gainMul: 1.2, solo: true }
+      );
+      preview.timbre = timbre;
+      return;
+    }
 
     const freq = frequencyFor(longitude, {
       octave: placement.octave,
@@ -187,7 +213,7 @@ export class Performer {
       temperament: this.tuning.temperament,
     });
     const pan = Math.sin((longitude * Math.PI) / 180) * 0.8;
-    preview.voice.retune({ freq, pan, time: this.engine.now + 0.004 });
+    preview.voice.retune({ freq, pan, time });
   }
 
   /** Release the held Designer audition when the pointer ends or is cancelled. */

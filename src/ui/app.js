@@ -330,7 +330,7 @@ function previewDesign(key, longitude) {
   state.chart = designChart(state.subject, design);
   wheel.renderLive(state.chart);
   syncDesignerList(state.chart);
-  performer.updateDesignerPreview(key, longitude);
+  performer.updateDesignerPreview(key, state.chart.byKey[key]);
   showBody(key);
 }
 

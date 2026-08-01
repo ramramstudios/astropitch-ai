@@ -92,6 +92,37 @@ console.log('\n--- designer audition: one held voice follows the dragged longitu
   ok('releases on drop', releases.length === 1);
 }
 
+console.log('\n--- designer audition: sign changes replace the held voice ---');
+{
+  const starts = [];
+  const releases = [];
+  const p = new Performer(engine);
+  p.setChart(A);
+  p._voiceFor = (placement) => {
+    starts.push(placement);
+    return {
+      released: false,
+      retune() {},
+      release: (at, fade) => releases.push({ at, fade }),
+    };
+  };
+
+  await p.beginDesignerPreview('venus');
+  const before = A.byKey.venus;
+  const moved = {
+    ...before,
+    longitude: (before.longitude + 30) % 360,
+    signIndex: (before.signIndex + 1) % 12,
+    element: 'water',
+    modality: 'fixed',
+  };
+  p.updateDesignerPreview('venus', moved);
+
+  ok('starts a replacement voice for the new sign', starts.length === 2);
+  ok('releases the preceding sign voice in a short crossfade', releases.length === 1 && releases[0].fade === 0.08);
+  p.endDesignerPreview('venus');
+}
+
 console.log('--- bloom: one chart unfolds from the solar centre ---');
 {
   const out = await run(A, 'bloom');
