@@ -297,6 +297,7 @@ export function placementFrequency(placement, tuning) {
     octave: placement.octave,
     refA: tuning.refA,
     temperament: tuning.temperament,
+    microtones: tuning.microtones,
   });
 }
 

@@ -132,9 +132,10 @@
 
         <form id="designerForm" class="form is-hidden">
           <p class="note">
-            Hold and drag any body around the wheel to hear its pitch glide as
-            it moves, or focus one and use the arrow keys — <kbd>Shift</kbd> for
-            5° at a time. Switch a body off to take it out of the chord. Sign,
+            Hold and drag any body around the wheel to hear its sign pitch, or
+            enable Microtonal pitch in Settings to glide continuously. Focus one
+            and use the arrow keys — <kbd>Shift</kbd> for 5° at a time. Switch a
+            body off to take it out of the chord. Sign,
             house, pitch and aspects are recomputed as it moves. Moving the
             Ascendant turns the houses with it.
           </p>
@@ -510,6 +511,17 @@
           <label class="theme-toggle">
             <span class="sr-only">Dark mode</span>
             <input type="checkbox" id="darkMode" role="switch">
+            <span aria-hidden="true"></span>
+          </label>
+        </div>
+        <div class="settings-item">
+          <div>
+            <h3>Microtonal pitch</h3>
+            <p>Let pitch glide continuously within each sign.</p>
+          </div>
+          <label class="theme-toggle">
+            <span class="sr-only">Enable microtonal pitch</span>
+            <input type="checkbox" id="microtonalPitch" role="switch">
             <span aria-hidden="true"></span>
           </label>
         </div>

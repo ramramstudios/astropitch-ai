@@ -12,7 +12,7 @@ export const TEMPERAMENTS = {
   equal: {
     name: 'Equal',
     continuous: true,
-    blurb: 'Every degree of longitude sounds. 3.33 cents per degree.',
+    blurb: 'Twelve equal-tempered sign tones. Enable Microtonal pitch for degree-by-degree glide.',
   },
   just: {
     name: 'Just',
@@ -39,11 +39,20 @@ const norm360 = (d) => ((d % 360) + 360) % 360;
  * @param {number} opts.octave   octave transposition, 0 == the A above middle C
  * @param {number} opts.refA     reference pitch for A, Hz
  * @param {string} opts.temperament key of TEMPERAMENTS
+ * @param {boolean} opts.microtones whether equal temperament glides within signs
  */
-export function frequencyFor(longitude, { octave = 0, refA = 440, temperament = 'equal' } = {}) {
+export function frequencyFor(longitude, {
+  octave = 0, refA = 440, temperament = 'equal', microtones = true,
+} = {}) {
   const lon = norm360(longitude);
   const t = TEMPERAMENTS[temperament] ?? TEMPERAMENTS.equal;
   const base = refA * 2 ** octave;
+  // Equal temperament can be heard two ways: continuously across the full
+  // wheel, or as twelve exact pitches that hold until a sign cusp.
+  if (t.continuous && !microtones) {
+    const signIndex = Math.floor(lon / 30) % 12;
+    return base * 2 ** (signIndex / 12);
+  }
   if (t.continuous) return base * 2 ** (lon / 360);
   const signIndex = Math.floor(lon / 30) % 12;
   return base * t.ratios[signIndex];

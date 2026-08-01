@@ -65,6 +65,7 @@ const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
 const DESIGN_KEY = 'astropitch.design.v1';
 const DESIGN_VERSION = 1;
 const THEME_KEY = 'astropitch.theme';
+const MICROTONES_KEY = 'astropitch.microtones';
 
 const SOURCES = ['birth', 'signs', 'designer'];
 
@@ -132,7 +133,7 @@ const state = {
     : savedSource,
   design: readSavedDesign(),
   overlaySource: 'sky',
-  tuning: { refA: 440, temperament: 'equal' },
+  tuning: { refA: 440, temperament: 'equal', microtones: false },
   // The sign-only fallback is a pure A-major voicing: A (Aries), C♯ (Leo),
   // and E (Scorpio). Bodies still keep their own octaves and roles, so the
   // chord is spread across the ensemble rather than packed into one register.
@@ -306,7 +307,7 @@ function syncDesignerList(chart) {
     ref.row.classList.toggle('is-off', !!p.silent);
     ref.glyph.style.color = ELEMENTS[p.element].color;
     ref.pos.textContent = p.label;
-    ref.pitch.textContent = state.tuning.temperament === 'equal'
+    ref.pitch.textContent = usesMicrotones()
       ? p.pitch
       : p.sign.pitch.split('/')[0];
   }
@@ -777,6 +778,7 @@ function wireSettings() {
   const modal = $('#settingsModal');
   const card = modal.querySelector('.modal-card');
   const toggle = $('#darkMode');
+  const microtonalPitch = $('#microtonalPitch');
   let returnTo = null;
 
   const applyTheme = (theme) => {
@@ -800,9 +802,18 @@ function wireSettings() {
   };
 
   toggle.checked = document.documentElement.dataset.theme === 'dark';
+  try { microtonalPitch.checked = localStorage.getItem(MICROTONES_KEY) === '1'; } catch { /* sign-locked is the default */ }
+  state.tuning.microtones = microtonalPitch.checked;
   $('#settingsBtn').addEventListener('click', open);
   $('#settingsClose').addEventListener('click', close);
   toggle.addEventListener('change', () => applyTheme(toggle.checked ? 'dark' : 'light'));
+  microtonalPitch.addEventListener('change', () => {
+    state.tuning.microtones = microtonalPitch.checked;
+    performer.setTuning(state.tuning);
+    try { localStorage.setItem(MICROTONES_KEY, microtonalPitch.checked ? '1' : '0'); } catch { /* session-only preference */ }
+    renderPlacements();
+    if (state.source === 'designer' && state.chart) syncDesignerList(state.chart);
+  });
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
   document.addEventListener('keydown', (e) => {
@@ -820,6 +831,10 @@ function wireSettings() {
       first.focus();
     }
   });
+}
+
+function usesMicrotones() {
+  return state.tuning.temperament === 'equal' && state.tuning.microtones;
 }
 
 // ---------------------------------------------------------------------------
@@ -995,7 +1010,7 @@ function renderPlacements() {
 
       const pitch = document.createElement('td');
       pitch.className = 'cell-pitch';
-      pitch.textContent = state.tuning.temperament === 'equal'
+      pitch.textContent = usesMicrotones()
         ? p.pitch
         : `${SIGNS[p.signIndex].pitch.split('/')[0]}`;
 
@@ -1275,7 +1290,7 @@ function showBody(key) {
     `${p.name} in ${p.sign.name}${p.side ? ` · chart ${p.side.toUpperCase()}` : ''}`,
     p.glyph,
     element.color,
-    state.tuning.temperament === 'equal' ? p.pitch : p.sign.pitch,
+    usesMicrotones() ? p.pitch : p.sign.pitch,
     [
       document.createTextNode(`${p.label}${p.retrograde ? ', retrograde' : ''}. `),
       em(p.role),

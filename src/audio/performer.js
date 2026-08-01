@@ -30,7 +30,7 @@ export class Performer {
   constructor(engine) {
     this.engine = engine;
     this.chart = null;
-    this.tuning = { refA: 440, temperament: 'equal' };
+    this.tuning = { refA: 440, temperament: 'equal', microtones: false };
     this.tempo = 120;
     this.mode = null;
     this.active = [];
@@ -81,6 +81,7 @@ export class Performer {
       octave: p.octave + octaveShift,
       refA: this.tuning.refA,
       temperament: this.tuning.temperament,
+      microtones: this.tuning.microtones,
     });
     // Position on the wheel becomes position in the stereo field.
     const pan = Math.sin((p.longitude * Math.PI) / 180) * 0.8;
@@ -211,6 +212,7 @@ export class Performer {
       octave: placement.octave,
       refA: this.tuning.refA,
       temperament: this.tuning.temperament,
+      microtones: this.tuning.microtones,
     });
     const pan = Math.sin((longitude * Math.PI) / 180) * 0.8;
     preview.voice.retune({ freq, pan, time });

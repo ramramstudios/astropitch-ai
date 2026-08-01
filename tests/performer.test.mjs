@@ -17,6 +17,7 @@
 import { Performer } from '../src/audio/performer.js';
 import { makeChart, makeSynastry } from '../src/chart.js';
 import { SOUNDING_BODIES } from '../src/ontology.js';
+import { frequencyFor } from '../src/audio/tuning.js';
 
 let fails = 0;
 const ok = (label, cond, detail = '') => {
@@ -66,6 +67,14 @@ console.log('--- tempo: BPM controls step length and echo time ---');
   p.setTempo(60);
   ok('120 BPM maps to a half-second beat', delayTimes[0] === 0.5, `${delayTimes[0]}s`);
   ok('60 BPM maps to a one-second beat', delayTimes[1] === 1, `${delayTimes[1]}s`);
+}
+
+console.log('\n--- sign-locked equal temperament ---');
+{
+  const aries = frequencyFor(14.99, { microtones: false });
+  const taurus = frequencyFor(30.01, { microtones: false });
+  ok('holds Aries at A until the cusp', Math.abs(aries - 440) < 1e-9, `${aries.toFixed(3)} Hz`);
+  ok('jumps to A-sharp immediately after the cusp', Math.abs(taurus - 440 * 2 ** (1 / 12)) < 1e-9, `${taurus.toFixed(3)} Hz`);
 }
 
 console.log('\n--- designer audition: one held voice follows the dragged longitude ---');
