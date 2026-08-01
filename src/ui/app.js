@@ -350,6 +350,15 @@ function wireDesigner() {
     clearReadout();
   });
 
+  $('#designerAllOffBtn').addEventListener('click', () => {
+    for (const key of DESIGNABLE_BODIES) {
+      state.design[key] = { ...state.design[key], enabled: false };
+    }
+    saveDesign();
+    render();
+    clearReadout();
+  });
+
   $('#designerAllOnBtn').addEventListener('click', () => {
     for (const entry of Object.values(state.design)) delete entry.enabled;
     saveDesign();
