@@ -347,7 +347,7 @@ export class Wheel {
     const nodes = [];
     this.markers = {};
 
-    const placements = this.chart.placements.filter((p) => p.key !== 'mc');
+    const placements = this.chart.placements;
     for (const item of this._layout(placements)) {
       const { p, shown, ring } = item;
       const radius = R.planet - ring * 44;
