@@ -58,11 +58,13 @@ async function run(chart, mode) {
   return out;
 }
 
-console.log('--- bloom: one chart behaves as it always did ---');
+console.log('--- bloom: one chart unfolds from the solar centre ---');
 {
   const out = await run(A, 'bloom');
+  const expectedOrder = ['sun', 'mercury', 'venus', 'moon', 'asc', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
   ok('sounds every body', out.length === A.placements.filter((x) => x.key !== 'mc').length, `${out.length}`);
-  ok('ascendant leads', out[0].key === 'asc', out[0].key);
+  ok('reveals bodies from Sun outward', out.map((v) => v.key).join(',') === expectedOrder.join(','),
+    out.map((v) => v.key).join(', '));
   ok('times strictly increase', out.every((v, i) => i === 0 || v.time > out[i - 1].time));
 }
 

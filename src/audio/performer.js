@@ -170,9 +170,9 @@ export class Performer {
   }
 
   /**
-   * The chart as a chord that assembles itself: rising sign first, because it
-   * is the voice you are heard in, then the lights, then the planets in order
-   * of speed. Everything holds, then releases together.
+   * The chart as a chord that assembles from its solar centre: the Sun, then
+   * the inner planets, then the Moon and Ascendant as the personal threshold,
+   * and finally the outer bodies. Everything holds, then releases together.
    *
    * With two charts overlaid the same order runs, but each body is immediately
    * followed by its opposite number — so Sun lands against Sun, and you hear
@@ -180,13 +180,13 @@ export class Performer {
    */
   async bloom() {
     await this._begin('bloom');
-    const ORDER = ['asc', 'sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
+    const ORDER = ['sun', 'mercury', 'venus', 'moon', 'asc', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
     const placements = this._sounding();
     const detunes = this._detuneMap(placements);
 
-    // Slower for the anchors, quicker through the inner planets, slowing again
-    // for the outers as they settle underneath.
-    const gaps = { asc: 0, sun: 1.15, moon: 0.95, mercury: 0.75, venus: 0.55, mars: 0.55, jupiter: 0.6, saturn: 0.7, uranus: 0.55, neptune: 0.7, pluto: 0.8 };
+    // The Sun arrives at once; the inner planets move quickly, then the
+    // personal threshold and slower bodies have room to settle underneath.
+    const gaps = { sun: 0, mercury: 0.75, venus: 0.55, moon: 0.95, asc: 0.7, mars: 0.55, jupiter: 0.6, saturn: 0.7, uranus: 0.55, neptune: 0.7, pluto: 0.8 };
 
     const baseOf = (p) => p.baseKey ?? p.key;
     const ordered = placements
