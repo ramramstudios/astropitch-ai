@@ -360,6 +360,7 @@ export class Wheel {
       const [tx1, ty1] = this._point(p.longitude, R.planetTick);
       const [tx2, ty2] = this._point(p.longitude, R.planetTick - 10);
       const [gx, gy] = this._point(shown, radius);
+      const tone = ELEMENTS[p.element]?.color ?? '#7fd3f0';
 
       // In an overlay, the second chart's markers are outlined rather than
       // filled, and anything that touches nothing in the other chart is dimmed
@@ -368,6 +369,7 @@ export class Wheel {
         class: `planet element-${p.element}`
           + (p.side ? ` side-${p.side}` : '')
           + (p.silent ? ' is-silent' : ''),
+        style: `--planet-tone: ${tone}`,
         'data-body': p.key,
         tabindex: 0,
         role: 'button',
@@ -387,6 +389,7 @@ export class Wheel {
       group.appendChild(el('line', { x1: tx2, y1: ty2, x2: gx, y2: gy, class: 'planet-leader' }));
       group.appendChild(el('circle', { cx: gx, cy: gy, r: 21, class: 'planet-halo' }));
       group.appendChild(el('circle', { cx: gx, cy: gy, r: 17, class: 'planet-disc' }));
+      group.appendChild(el('circle', { cx: gx, cy: gy, r: 17, class: 'planet-orb' }));
       // "Asc"/"MC" are words, not glyphs, and will not fit at glyph size.
       const isWord = p.glyph.replace(/︎/g, '').length > 1;
       group.appendChild(

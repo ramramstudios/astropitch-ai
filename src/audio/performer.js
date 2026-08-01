@@ -245,7 +245,7 @@ export class Performer {
     const asc = this.chart.byKey.asc ?? this.chart.byKey['a:asc'];
     if (asc) {
       this._voiceFor(asc, { time: t + 0.2, duration: 3.0, gainMul: 1.5, octaveShift: 1 });
-      this._emitAt({ type: 'note', key: 'asc' }, t + 0.2);
+      this._emitAt({ type: 'note', key: asc.key }, t + 0.2);
     }
     this._emitAt({ type: 'end' }, t + 4.0);
     this.timers.push(setTimeout(() => { if (this.mode === 'sequence') this.mode = null; }, (t + 4.0 - this.engine.now) * 1000));
