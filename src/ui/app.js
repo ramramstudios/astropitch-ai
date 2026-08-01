@@ -64,17 +64,17 @@ const PLACES = [
 const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
 
 const DEFAULT_MAJOR_SIGN_SELECTIONS = Object.freeze({
-  asc: 0,
-  sun: 4,
-  moon: 0,
-  mercury: 7,
-  venus: 4,
-  mars: 0,
-  jupiter: 7,
-  saturn: 0,
-  uranus: 4,
-  neptune: 7,
-  pluto: 0,
+  asc: 8,
+  sun: 8,
+  moon: 4,
+  mercury: 8,
+  venus: 8,
+  mars: 8,
+  jupiter: 8,
+  saturn: 4,
+  uranus: 11,
+  neptune: 8,
+  pluto: 8,
 });
 
 function readSavedChartConfig() {
@@ -102,12 +102,13 @@ const state = {
   partner: null,
   // What is actually drawn and played: the subject, or the two of them merged.
   chart: null,
-  source: savedChartConfig?.source === 'birth' ? 'birth' : 'signs',
+  source: savedChartConfig?.source === 'signs' ? 'signs' : 'birth',
   overlaySource: 'sky',
   tuning: { refA: 440, temperament: 'equal' },
-  // The first Bloom is intentionally an A-major voicing: A (Aries), C♯ (Leo),
-  // and E (Scorpio). Bodies still keep their own octaves and roles, so the
-  // chord is spread across the ensemble instead of packed into one register.
+  // The sign-only fallback is a pure C♯-major voicing: C♯ (Leo), F
+  // (Sagittarius), and G♯ (Pisces). Bodies still keep their own octaves and
+  // roles, so the chord is spread across the ensemble rather than packed into
+  // one register.
   signSelections: savedSignSelections(savedChartConfig?.signSelections),
   savedBirthForm: savedChartConfig?.birthForm ?? null,
 };
