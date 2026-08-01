@@ -167,6 +167,7 @@ function boot() {
   wireModal();
   wireSettings();
   wireSidebar();
+  wireTransportVisibility();
   wireKeyboard();
   applySource(state.source);
 
@@ -817,6 +818,7 @@ function wireSettings() {
 // ---------------------------------------------------------------------------
 
 const SIDE_KEY = 'astropitch.sideCollapsed';
+const TRANSPORT_KEY = 'astropitch.transportHidden';
 
 /** Read/write a preference without caring whether storage exists. */
 function stored(key, value) {
@@ -852,6 +854,33 @@ function wireSidebar() {
 
   toggle.addEventListener('click', collapseSide);
   apply(collapsed);
+}
+
+function wireTransportVisibility() {
+  const bar = $('#transportBar');
+  const hide = $('#transportHide');
+  const show = $('#transportShow');
+  let hidden = stored(TRANSPORT_KEY) === '1';
+
+  const apply = (next) => {
+    hidden = next;
+    document.body.classList.toggle('is-transport-hidden', hidden);
+    bar.hidden = hidden;
+    hide.setAttribute('aria-expanded', String(!hidden));
+    show.setAttribute('aria-expanded', String(!hidden));
+  };
+
+  hide.addEventListener('click', () => {
+    apply(true);
+    stored(TRANSPORT_KEY, '1');
+    show.focus();
+  });
+  show.addEventListener('click', () => {
+    apply(false);
+    stored(TRANSPORT_KEY, '0');
+    hide.focus();
+  });
+  apply(hidden);
 }
 
 function wireKeyboard() {

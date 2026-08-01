@@ -91,6 +91,8 @@ body {
   overflow-x: hidden;
 }
 
+body.is-transport-hidden .stage { padding-bottom: 1.5rem; }
+
 button,
 input,
 select { color: inherit; }
@@ -969,6 +971,10 @@ table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none);
   color: var(--transport-fg);
 }
 
+/* The component declares `display: flex`, so the generic browser `[hidden]`
+   rule needs an explicit component-level counterpart. */
+.transport[hidden] { display: none; }
+
 .transport-main { display: flex; align-items: stretch; }
 
 button.play,
@@ -983,6 +989,45 @@ button.stop {
   color: var(--transport-fg);
   cursor: pointer;
 }
+
+.transport-hide {
+  appearance: none;
+  padding: 0.7rem 0.9rem;
+  border: 0;
+  border-right: 1px solid var(--transport-divider);
+  background: var(--transport-bg);
+  color: var(--transport-fg);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.transport-hide:hover { background: var(--transport-hover); }
+
+.transport-rail {
+  position: fixed;
+  right: 1rem;
+  bottom: 0;
+  z-index: 11;
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--transport-fg);
+  border-bottom: 0;
+  background: var(--transport-bg);
+  color: var(--transport-fg);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.transport-rail:hover { background: var(--transport-hover); }
+body.is-transport-hidden .transport-rail { display: flex; }
 
 button.play {
   display: flex;
@@ -1352,11 +1397,12 @@ kbd {
   .transport-main {
     display: grid;
     width: 100%;
-    grid-template-columns: repeat(3, 1fr) auto;
+    grid-template-columns: repeat(3, 1fr) auto auto;
   }
 
   button.play,
-  button.stop {
+  button.stop,
+  .transport-hide {
     min-width: 0;
     padding: 0.7rem 0.45rem;
   }

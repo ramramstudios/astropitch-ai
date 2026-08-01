@@ -290,7 +290,7 @@
     </aside>
   </main>
 
-  <footer class="transport">
+  <footer class="transport" id="transportBar">
     <div class="transport-main">
       <button class="play" id="bloomBtn" title="The chart assembles itself into one chord">
         <span class="play-name">Bloom</span>
@@ -305,6 +305,7 @@
         <span class="play-sub">generative</span>
       </button>
       <button class="stop" id="stopBtn" disabled>Stop</button>
+      <button class="transport-hide" id="transportHide" aria-controls="transportBar" aria-expanded="true" title="Hide the player">Hide</button>
     </div>
     <label class="volume">
       <span class="sr-only">Volume</span>
@@ -312,6 +313,10 @@
       <input type="range" id="volume" min="0" max="1" step="0.01" value="0.75">
     </label>
   </footer>
+  <button class="transport-rail" id="transportShow" aria-controls="transportBar" aria-expanded="false" title="Show the player">
+    <span aria-hidden="true">↑</span>
+    <span>Player</span>
+  </button>
 
   <div class="modal" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" hidden>
     <div class="modal-card">
