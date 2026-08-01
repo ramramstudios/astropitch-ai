@@ -48,11 +48,11 @@
       <!-- ---------------- Chart ---------------- -->
       <section class="tabpanel is-active" id="panel-chart" role="tabpanel" aria-labelledby="tab-chart" tabindex="0" data-panel="chart">
         <div class="seg" role="group" aria-label="Chart source">
-          <button class="seg-btn is-active" data-source="birth">Birth data</button>
-          <button class="seg-btn" data-source="signs">Just the signs</button>
+          <button class="seg-btn" data-source="birth">Birth data</button>
+          <button class="seg-btn is-active" data-source="signs">Just the signs</button>
         </div>
 
-        <form id="birthForm" class="form">
+        <form id="birthForm" class="form is-hidden">
           <div class="field-row">
             <label class="field">
               <span>Date</span>
@@ -106,10 +106,11 @@
           </div>
         </form>
 
-        <form id="signsForm" class="form is-hidden">
+        <form id="signsForm" class="form">
           <p class="note">
             No birth time needed. Each body sits at the midpoint of its sign,
-            which is the honest position when the sign is all you know.
+            which is the honest position when the sign is all you know. The
+            opening selection is an A-major voicing; change any sign to explore.
           </p>
           <div id="signPickers" class="sign-pickers"></div>
           <div class="form-actions">

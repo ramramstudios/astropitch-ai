@@ -61,6 +61,40 @@ const PLACES = [
 // State
 // ---------------------------------------------------------------------------
 
+const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
+
+const DEFAULT_MAJOR_SIGN_SELECTIONS = Object.freeze({
+  asc: 0,
+  sun: 4,
+  moon: 0,
+  mercury: 7,
+  venus: 4,
+  mars: 0,
+  jupiter: 7,
+  saturn: 0,
+  uranus: 4,
+  neptune: 7,
+  pluto: 0,
+});
+
+function readSavedChartConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CHART_CONFIG_KEY) ?? 'null');
+    return saved && typeof saved === 'object' ? saved : null;
+  } catch { return null; }
+}
+
+const savedChartConfig = readSavedChartConfig();
+
+function savedSignSelections(raw) {
+  const selections = { ...DEFAULT_MAJOR_SIGN_SELECTIONS };
+  for (const key of SOUNDING_BODIES) {
+    const sign = raw?.[key];
+    if (Number.isInteger(sign) && sign >= 0 && sign < SIGNS.length) selections[key] = sign;
+  }
+  return selections;
+}
+
 const state = {
   // The chart you cast. Always a single chart.
   subject: null,
@@ -68,10 +102,14 @@ const state = {
   partner: null,
   // What is actually drawn and played: the subject, or the two of them merged.
   chart: null,
-  source: 'birth',
+  source: savedChartConfig?.source === 'birth' ? 'birth' : 'signs',
   overlaySource: 'sky',
   tuning: { refA: 440, temperament: 'equal' },
-  signSelections: Object.fromEntries(SOUNDING_BODIES.map((k, i) => [k, i % 12])),
+  // The first Bloom is intentionally an A-major voicing: A (Aries), C♯ (Leo),
+  // and E (Scorpio). Bodies still keep their own octaves and roles, so the
+  // chord is spread across the ensemble instead of packed into one register.
+  signSelections: savedSignSelections(savedChartConfig?.signSelections),
+  savedBirthForm: savedChartConfig?.birthForm ?? null,
 };
 
 const performer = new Performer(engine);
@@ -88,6 +126,7 @@ function boot() {
 
   buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 0);
   buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 10);
+  restoreBirthForm();
   buildSignPickers();
   buildTemperamentOptions();
   buildLegends();
@@ -102,6 +141,7 @@ function boot() {
   wireModal();
   wireSidebar();
   wireKeyboard();
+  applySource(state.source);
 
   window.addEventListener('resize', onResize);
   onResize();
@@ -109,7 +149,8 @@ function boot() {
   performer.onEvent(onPerformerEvent);
   performer.setTempo(0.5);
 
-  castFromBirthForm();
+  if (state.source === 'birth') castFromBirthForm();
+  else setSubject(chartFromSigns(state.signSelections));
   loop();
 }
 
@@ -140,6 +181,7 @@ function buildPlaceOptions(selectId, fields, defaultIndex) {
     $(fields.lat).value = p.lat;
     $(fields.lon).value = p.lon;
     $(fields.utc).value = p.utc;
+    saveChartConfig();
   });
   // Typing coordinates by hand should flip the selector to Custom.
   for (const id of [fields.lat, fields.lon, fields.utc]) {
@@ -168,6 +210,7 @@ function buildSignPickers() {
       select.value = String(state.signSelections[body.key] ?? 0);
       select.addEventListener('change', () => {
         state.signSelections[body.key] = Number(select.value);
+        saveChartConfig();
       });
       label.append(span, select);
       return label;
@@ -241,6 +284,13 @@ function buildAspectKey() {
 // Tabs, forms, controls
 // ---------------------------------------------------------------------------
 
+function applySource(source) {
+  state.source = source;
+  for (const b of $$('[data-source]')) b.classList.toggle('is-active', b.dataset.source === source);
+  $('#birthForm').classList.toggle('is-hidden', source !== 'birth');
+  $('#signsForm').classList.toggle('is-hidden', source !== 'signs');
+}
+
 function wireTabs() {
   const tabs = $$('.tab');
 
@@ -274,10 +324,8 @@ function wireForms() {
   // same segmented-button styling for a different choice.
   for (const btn of $$('[data-source]')) {
     btn.addEventListener('click', () => {
-      state.source = btn.dataset.source;
-      for (const b of $$('[data-source]')) b.classList.toggle('is-active', b === btn);
-      $('#birthForm').classList.toggle('is-hidden', state.source !== 'birth');
-      $('#signsForm').classList.toggle('is-hidden', state.source !== 'signs');
+      applySource(btn.dataset.source);
+      saveChartConfig();
     });
   }
 
@@ -289,11 +337,17 @@ function wireForms() {
   $('#signsForm').addEventListener('submit', (e) => {
     e.preventDefault();
     setSubject(chartFromSigns(state.signSelections));
+    saveChartConfig();
   });
 
   $('#houseSystem').addEventListener('change', () => {
     if (state.source === 'birth') castFromBirthForm();
+    else saveChartConfig();
   });
+
+  for (const id of ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset']) {
+    $(`#${id}`).addEventListener('input', saveChartConfig);
+  }
 
   $('#nowBtn').addEventListener('click', () => {
     const place = readPlace();
@@ -303,6 +357,7 @@ function wireForms() {
     $('#birthTime').value = now.toISOString().slice(11, 16);
     $('#utcOffset').value = 0;
     $('#placePreset').value = 'custom';
+    saveChartConfig();
   });
 
   $('#randomBtn').addEventListener('click', () => {
@@ -329,6 +384,7 @@ function wireForms() {
       state.signSelections[select.dataset.body] = v;
     }
     setSubject(chartFromSigns(state.signSelections));
+    saveChartConfig();
   });
 }
 
@@ -337,6 +393,32 @@ function readPlace() {
     latitude: Number($('#lat').value) || 0,
     longitude: Number($('#lon').value) || 0,
   };
+}
+
+function birthFormValues() {
+  return Object.fromEntries(
+    ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset', 'houseSystem']
+      .map((id) => [id, $(`#${id}`).value])
+  );
+}
+
+function restoreBirthForm() {
+  const values = state.savedBirthForm;
+  if (!values || typeof values !== 'object') return;
+  for (const id of ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset', 'houseSystem']) {
+    if (typeof values[id] === 'string' && values[id] !== '') $(`#${id}`).value = values[id];
+  }
+  $('#placePreset').value = 'custom';
+}
+
+function saveChartConfig() {
+  try {
+    localStorage.setItem(CHART_CONFIG_KEY, JSON.stringify({
+      source: state.source,
+      signSelections: state.signSelections,
+      birthForm: birthFormValues(),
+    }));
+  } catch { /* private mode and disabled storage still receive the first-load chord */ }
 }
 
 function castFromBirthForm() {
@@ -351,6 +433,7 @@ function castFromBirthForm() {
     utcOffset: Number($('#utcOffset').value) || 0,
   };
   setSubject(chartFromBirth(birth, readPlace(), $('#houseSystem').value));
+  saveChartConfig();
 }
 
 // ---------------------------------------------------------------------------
