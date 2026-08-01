@@ -204,17 +204,23 @@ head('Voice teardown: nodes are released, not leaked');
   check('engine voice registry drained', engine.voices.size === 0, `${engine.voices.size} left`);
 }
 
-head('Voice stealing caps polyphony');
+head('Voice stealing caps scheduled polyphony');
 {
   const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 3, sampleRate: 48000 });
   const engine = new AudioEngine({ context: ctx });
   const spec = buildVoiceSpec({ element: 'air', house: 3, modality: 'fixed' });
   for (let i = 0; i < 90; i++) {
-    new Voice(engine, spec, { freq: 300 + i * 7, time: 0.01, gain: 0.05 });
+    // A scheduled release must still consume a slot until that release
+    // actually happens. This used to look "released" to the engine and let
+    // arbitrary numbers of audible voices escape the cap.
+    new Voice(engine, spec, { freq: 300 + i * 7, time: 0.01, duration: 2, gain: 0.05 });
   }
   check('sounding polyphony capped at maxVoices',
     engine.activeVoiceCount() <= engine.maxVoices,
     `${engine.activeVoiceCount()} sounding of ${engine.maxVoices} (${engine.voices.size} incl. fading)`);
+  check('scheduled voices retain slots until stolen or torn down',
+    engine.activeVoiceCount() === engine.maxVoices,
+    `${engine.activeVoiceCount()} reserved of ${engine.maxVoices}`);
   const buffer = await ctx.startRendering();
   const s = analyse(buffer);
   log('info', `      ${fmt(s)}`);

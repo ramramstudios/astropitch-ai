@@ -276,25 +276,31 @@ export class AudioEngine {
     this.delayTimes[1].setTargetAtTime(seconds, t, 0.05);
   }
 
-  /** Voices still holding their envelope, i.e. not yet fading out. */
+  /**
+   * Voices that still occupy a polyphony slot.
+   *
+   * A voice may have a release scheduled far in the future, but it still owns
+   * live nodes and will still sound until then. `released` cannot be used here:
+   * it means "a release has been scheduled", not "the voice has ended".
+   */
   activeVoiceCount() {
     let n = 0;
-    for (const v of this.voices) if (!v.released) n++;
+    for (const v of this.voices) if (!v.stolen) n++;
     return n;
   }
 
   register(voice) {
     this.voices.add(voice);
-    // A released voice stays in the set until its nodes are torn down, so the
-    // cap has to count sounding voices — otherwise the set grows without bound
-    // and every new note steals exactly one, which is not a cap at all.
+    // A voice stays in the set until its nodes are torn down. In particular,
+    // `released` can mean a release scheduled seconds from now, so it is not
+    // a signal that the voice has stopped consuming a polyphony slot.
     while (this.activeVoiceCount() > this.maxVoices) {
       let oldest = null;
       for (const v of this.voices) {
-        if (!v.released) { oldest = v; break; }
+        if (!v.stolen) { oldest = v; break; }
       }
       if (!oldest) break;
-      oldest.release(this.now, 0.12);
+      oldest.steal(this.now, 0.12);
     }
   }
 

@@ -342,6 +342,11 @@ export class Voice {
     this.nodes = [];
     this.sources = [];
     this.released = false;
+    // `released` only says that an envelope release has been scheduled. A
+    // future release is still a fully live voice, so voice stealing gets its
+    // own state and can free a polyphony slot immediately.
+    this.stolen = false;
+    this.releaseAt = null;
     // The source whose ending defines the voice's lifetime. It must be one that
     // is never stopped early — the gate oscillator finishes mid-note, so hanging
     // teardown off "the last source in the array" would cut the note short.
@@ -612,17 +617,20 @@ export class Voice {
       this.nodes.push(gateAmt);
     }
 
-    this.engine.register(this);
-
     if (duration != null) this.release(t0 + duration);
+    // Register after scheduling a finite duration so the engine sees the
+    // voice's final lifetime before assigning its polyphony slot.
+    this.engine.register(this);
   }
 
   /** Schedule the release. Idempotent — the earliest call wins. */
   release(at, overrideRelease = null) {
-    if (this.released) return;
-    this.released = true;
     const { ctx } = this.engine;
     const t = Math.max(at ?? ctx.currentTime, this.t0 + 0.01);
+    if (this.released && this.releaseAt <= t) return;
+
+    this.released = true;
+    this.releaseAt = t;
     const rel = overrideRelease ?? this.spec.amp.release;
     const g = this.vca.gain;
 
@@ -651,7 +659,15 @@ export class Voice {
     if (this.lifetimeSource) this.lifetimeSource.onended = cleanup;
     // Belt and braces: if the ended event never arrives (a suspended context,
     // a tab in the background), reclaim the nodes on a timer anyway.
+    if (this._cleanupTimer) clearTimeout(this._cleanupTimer);
     this._cleanupTimer = setTimeout(cleanup, Math.max(0, (stopAt - ctx.currentTime) * 1000) + 250);
+  }
+
+  /** Release this voice early because another voice needs its polyphony slot. */
+  steal(at, fade = 0.12) {
+    if (this.stolen) return;
+    this.stolen = true;
+    this.release(at, fade);
   }
 
   dispose() {
