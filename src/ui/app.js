@@ -64,17 +64,17 @@ const PLACES = [
 const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
 
 const DEFAULT_MAJOR_SIGN_SELECTIONS = Object.freeze({
-  asc: 8,
-  sun: 8,
-  moon: 4,
-  mercury: 8,
-  venus: 8,
-  mars: 8,
-  jupiter: 8,
-  saturn: 4,
-  uranus: 11,
-  neptune: 8,
-  pluto: 8,
+  asc: 7,
+  sun: 4,
+  moon: 0,
+  mercury: 4,
+  venus: 4,
+  mars: 4,
+  jupiter: 4,
+  saturn: 7,
+  uranus: 4,
+  neptune: 7,
+  pluto: 4,
 });
 
 function readSavedChartConfig() {
@@ -105,10 +105,9 @@ const state = {
   source: savedChartConfig?.source === 'signs' ? 'signs' : 'birth',
   overlaySource: 'sky',
   tuning: { refA: 440, temperament: 'equal' },
-  // The sign-only fallback is a pure C♯-major voicing: C♯ (Leo), F
-  // (Sagittarius), and G♯ (Pisces). Bodies still keep their own octaves and
-  // roles, so the chord is spread across the ensemble rather than packed into
-  // one register.
+  // The sign-only fallback is a pure A-major voicing: A (Aries), C♯ (Leo),
+  // and E (Scorpio). Bodies still keep their own octaves and roles, so the
+  // chord is spread across the ensemble rather than packed into one register.
   signSelections: savedSignSelections(savedChartConfig?.signSelections),
   savedBirthForm: savedChartConfig?.birthForm ?? null,
 };
@@ -125,7 +124,7 @@ function boot() {
   wheel = new Wheel($('#wheelHolder'));
   starfield = new Starfield($('#stars'));
 
-  buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 0);
+  buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 6);
   buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 10);
   restoreBirthForm();
   buildSignPickers();
