@@ -6,7 +6,14 @@ import {
 import { computeSky, centuriesSinceJ2000, julianDayFromBirth, deltaT, isRetrograde } from './ephemeris.js';
 import { frequencyFor, pitchLabel, centsOffset } from './audio/tuning.js';
 
-export function makeChart(positions, { cusps = null, system = 'whole', retrogrades = {}, meta = {} } = {}) {
+/**
+ * @param {object} positions   longitudes by body key
+ * @param {object} o           { cusps, system, retrogrades, meta, silent }
+ *   `silent` marks bodies that are drawn but not sounded. They keep their place
+ *   in the list and on the wheel, and drop out of the aspects and the balance —
+ *   a body that is not there should not be casting chords across the middle.
+ */
+export function makeChart(positions, { cusps = null, system = 'whole', retrogrades = {}, meta = {}, silent = {} } = {}) {
   const ascSignIndex = positions.asc != null ? signIndexOf(positions.asc) : 0;
 
   const placements = BODIES.filter((b) => positions[b.key] != null).map((body) => {
@@ -31,6 +38,7 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
       element: sign.element,
       modality: sign.modality,
       retrograde: !!retrogrades[body.key],
+      silent: !!silent[body.key],
       label: formatLongitude(longitude),
       pitch: pitchLabel(longitude),
       cents: centsOffset(longitude),
@@ -40,7 +48,7 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
   const byKey = Object.fromEntries(placements.map((p) => [p.key, p]));
 
   const aspects = [];
-  const keys = SOUNDING_BODIES.filter((k) => byKey[k]);
+  const keys = SOUNDING_BODIES.filter((k) => byKey[k] && !byKey[k].silent);
   for (let i = 0; i < keys.length; i++) {
     for (let j = i + 1; j < keys.length; j++) {
       const a = byKey[keys[i]];
@@ -68,7 +76,7 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
   const balance = { fire: 0, earth: 0, air: 0, water: 0 };
   const modal = { cardinal: 0, fixed: 0, mutable: 0 };
   for (const p of placements) {
-    if (p.key === 'mc') continue;
+    if (p.key === 'mc' || p.silent) continue;
     const weight = p.key === 'sun' || p.key === 'moon' || p.key === 'asc' ? 2 : 1;
     balance[p.element] += weight;
     modal[p.modality] += weight;
@@ -108,6 +116,67 @@ export function chartFromSigns(signMap, houseSystem = 'whole') {
   const ascSignIndex = signIndexOf(positions.asc);
   const cusps = Array.from({ length: 12 }, (_, i) => norm360(ascSignIndex * 30 + i * 30));
   return makeChart(positions, { cusps, system: 'whole', meta: { manual: true, requestedSystem: houseSystem } });
+}
+
+// ---------------------------------------------------------------------------
+// Designer
+//
+// A chart you build by hand: drag the bodies where you want them and switch the
+// ones you do not want off. The result is a normal chart-shaped object, so the
+// wheel, the tables and the performer read it without knowing it was invented.
+// ---------------------------------------------------------------------------
+
+/** The eleven sounding bodies. The Midheaven follows the Ascendant, so it is
+ *  derived rather than placed. */
+export const DESIGNABLE_BODIES = SOUNDING_BODIES;
+
+/**
+ * Rebuild `base` with hand-placed bodies.
+ *
+ * @param {object} base    the cast chart the design sits on top of
+ * @param {object} design  `{ [bodyKey]: { longitude?, enabled? } }`
+ */
+export function designChart(base, design = {}) {
+  const positions = {};
+  const retrogrades = {};
+  for (const p of base.placements) {
+    positions[p.key] = p.longitude;
+    retrogrades[p.key] = p.retrograde;
+  }
+
+  const silent = {};
+  for (const key of DESIGNABLE_BODIES) {
+    const override = design[key];
+    if (!override) continue;
+    if (Number.isFinite(override.longitude)) positions[key] = norm360(override.longitude);
+    if (override.enabled === false) silent[key] = true;
+  }
+
+  // The Ascendant *is* the first cusp, so moving it turns the house ring with
+  // it. Whole sign and equal houses are redrawn from the new angle; the
+  // quadrant systems have no closed form without the birth data behind them,
+  // so their cusps rotate rigidly and keep their unequal spacing.
+  const ascDelta = base.byKey.asc ? norm360(positions.asc - base.byKey.asc.longitude) : 0;
+  let cusps = base.cusps;
+  if (ascDelta !== 0) {
+    if (base.system === 'whole') {
+      const start = signIndexOf(positions.asc) * 30;
+      cusps = Array.from({ length: 12 }, (_, i) => norm360(start + i * 30));
+    } else if (base.system === 'equal') {
+      cusps = Array.from({ length: 12 }, (_, i) => norm360(positions.asc + i * 30));
+    } else if (cusps) {
+      cusps = cusps.map((c) => norm360(c + ascDelta));
+    }
+    if (positions.mc != null) positions.mc = norm360(positions.mc + ascDelta);
+  }
+
+  return makeChart(positions, {
+    cusps,
+    system: base.system,
+    retrogrades,
+    silent,
+    meta: { ...base.meta, designer: true, base },
+  });
 }
 
 export function chartForNow(place, houseSystem = 'whole') {

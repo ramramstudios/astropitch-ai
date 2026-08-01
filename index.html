@@ -49,6 +49,7 @@
         <div class="seg" role="group" aria-label="Chart source">
           <button class="seg-btn is-active" data-source="birth">Birth data</button>
           <button class="seg-btn" data-source="signs">Just the signs</button>
+          <button class="seg-btn" data-source="designer">Designer</button>
         </div>
 
         <form id="birthForm" class="form">
@@ -116,6 +117,21 @@
           <div class="form-actions">
             <button type="submit" class="primary">Cast chart</button>
             <button type="button" class="ghost" id="randomSignsBtn">Random</button>
+          </div>
+        </form>
+
+        <form id="designerForm" class="form is-hidden">
+          <p class="note">
+            Drag any body around the wheel to move it, or focus one and use the
+            arrow keys — <kbd>Shift</kbd> for 5° at a time. Switch a body off to take
+            it out of the chord. Sign, house, pitch and aspects are recomputed as
+            it moves, so what you see is what you hear. Moving the Ascendant
+            turns the houses with it.
+          </p>
+          <div id="designerList" class="designer-list"></div>
+          <div class="form-actions">
+            <button type="button" class="primary" id="designerResetBtn">Reset to chart</button>
+            <button type="button" class="ghost" id="designerAllOnBtn">All on</button>
           </div>
         </form>
 

@@ -52,6 +52,12 @@ export class Wheel {
     this.chart = null;
     this.rotation = 0;
     this.handlers = {};
+    this.designer = false;
+    this.drag = null;
+    // While a body is being dragged the wheel stops turning under it. The
+    // Ascendant sets the rotation, so without this the one marker you are
+    // holding is the one that cannot follow the pointer.
+    this.rotationLock = null;
     this.scopePalette = [this._scopeColor('air')];
 
     this.svg = el('svg', {
@@ -73,6 +79,16 @@ export class Wheel {
 
     container.appendChild(this.svg);
     container.appendChild(this.canvas);
+
+    // The pointer is captured by the SVG root rather than the marker, because
+    // the marker is destroyed and rebuilt on every frame of the drag.
+    this.svg.addEventListener('pointermove', (e) => this._onPointerMove(e));
+    this.svg.addEventListener('pointerup', (e) => this._onPointerUp(e));
+    this.svg.addEventListener('pointercancel', () => this._cancelDrag());
+    this.svg.addEventListener('lostpointercapture', () => this._cancelDrag());
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this._cancelDrag();
+    });
 
     this._drawStaticRings();
   }
@@ -139,13 +155,35 @@ export class Wheel {
   render(chart) {
     this.chart = chart;
     // Put the rising sign on the left the way a printed chart does.
-    this.rotation = chart.cusps ? chart.cusps[0] : 0;
+    this.rotation = this.rotationLock ?? (chart.cusps ? chart.cusps[0] : 0);
     this._drawStaticRings();
     this._drawSigns();
     this._drawHouses();
     this._drawTicks();
     this._drawAspects();
     this._drawPlanets();
+  }
+
+  /**
+   * Redraw only what a moved body changes. The rings, signs and ticks are fixed
+   * to the rotation, which is frozen for the length of a drag, so they can be
+   * left alone and the whole thing keeps up with the pointer.
+   */
+  renderLive(chart) {
+    this.chart = chart;
+    this._drawHouses();
+    this._drawAspects();
+    this._drawPlanets();
+  }
+
+  setDesignerMode(enabled) {
+    this.designer = !!enabled;
+    if (!this.designer) this._endDrag();
+    this.svg.classList.toggle('is-designing', this.designer);
+  }
+
+  focusBody(key) {
+    this.markers?.[key]?.focus();
   }
 
   _drawSigns() {
@@ -342,6 +380,90 @@ export class Wheel {
     return items;
   }
 
+  // -------------------------------------------------------------------------
+  // Designer dragging
+  //
+  // Angular position only: however far the pointer wanders toward or away from
+  // the centre, the body stays on its ring and only its longitude changes.
+  // -------------------------------------------------------------------------
+
+  /** Screen coordinates -> longitude, with the wheel's rotation undone. */
+  _longitudeAt(event) {
+    const ctm = this.svg.getScreenCTM();
+    if (!ctm) return null;
+    const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
+    // SVG y grows downward; the angle maths in _point assumes it grows up.
+    const deg = (Math.atan2(C - p.y, p.x - C) * 180) / Math.PI;
+    return norm360(deg - 180 + this.rotation);
+  }
+
+  _startDrag(event, placement) {
+    if (this.drag) return;
+    event.preventDefault();
+    this.svg.setPointerCapture(event.pointerId);
+    this.rotationLock = this.rotation;
+    this.drag = {
+      key: placement.key,
+      pointerId: event.pointerId,
+      startLon: placement.longitude,
+      lon: placement.longitude,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      moved: false,
+      frame: 0,
+    };
+  }
+
+  _onPointerMove(event) {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+
+    // A tap that trembles is still a tap. Past the threshold it is a drag, and
+    // the click that would otherwise audition the body is suppressed.
+    if (!drag.moved) {
+      const dist = Math.hypot(event.clientX - drag.clientX, event.clientY - drag.clientY);
+      if (dist < 3) return;
+      drag.moved = true;
+      this.svg.classList.add('is-dragging');
+      this._emit('designerDragStart', drag.key);
+    }
+
+    const lon = this._longitudeAt(event);
+    if (lon == null) return;
+    drag.lon = lon;
+    if (drag.frame) return;
+    drag.frame = requestAnimationFrame(() => {
+      if (!this.drag) return;
+      this.drag.frame = 0;
+      this._emit('designerMove', this.drag.key, this.drag.lon);
+    });
+  }
+
+  _onPointerUp(event) {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    this._endDrag();
+    if (drag.moved) this._emit('designerCommit', drag.key, drag.lon);
+    else this._emit('body', drag.key);
+  }
+
+  _cancelDrag() {
+    const drag = this.drag;
+    if (!drag) return;
+    this._endDrag();
+    if (drag.moved) this._emit('designerCancel', drag.key, drag.startLon);
+  }
+
+  _endDrag() {
+    const drag = this.drag;
+    this.drag = null;
+    this.rotationLock = null;
+    this.svg.classList.remove('is-dragging');
+    if (!drag) return;
+    if (drag.frame) cancelAnimationFrame(drag.frame);
+    if (this.svg.hasPointerCapture?.(drag.pointerId)) this.svg.releasePointerCapture(drag.pointerId);
+  }
+
   _drawPlanets() {
     const g = this.layers.planets;
     const nodes = [];
@@ -361,25 +483,55 @@ export class Wheel {
       // In an overlay, the second chart's markers are outlined rather than
       // filled, and anything that touches nothing in the other chart is dimmed
       // to show it is present but not sounding.
+      // Angles are where the chart is anchored and the Midheaven is derived
+      // from the Ascendant, so neither the MC nor a body that is switched off
+      // takes a drag.
+      const draggable = this.designer && !p.silent && p.key !== 'mc';
+      const held = this.drag?.moved && this.drag.key === p.key;
+
       const group = el('g', {
         class: `planet element-${p.element}`
           + (p.side ? ` side-${p.side}` : '')
-          + (p.silent ? ' is-silent' : ''),
+          + (p.silent ? ' is-silent' : '')
+          + (draggable ? ' is-draggable' : '')
+          + (held ? ' is-held' : ''),
         style: `--planet-tone: ${tone}`,
         'data-body': p.key,
         tabindex: 0,
         role: 'button',
-        'aria-label': `${p.name}${p.side ? `, chart ${p.side.toUpperCase()}` : ''} at ${p.label}, house ${p.house}`,
+        'aria-label': `${p.name}${p.side ? `, chart ${p.side.toUpperCase()}` : ''} at ${p.label}, house ${p.house}`
+          + (draggable ? '. Drag or use the arrow keys to move it.' : ''),
       });
-      group.addEventListener('click', () => this._emit('body', p.key));
+      // A draggable body auditions from the pointer sequence instead, so that a
+      // drag ending over its own marker does not also play it.
+      if (!draggable) group.addEventListener('click', () => this._emit('body', p.key));
       group.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           this._emit('body', p.key);
+          return;
         }
+        if (!draggable) return;
+        const dir = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+        if (dir === undefined) return;
+        e.preventDefault();
+        this._emit('designerCommit', p.key, norm360(p.longitude + dir * (e.shiftKey ? 5 : 1)));
+        // The redraw that just ran replaced this node, so follow the focus over.
+        this.focusBody(p.key);
       });
       group.addEventListener('mouseenter', () => this._emit('hoverBody', p.key));
       group.addEventListener('mouseleave', () => this._emit('hoverBody', null));
+      if (draggable) {
+        group.addEventListener('pointerdown', (e) => {
+          if (e.button != null && e.button !== 0) return;
+          this._startDrag(e, p);
+        });
+        // Makes the whole marker grabbable rather than just the disc — the orb
+        // and the glyph both take themselves out of hit testing. Kept to the
+        // halo's own radius: any larger and in a stellium you are reliably
+        // grabbing the neighbour rather than the planet you aimed at.
+        group.appendChild(el('circle', { cx: gx, cy: gy, r: 22, class: 'planet-grab' }));
+      }
 
       group.appendChild(el('line', { x1: tx1, y1: ty1, x2: tx2, y2: ty2, class: 'planet-pointer' }));
       group.appendChild(el('line', { x1: tx2, y1: ty2, x2: gx, y2: gy, class: 'planet-leader' }));

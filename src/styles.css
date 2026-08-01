@@ -605,7 +605,8 @@ select:focus-visible,
 
 .seg {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   margin-bottom: 1.25rem;
   border: 1px solid var(--ink);
 }
@@ -1383,4 +1384,116 @@ tr.is-silent { opacity: 0.42; }
 
 @media (max-width: 430px) {
   .verdict-title { font-size: 1.35rem; }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Designer
+   --------------------------------------------------------------------------- */
+
+/* A generous target for a fingertip. Transparent rather than absent, because
+   `visiblePainted` hit-testing needs a paint to hit. */
+.planet-grab { fill: transparent; }
+
+/* Browsers do not honour `touch-action` on SVG children — it is read off the
+   nearest CSS box — so the whole wheel has to give up single-finger panning
+   while designing, or the first touch-move on a planet becomes a page scroll
+   and cancels the drag. `pinch-zoom` rather than `none` keeps zooming, and the
+   page still scrolls from anywhere outside the wheel. */
+.wheel-svg.is-designing { touch-action: pinch-zoom; }
+
+.planet.is-draggable { cursor: grab; }
+.planet.is-draggable:active,
+.planet.is-held { cursor: grabbing; }
+
+/* The tether from the true degree to the drawn glyph does the explaining while
+   a body is moving, so it is drawn heavier than at rest. */
+.planet.is-draggable .planet-pointer { stroke-width: 1.8; }
+
+.planet.is-held .planet-halo { opacity: 0.16; }
+.planet.is-held .planet-pointer,
+.planet.is-held .planet-leader {
+  stroke: var(--planet-tone, var(--ink));
+  stroke-width: 2;
+}
+
+.wheel-svg.is-dragging { cursor: grabbing; }
+.wheel-svg.is-dragging .aspect-hit,
+.wheel-svg.is-dragging .sign-sector { pointer-events: none; }
+
+.designer-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hairline);
+}
+
+.designer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.34rem 0;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+}
+
+.designer-switch {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.designer-switch input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+.designer-switch .g {
+  flex: 0 0 1.1rem;
+  font-family: var(--symbol);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.designer-switch .nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.designer-pos {
+  flex: 0 0 auto;
+  color: var(--graphite);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Wide enough for the longest label the equal-temperament readout produces —
+   "A♯ −49c" — because wrapping it turns a tidy list into a ragged one. */
+.designer-pitch {
+  flex: 0 0 4.3rem;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Switched off: still listed, still positioned, simply not in the chord. */
+.designer-row.is-off { opacity: 0.42; }
+
+.designer-row.is-off .designer-pos,
+.designer-row.is-off .designer-pitch { text-decoration: line-through; }
+
+@media (prefers-reduced-motion: reduce) {
+  .planet.is-held .planet-halo { transition: none; }
+}
+
+@media (max-width: 430px) {
+  .designer-row { font-size: 0.58rem; }
+  .designer-switch .nm { flex: 1; }
 }

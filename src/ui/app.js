@@ -3,9 +3,11 @@
  */
 
 import {
-  SIGNS, HOUSES, ELEMENTS, MODALITIES, ASPECTS, BODIES, SOUNDING_BODIES,
+  SIGNS, HOUSES, ELEMENTS, MODALITIES, ASPECTS, BODIES, BODY_BY_KEY, SOUNDING_BODIES, norm360,
 } from '../ontology.js';
-import { chartFromBirth, chartFromSigns, chartForNow, makeSynastry } from '../chart.js';
+import {
+  chartFromBirth, chartFromSigns, chartForNow, makeSynastry, designChart, DESIGNABLE_BODIES,
+} from '../chart.js';
 import { TEMPERAMENTS, frequencyFor } from '../audio/tuning.js';
 import { engine } from '../audio/engine.js';
 import { Performer } from '../audio/performer.js';
@@ -58,6 +60,12 @@ const PLACES = [
 ];
 
 const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
+// Hand-built positions are kept apart from the cast chart's own configuration,
+// so clearing one never silently rewrites the other.
+const DESIGN_KEY = 'astropitch.design.v1';
+const DESIGN_VERSION = 1;
+
+const SOURCES = ['birth', 'signs', 'designer'];
 
 const DEFAULT_MAJOR_SIGN_SELECTIONS = Object.freeze({
   asc: 7,
@@ -91,11 +99,37 @@ function savedSignSelections(raw) {
   return selections;
 }
 
+/** Hand-placed overrides, `{ [bodyKey]: { longitude?, enabled? } }`. */
+function readSavedDesign() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DESIGN_KEY) ?? 'null');
+    if (saved?.version !== DESIGN_VERSION || typeof saved.design !== 'object') return {};
+    const out = {};
+    for (const key of DESIGNABLE_BODIES) {
+      const raw = saved.design?.[key];
+      if (!raw || typeof raw !== 'object') continue;
+      const entry = {};
+      if (Number.isFinite(raw.longitude)) entry.longitude = norm360(raw.longitude);
+      if (raw.enabled === false) entry.enabled = false;
+      if (Object.keys(entry).length) out[key] = entry;
+    }
+    return out;
+  } catch { return {}; }
+}
+
+const savedSource = SOURCES.includes(savedChartConfig?.source) ? savedChartConfig.source : 'birth';
+
 const state = {
   subject: null,
   partner: null,
   chart: null,
-  source: savedChartConfig?.source === 'signs' ? 'signs' : 'birth',
+  source: savedSource,
+  // Which of the two casting forms produced `subject`. The designer sits on top
+  // of whichever it was, so it has to be remembered separately.
+  baseSource: savedSource === 'designer'
+    ? (savedChartConfig?.baseSource === 'signs' ? 'signs' : 'birth')
+    : savedSource,
+  design: readSavedDesign(),
   overlaySource: 'sky',
   tuning: { refA: 440, temperament: 'equal' },
   // The sign-only fallback is a pure A-major voicing: A (Aries), C♯ (Leo),
@@ -117,12 +151,14 @@ function boot() {
   buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 10);
   restoreBirthForm();
   buildSignPickers();
+  buildDesignerList();
   buildTemperamentOptions();
   buildLegends();
   buildAspectKey();
 
   wireTabs();
   wireForms();
+  wireDesigner();
   wireOverlay();
   wireTransport();
   wireSoundControls();
@@ -138,7 +174,7 @@ function boot() {
   performer.onEvent(onPerformerEvent);
   performer.setTempo(120);
 
-  if (state.source === 'birth') castFromBirthForm();
+  if (state.baseSource === 'birth') castFromBirthForm();
   else setSubject(chartFromSigns(state.signSelections));
   loop();
 }
@@ -201,6 +237,119 @@ function buildSignPickers() {
       return label;
     })
   );
+}
+
+// ---------------------------------------------------------------------------
+// Designer
+// ---------------------------------------------------------------------------
+
+const designerRows = {};
+
+function buildDesignerList() {
+  const holder = $('#designerList');
+  holder.replaceChildren(
+    ...DESIGNABLE_BODIES.map((key) => {
+      const body = BODY_BY_KEY[key];
+
+      const row = document.createElement('div');
+      row.className = 'designer-row';
+      row.dataset.body = key;
+
+      const label = document.createElement('label');
+      label.className = 'designer-switch';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = true;
+      box.addEventListener('change', () => {
+        setDesign(key, { enabled: box.checked });
+        render();
+      });
+      const glyph = document.createElement('span');
+      glyph.className = 'g';
+      glyph.textContent = body.glyph;
+      const name = document.createElement('span');
+      name.className = 'nm';
+      name.textContent = body.name;
+      label.append(box, glyph, name);
+
+      const pos = document.createElement('span');
+      pos.className = 'designer-pos';
+      const pitch = document.createElement('span');
+      pitch.className = 'designer-pitch';
+
+      row.append(label, pos, pitch);
+      row.addEventListener('mouseenter', () => {
+        showBody(key);
+        wheel.highlightBody(key);
+      });
+      row.addEventListener('mouseleave', () => {
+        clearReadout();
+        wheel.highlightBody(null);
+      });
+
+      designerRows[key] = { row, box, glyph, pos, pitch };
+      return row;
+    })
+  );
+}
+
+/** Mirror the live chart back into the control list. */
+function syncDesignerList(chart) {
+  for (const key of DESIGNABLE_BODIES) {
+    const ref = designerRows[key];
+    const p = chart.byKey[key];
+    if (!ref || !p) continue;
+    ref.box.checked = !p.silent;
+    ref.row.classList.toggle('is-off', !!p.silent);
+    ref.glyph.style.color = ELEMENTS[p.element].color;
+    ref.pos.textContent = p.label;
+    ref.pitch.textContent = state.tuning.temperament === 'equal'
+      ? p.pitch
+      : p.sign.pitch.split('/')[0];
+  }
+}
+
+function setDesign(key, patch) {
+  state.design[key] = { ...state.design[key], ...patch };
+  saveDesign();
+}
+
+function saveDesign() {
+  try {
+    localStorage.setItem(DESIGN_KEY, JSON.stringify({ version: DESIGN_VERSION, design: state.design }));
+  } catch { /* the design still holds for this session */ }
+}
+
+/** Redraw the wheel from an uncommitted position, mid-drag. */
+function previewDesign(key, longitude) {
+  if (state.source !== 'designer' || !state.subject) return;
+  const design = { ...state.design, [key]: { ...state.design[key], longitude } };
+  state.chart = designChart(state.subject, design);
+  wheel.renderLive(state.chart);
+  syncDesignerList(state.chart);
+  showBody(key);
+}
+
+function commitDesign(key, longitude) {
+  if (state.source !== 'designer' || !state.subject) return;
+  setDesign(key, { longitude: norm360(longitude) });
+  render();
+  showBody(key);
+}
+
+function wireDesigner() {
+  $('#designerResetBtn').addEventListener('click', () => {
+    state.design = {};
+    saveDesign();
+    render();
+    clearReadout();
+  });
+
+  $('#designerAllOnBtn').addEventListener('click', () => {
+    for (const entry of Object.values(state.design)) delete entry.enabled;
+    saveDesign();
+    render();
+  });
 }
 
 function buildTemperamentOptions() {
@@ -267,9 +416,11 @@ function buildAspectKey() {
 
 function applySource(source) {
   state.source = source;
+  if (source !== 'designer') state.baseSource = source;
   for (const b of $$('[data-source]')) b.classList.toggle('is-active', b.dataset.source === source);
   $('#birthForm').classList.toggle('is-hidden', source !== 'birth');
   $('#signsForm').classList.toggle('is-hidden', source !== 'signs');
+  $('#designerForm').classList.toggle('is-hidden', source !== 'designer');
 }
 
 function wireTabs() {
@@ -305,8 +456,17 @@ function wireForms() {
   // same segmented-button styling for a different choice.
   for (const btn of $$('[data-source]')) {
     btn.addEventListener('click', () => {
+      const was = state.source;
       applySource(btn.dataset.source);
       saveChartConfig();
+      // Entering or leaving the designer changes the chart on the wheel without
+      // anything being cast, so it has to redraw now rather than on submit.
+      if (was !== state.source && (was === 'designer' || state.source === 'designer')) {
+        // Synastry puts two of everything on the wheel and cuts the density by
+        // contact; designing is one chart at a time.
+        if (state.source === 'designer' && state.partner) setPartner(null);
+        else render();
+      }
     });
   }
 
@@ -396,6 +556,7 @@ function saveChartConfig() {
   try {
     localStorage.setItem(CHART_CONFIG_KEY, JSON.stringify({
       source: state.source,
+      baseSource: state.baseSource,
       signSelections: state.signSelections,
       birthForm: birthFormValues(),
     }));
@@ -540,6 +701,13 @@ function wireWheel() {
 
   wheel.on('hoverBody', (key) => (key == null ? clearReadout() : showBody(key)));
   wheel.on('hoverAspect', (a) => (a == null ? clearReadout() : showAspect(a)));
+
+  wheel.on('designerDragStart', (key) => showBody(key));
+  wheel.on('designerMove', previewDesign);
+  wheel.on('designerCommit', commitDesign);
+  // Nothing was written while the drag was live, so putting the body back is
+  // just a redraw of what is already stored.
+  wheel.on('designerCancel', () => render());
 }
 
 function wireModal() {
@@ -663,19 +831,24 @@ function setPartner(chart, label = null) {
  */
 function render() {
   if (!state.subject) return;
-  state.chart = state.partner
-    ? makeSynastry(state.subject, state.partner)
-    : state.subject;
+  const designing = state.source === 'designer';
+  // A designed chart is chart-shaped, so it drops into the same pipeline.
+  const subject = designing ? designChart(state.subject, state.design) : state.subject;
+  state.chart = state.partner && !designing
+    ? makeSynastry(subject, state.partner)
+    : subject;
 
   performer.stop();
   performer.setChart(state.chart);
   performer.setTuning(state.tuning);
+  wheel.setDesignerMode(designing);
   wheel.render(state.chart);
   wheel.resizeScope();
   renderPlacements();
   renderAspects();
   renderBalance();
   renderOverlay();
+  if (designing) syncDesignerList(state.chart);
 }
 
 function renderPlacements() {
@@ -835,7 +1008,18 @@ function renderOverlay() {
   const holder = $('#verdict');
   const tbody = $('#contactsTable tbody');
   const meta = state.chart?.meta;
+  const designing = state.source === 'designer';
   $('#clearOverlayBtn').disabled = !state.partner;
+  for (const btn of $$('#skyForm button, #partnerForm button, #bRandomBtn')) btn.disabled = designing;
+
+  if (designing) {
+    const hint = document.createElement('p');
+    hint.className = 'note';
+    hint.textContent = 'The designer works on one chart at a time. Leave it to overlay again.';
+    holder.replaceChildren(hint);
+    tbody.replaceChildren();
+    return;
+  }
 
   if (!meta?.synastry) {
     const hint = document.createElement('p');

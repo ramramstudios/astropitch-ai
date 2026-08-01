@@ -175,6 +175,28 @@ You must supply the UTC offset that was actually in force at the birth moment.
 Historical daylight saving cannot be derived from coordinates, and guessing it
 silently would be worse than asking.
 
+Use **Designer** to build a chart by hand on top of whichever of those two you
+cast. Drag any of the eleven sounding bodies around the wheel, or focus one and
+nudge it with the arrow keys — `Shift` for 5° at a time. Only the angular
+position changes; a body stays on its ring however far the pointer wanders. Sign,
+exact degree, house, pitch, element, modality and aspects are all recomputed as
+it moves, so the chord you are looking at is the chord you will hear.
+
+Each body also has a switch. A body switched off keeps its place on the wheel and
+in the placement list, but drops out of the aspects, out of the elemental balance
+and out of all three playback modes — the fastest way to find out what a chart
+sounds like without its Saturn.
+
+Moving the Ascendant turns the house ring with it, because the Ascendant *is* the
+first cusp. Whole sign and equal houses are redrawn from the new angle; Placidus
+and Porphyry have no closed form without the birth data behind them, so their
+cusps rotate rigidly and keep their unequal spacing.
+
+The design is stored separately from the cast chart, so *Reset to chart* always
+has something to go back to, and nothing you drag ever edits the chart underneath.
+Designing is one chart at a time: entering the designer clears any overlay, since
+synastry puts two of everything on the wheel and cuts the sound density by contact.
+
 ## Two charts at once
 
 The **Overlay** tab plays a chart against the sky right now, or against another
@@ -277,7 +299,8 @@ remembered between visits.
 | `Space` | play the chart, or stop it |
 | `B` `S` `D` | bloom, sequence, drone |
 | `[` | fold or unfold the controls |
-| `Esc` | close *How it works* |
+| `←` `→` | in the designer, move the focused body by 1° (`Shift` for 5°) |
+| `Esc` | cancel a designer drag, or close *How it works* |
 
 ## Run locally
 
@@ -299,6 +322,7 @@ Stop the server with `Ctrl+C` in the terminal where it is running.
 node tests/ephemeris.test.mjs    # astronomy vs. Meeus and JPL reference values
 node tests/synastry.test.mjs     # cross-chart contacts, density, harmony score
 node tests/performer.test.mjs    # what the arrangements schedule
+node tests/designer.test.mjs     # hand-placed bodies, switches, moved angles
 ```
 
 `synastry.test.mjs` pins the claims the overlay depends on: that a merged
@@ -308,6 +332,10 @@ transposed, and that orb converts to beat rate as advertised.
 without an `AudioContext`; its sharpest check is that the detune nudge never
 crosses between charts, since there the beating is the signal rather than
 something to be smoothed away.
+`designer.test.mjs` holds the designer to the same bargain as the overlay: a
+designed chart has to be shaped exactly like a cast one, a moved body has to
+carry every derived field with it, and a body switched off has to disappear from
+the aspects, the balance and the schedule rather than merely being turned down.
 
 For the audio, open `tests/audio.test.html` with the server running. It renders
 the graph through an `OfflineAudioContext` and measures the result: all 144
@@ -322,7 +350,7 @@ index.html
 src/
   ontology.js        signs, houses, elements, modalities, bodies, aspects
   ephemeris.js       Sun, Moon, planets, angles, house systems
-  chart.js           longitudes -> placements, aspects, balance, synastry
+  chart.js           longitudes -> placements, aspects, balance, synastry, designer
   styles.css
   audio/
     engine.js        the persistent signal graph
