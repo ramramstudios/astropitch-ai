@@ -14,10 +14,6 @@
  * distances, become intervals for free.
  */
 
-// ---------------------------------------------------------------------------
-// Elements — the material: waveform stack, harmonic content, texture
-// ---------------------------------------------------------------------------
-
 export const ELEMENTS = {
   fire: {
     name: 'Fire',
@@ -61,10 +57,6 @@ export const ELEMENTS = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Modalities — the envelope shape
-// ---------------------------------------------------------------------------
-
 export const MODALITIES = {
   cardinal: {
     name: 'Cardinal',
@@ -107,11 +99,6 @@ export const SIGNS = [
   { name: 'Pisces',      glyph: '♓\uFE0E', pitch: 'G♯/A♭', element: 'water', modality: 'mutable',  ruler: 'Neptune', keyword: 'the dissolve' },
 ];
 
-// ---------------------------------------------------------------------------
-// Houses — timbre. Each archetype is translated into a synthesis recipe in
-// audio/voices.js.
-// ---------------------------------------------------------------------------
-
 export const HOUSES = [
   { n: 1,  meaning: 'ego, sense of self',                   timbre: 'Naked and forward — a voice with nothing in front of it' },
   { n: 2,  meaning: 'material possessions and security',    timbre: 'Struck and physical — something with mass behind it' },
@@ -126,11 +113,6 @@ export const HOUSES = [
   { n: 11, meaning: 'humanity, technology',                 timbre: 'Metallic and inharmonic — a machine bell' },
   { n: 12, meaning: 'collective unconscious, psychic ability', timbre: 'Dissolved — arrives before it begins' },
 ];
-
-// ---------------------------------------------------------------------------
-// Bodies — register and role in the mix. Sun, Moon, and Ascendant are the
-// loudest three voices.
-// ---------------------------------------------------------------------------
 
 export const BODIES = [
   { key: 'asc',     name: 'Ascendant', glyph: 'Asc', octave:  0, gain: 1.00, role: 'The voice you are heard in', angle: true },
@@ -149,7 +131,6 @@ export const BODIES = [
 
 export const BODY_BY_KEY = Object.fromEntries(BODIES.map((b) => [b.key, b]));
 
-/** Bodies that sound by default (Midheaven is an angle, not a voice). */
 export const SOUNDING_BODIES = BODIES.filter((b) => b.key !== 'mc').map((b) => b.key);
 
 // ---------------------------------------------------------------------------
@@ -170,13 +151,8 @@ export const ASPECTS = [
   { name: 'Opposition',  glyph: '☍', angle: 180, orb: 8, semitones: 6,  interval: 'tritone',       consonance: 0.15, color: '#e0567c' },
 ];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 export const norm360 = (d) => ((d % 360) + 360) % 360;
 
-/** Shortest angular separation between two longitudes, 0..180. */
 export function separation(a, b) {
   const d = Math.abs(norm360(a) - norm360(b));
   return d > 180 ? 360 - d : d;
@@ -185,7 +161,6 @@ export function separation(a, b) {
 export const signIndexOf = (lon) => Math.floor(norm360(lon) / 30) % 12;
 export const degreeInSign = (lon) => norm360(lon) % 30;
 
-/** "14°22' Aries" */
 export function formatLongitude(lon, { glyph = false } = {}) {
   const idx = signIndexOf(lon);
   const deg = degreeInSign(lon);
@@ -196,12 +171,10 @@ export function formatLongitude(lon, { glyph = false } = {}) {
   return `${d}°${String(m).padStart(2, '0')}' ${label}`;
 }
 
-/** Whole-sign house for a longitude, given the rising sign index. */
 export function wholeSignHouse(lon, ascSignIndex) {
   return ((signIndexOf(lon) - ascSignIndex + 12) % 12) + 1;
 }
 
-/** Which house a longitude falls in, given 12 cusp longitudes. */
 export function houseFromCusps(lon, cusps) {
   const L = norm360(lon);
   for (let i = 0; i < 12; i++) {
@@ -213,7 +186,6 @@ export function houseFromCusps(lon, cusps) {
   return 1;
 }
 
-/** Find the aspect (if any) between two longitudes. */
 export function aspectBetween(lonA, lonB) {
   const sep = separation(lonA, lonB);
   for (const aspect of ASPECTS) {

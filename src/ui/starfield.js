@@ -38,7 +38,6 @@ export class Starfield {
     ctx.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
     ctx.lineWidth = 1;
 
-    // Ruled-paper horizontals.
     for (let y = -20; y < h + 40; y += 72) {
       ctx.beginPath();
       ctx.moveTo(0, y + 0.5);

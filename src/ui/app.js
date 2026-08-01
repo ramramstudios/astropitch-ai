@@ -57,10 +57,6 @@ const PLACES = [
   { name: 'Auckland, NZ', lat: -36.848, lon: 174.763, utc: 12 },
 ];
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-
 const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
 
 const DEFAULT_MAJOR_SIGN_SELECTIONS = Object.freeze({
@@ -96,11 +92,8 @@ function savedSignSelections(raw) {
 }
 
 const state = {
-  // The chart you cast. Always a single chart.
   subject: null,
-  // The chart overlaid on it, or null. Either another person or the sky.
   partner: null,
-  // What is actually drawn and played: the subject, or the two of them merged.
   chart: null,
   source: savedChartConfig?.source === 'signs' ? 'signs' : 'birth',
   overlaySource: 'sky',
@@ -115,10 +108,6 @@ const state = {
 const performer = new Performer(engine);
 let wheel;
 let starfield;
-
-// ---------------------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------------------
 
 function boot() {
   wheel = new Wheel($('#wheelHolder'));
@@ -158,10 +147,6 @@ function onResize() {
   starfield.resize();
   wheel.resizeScope();
 }
-
-// ---------------------------------------------------------------------------
-// Static UI construction
-// ---------------------------------------------------------------------------
 
 function buildPlaceOptions(selectId, fields, defaultIndex) {
   const select = $(selectId);
@@ -279,10 +264,6 @@ function buildAspectKey() {
     })
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tabs, forms, controls
-// ---------------------------------------------------------------------------
 
 function applySource(source) {
   state.source = source;
@@ -435,10 +416,6 @@ function castFromBirthForm() {
   setSubject(chartFromBirth(birth, readPlace(), $('#houseSystem').value));
   saveChartConfig();
 }
-
-// ---------------------------------------------------------------------------
-// Overlay
-// ---------------------------------------------------------------------------
 
 function wireOverlay() {
   for (const btn of $$('[data-overlay]')) {
@@ -667,10 +644,6 @@ function wireKeyboard() {
     else if (e.key.toLowerCase() === 'd') performer.drone();
   });
 }
-
-// ---------------------------------------------------------------------------
-// Chart rendering
-// ---------------------------------------------------------------------------
 
 function setSubject(chart) {
   state.subject = chart;
@@ -940,10 +913,6 @@ function renderBalance() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Readout
-// ---------------------------------------------------------------------------
-
 function readoutEl(title, glyph, color, pitch, bodyHTML, tags) {
   const holder = $('#readout');
   const h = document.createElement('p');
@@ -1098,10 +1067,6 @@ function clearReadout() {
 const ordinal = (n) => (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
 const lowerFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 
-// ---------------------------------------------------------------------------
-// Performer events -> UI
-// ---------------------------------------------------------------------------
-
 function onPerformerEvent(event) {
   if (event.type === 'note') {
     wheel.setScopeTone(state.chart?.byKey?.[event.key]?.element);
@@ -1130,10 +1095,6 @@ function onPerformerEvent(event) {
     for (const sel of ['#bloomBtn', '#sequenceBtn', '#droneBtn']) $(sel).classList.remove('is-active');
   }
 }
-
-// ---------------------------------------------------------------------------
-// Render loop
-// ---------------------------------------------------------------------------
 
 let lastFrame = performance.now();
 

@@ -16,7 +16,6 @@
  * when they finish.
  */
 
-/** Soft-clip curve. tanh-shaped, so it compresses peaks instead of shattering them. */
 function saturationCurve(amount = 1.6, n = 2048) {
   const curve = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -123,7 +122,6 @@ export class AudioEngine {
     }
   }
 
-  /** Must be called from a user gesture. Safe to call repeatedly. */
   async start() {
     if (!this.ctx) this._build();
     if (this.ctx.state === 'suspended') await this.ctx.resume();
@@ -141,7 +139,6 @@ export class AudioEngine {
     });
     this.ctx = ctx;
 
-    // --- output chain, from the end backwards ---
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.72;
@@ -200,12 +197,10 @@ export class AudioEngine {
     mixBus.connect(master);
     this.mixBus = mixBus;
 
-    // --- dry path ---
     const dryBus = ctx.createGain();
     dryBus.connect(mixBus);
     this.dryBus = dryBus;
 
-    // --- reverb send ---
     const reverbSend = ctx.createGain();
     reverbSend.gain.value = 1;
     const preDelay = ctx.createDelay(0.5);
@@ -228,7 +223,6 @@ export class AudioEngine {
     this.reverbSend = reverbSend;
     this.reverbReturn = reverbReturn;
 
-    // --- ping-pong delay send ---
     const delaySend = ctx.createGain();
     const delayL = ctx.createDelay(2);
     const delayR = ctx.createDelay(2);
@@ -268,7 +262,6 @@ export class AudioEngine {
     this.master.gain.setTargetAtTime(0.95 * v * v, this.ctx.currentTime, 0.02);
   }
 
-  /** Tempo-linked delay times, so sequences and echoes agree. */
   setDelayTime(seconds) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -308,7 +301,6 @@ export class AudioEngine {
     this.voices.delete(voice);
   }
 
-  /** Release everything currently sounding. */
   releaseAll(fade = 0.25) {
     const t = this.now;
     for (const v of Array.from(this.voices)) {
@@ -316,7 +308,6 @@ export class AudioEngine {
     }
   }
 
-  /** Peak level 0..1, for the visualiser. */
   level() {
     if (!this.analyser) return 0;
     this.analyser.getFloatTimeDomainData(this._analyserData);
@@ -327,7 +318,6 @@ export class AudioEngine {
     return Math.sqrt(sum / this._analyserData.length);
   }
 
-  /** Raw waveform, for the circular oscilloscope. */
   waveform() {
     if (!this.analyser) return null;
     this.analyser.getFloatTimeDomainData(this._analyserData);

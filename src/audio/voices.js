@@ -18,10 +18,6 @@
 
 import { MODALITIES } from '../ontology.js';
 
-// ---------------------------------------------------------------------------
-// Shared, allocated once per context
-// ---------------------------------------------------------------------------
-
 const noiseBuffers = new WeakMap();
 function noiseBuffer(ctx) {
   let buf = noiseBuffers.get(ctx);
@@ -57,10 +53,6 @@ function driveCurve(amount) {
   }
   return curve;
 }
-
-// ---------------------------------------------------------------------------
-// ELEMENT — the material
-// ---------------------------------------------------------------------------
 
 export const MATERIALS = {
   // Dense, bright, every harmonic present. Saws beating against each other,
@@ -144,10 +136,6 @@ export const MATERIALS = {
     width: 0.62,
   },
 };
-
-// ---------------------------------------------------------------------------
-// HOUSE — the gesture. Values multiply or override the material.
-// ---------------------------------------------------------------------------
 
 const G = (o) => ({
   ampMul: { attack: 1, decay: 1, sustain: 1, release: 1 },
@@ -282,11 +270,6 @@ export const GESTURES = {
   }),
 };
 
-// ---------------------------------------------------------------------------
-// Composition
-// ---------------------------------------------------------------------------
-
-/** Merge material + gesture + modality into one flat voice recipe. */
 export function buildVoiceSpec({ element, house, modality }) {
   const material = MATERIALS[element] ?? MATERIALS.fire;
   const gesture = GESTURES[house] ?? GESTURES[1];
@@ -322,10 +305,6 @@ export function buildVoiceSpec({ element, house, modality }) {
     width: Math.min(1, material.width * gesture.widthMul),
   };
 }
-
-// ---------------------------------------------------------------------------
-// The voice itself
-// ---------------------------------------------------------------------------
 
 let voiceSerial = 0;
 

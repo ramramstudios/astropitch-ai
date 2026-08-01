@@ -29,10 +29,6 @@ const norm180 = (d) => {
   return x > 180 ? x - 360 : x;
 };
 
-// ---------------------------------------------------------------------------
-// Time
-// ---------------------------------------------------------------------------
-
 /**
  * Julian Day from a UTC calendar date. Month is 1-12. `day` may be fractional.
  * Meeus ch. 7.
@@ -60,7 +56,6 @@ export function julianDayFromBirth({ year, month, day, hour = 0, minute = 0, utc
   return julianDay(year, month, day + dayFraction);
 }
 
-/** Julian centuries from J2000.0. */
 export const centuriesSinceJ2000 = (jd) => (jd - 2451545.0) / 36525;
 
 /**
@@ -114,10 +109,6 @@ export function greenwichMeanSiderealTime(jd) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sun — Meeus ch. 25
-// ---------------------------------------------------------------------------
-
 export function sunLongitude(T) {
   const L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T;
   const M = 357.52911 + 35999.05029 * T - 0.0001537 * T * T;
@@ -130,10 +121,6 @@ export function sunLongitude(T) {
   // Apparent longitude: nutation in longitude + aberration.
   return norm360(trueLon - 0.00569 - 0.00478 * sin(omega));
 }
-
-// ---------------------------------------------------------------------------
-// Moon — Meeus ch. 47, full 60-term longitude series
-// ---------------------------------------------------------------------------
 
 // [D, M, M', F, coefficient in 1e-6 degrees]
 const MOON_TERMS = [
@@ -191,10 +178,6 @@ export function moonLongitude(T) {
   return norm360(Lp + sumL / 1e6);
 }
 
-// ---------------------------------------------------------------------------
-// Planets — JPL approximate Keplerian elements
-// ---------------------------------------------------------------------------
-
 // [a (au), e, I (deg), L (deg), longPeri (deg), longNode (deg)] and per-century rates.
 const PLANET_ELEMENTS = {
   mercury: {
@@ -235,7 +218,6 @@ const PLANET_ELEMENTS = {
   },
 };
 
-/** Solve Kepler's equation. M and the result are in degrees. */
 function solveKepler(M, e) {
   const Mdeg = norm180(M);
   const eStar = RAD * e; // e expressed in degrees, per the JPL cookbook
@@ -249,7 +231,6 @@ function solveKepler(M, e) {
   return E;
 }
 
-/** Heliocentric ecliptic rectangular coordinates (au), J2000 frame. */
 function heliocentric(name, T) {
   const { el, rate } = PLANET_ELEMENTS[name];
   const a = el[0] + rate[0] * T;
@@ -263,7 +244,6 @@ function heliocentric(name, T) {
   const M = L - peri;
   const E = solveKepler(M, e);
 
-  // Position in the orbital plane.
   const xv = a * (cos(E) - e);
   const yv = a * Math.sqrt(1 - e * e) * sin(E);
 
@@ -281,12 +261,10 @@ function heliocentric(name, T) {
   };
 }
 
-/** General precession in longitude since J2000, degrees. Meeus 21.  */
 function precession(T) {
   return (5029.0966 * T + 1.11113 * T * T) / 3600;
 }
 
-/** Geocentric apparent ecliptic longitude of a planet, equinox of date. */
 export function planetLongitude(name, T) {
   const p = heliocentric(name, T);
   const earth = heliocentric('earth', T);
@@ -294,10 +272,6 @@ export function planetLongitude(name, T) {
   const y = p.y - earth.y;
   return norm360(atan2(y, x) + precession(T));
 }
-
-// ---------------------------------------------------------------------------
-// Angles and houses
-// ---------------------------------------------------------------------------
 
 /**
  * Ascendant and Midheaven.
@@ -322,7 +296,6 @@ export function angles(jd, lat, lon) {
   return { asc, mc, ramc, obliquity: eps };
 }
 
-/** Ecliptic longitude of the point on the ecliptic with the given right ascension. */
 function eclipticFromRA(ra, eps) {
   let lambda = norm360(atan2(sin(ra), cos(ra) * cos(eps)));
   if (Math.abs(norm180(lambda - ra)) > 90) lambda = norm360(lambda + 180);
@@ -353,7 +326,6 @@ function placidusCusp(ramc, lat, eps, base, f) {
   return eclipticFromRA(norm360(ramc + base + f * ad), eps);
 }
 
-/** Trisect each quadrant between the angles. Used above the polar circles. */
 function porphyryCusps(asc, mc) {
   const q1 = norm360(asc - mc); // MC -> Asc, the 10th/11th/12th quadrant
   const q2 = norm360(mc + 180 - asc);
@@ -406,10 +378,6 @@ export function houseCusps(system, { asc, mc, ramc, obliquity: eps }, lat) {
     system: 'placidus',
   };
 }
-
-// ---------------------------------------------------------------------------
-// Top level
-// ---------------------------------------------------------------------------
 
 const PLANET_KEYS = ['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
 

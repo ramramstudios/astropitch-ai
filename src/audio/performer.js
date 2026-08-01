@@ -31,7 +31,7 @@ export class Performer {
     this.engine = engine;
     this.chart = null;
     this.tuning = { refA: 440, temperament: 'equal' };
-    this.tempo = 120; // beats per minute
+    this.tempo = 120;
     this.mode = null;
     this.active = [];
     this.timers = [];
@@ -48,7 +48,6 @@ export class Performer {
     for (const fn of this.listeners) fn(event);
   }
 
-  /** Fire a UI event at an audio-clock time. */
   _emitAt(event, time) {
     const delay = Math.max(0, (time - this.engine.now) * 1000);
     this.timers.push(setTimeout(() => this._emit(event), delay));
@@ -66,10 +65,6 @@ export class Performer {
     this.tempo = bpm;
     this.engine.setDelayTime(60 / bpm);
   }
-
-  // -------------------------------------------------------------------------
-  // Voice construction
-  // -------------------------------------------------------------------------
 
   /**
    * @param {object} p       placement from the chart
@@ -117,17 +112,11 @@ export class Performer {
     return map;
   }
 
-  /** Bodies that actually sound: not the Midheaven, and not the untouched. */
   _sounding() {
     if (!this.chart) return [];
     return this.chart.placements.filter((p) => p.key !== 'mc' && !p.silent);
   }
 
-  // -------------------------------------------------------------------------
-  // Public playback
-  // -------------------------------------------------------------------------
-
-  /** One placement, on its own. */
   async playPlacement(key, { duration = 2.4 } = {}) {
     await this.engine.start();
     const p = this.chart?.byKey?.[key];
@@ -137,7 +126,6 @@ export class Performer {
     this._emit({ type: 'note', key, time: t });
   }
 
-  /** A bare sign, for exploring the wheel without a chart loaded. */
   async playSign(signIndex, { house = 1, octave = 0, duration = 2.2 } = {}) {
     await this.engine.start();
     const sign = SIGNS[signIndex];
@@ -156,7 +144,6 @@ export class Performer {
     this._emit({ type: 'sign', signIndex, time: t });
   }
 
-  /** Two bodies together, so you can hear an aspect as the interval it is. */
   async playAspect(aspect, { duration = 3.2 } = {}) {
     await this.engine.start();
     const a = this.chart?.byKey?.[aspect.a];

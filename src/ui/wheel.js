@@ -95,13 +95,11 @@ export class Wheel {
     };
   }
 
-  /** Use one element hue for a voice, or a two-colour field for an aspect. */
   setScopeTone(elements) {
     const tones = (Array.isArray(elements) ? elements : [elements]).filter(Boolean);
     if (tones.length) this.scopePalette = tones.slice(0, 2).map((element) => this._scopeColor(element));
   }
 
-  /** Screen angle in radians for an ecliptic longitude. */
   _angle(longitude) {
     return ((180 + (norm360(longitude) - this.rotation)) * Math.PI) / 180;
   }
@@ -232,7 +230,6 @@ export class Wheel {
         })
       );
 
-      // House number, centred in its own span.
       const span = norm360(cusps[(i + 1) % 12] - lon);
       const [nx, ny] = this._point(lon + span / 2, (R.houseOuter + R.houseInner) / 2);
       nodes.push(
@@ -245,7 +242,6 @@ export class Wheel {
       );
     }
 
-    // Angle labels outside the rim.
     const angleLabels = [[cusps[0], 'ASC'], [cusps[9], 'MC'], [cusps[6], 'DSC'], [cusps[3], 'IC']];
     for (const [lon, name] of angleLabels) {
       const [x, y] = this._point(lon, R.rim + 16);
@@ -443,10 +439,6 @@ export class Wheel {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Circular oscilloscope in the hub
-  // -------------------------------------------------------------------------
-
   resizeScope() {
     const rect = this.container.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -466,7 +458,6 @@ export class Wheel {
     ctx.clearRect(0, 0, size, size);
     if (!waveform) return;
 
-    // The canvas covers the same box as the padded viewBox, so map through it.
     const scale = size / VIEW_SIZE;
     const cx = (C - VIEW_MIN) * scale;
     const cy = (C - VIEW_MIN) * scale;
@@ -486,7 +477,6 @@ export class Wheel {
       return gradient;
     };
 
-    // A broad colour bloom, a tighter halo, and a bright technical core.
     for (const pass of [0, 1, 2]) {
       ctx.beginPath();
       const N = 360;

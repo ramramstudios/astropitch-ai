@@ -89,7 +89,6 @@ select:focus-visible,
 
 .is-hidden { display: none !important; }
 
-/* Page layout ------------------------------------------------------------- */
 
 .chart-help {
   appearance: none;
@@ -136,7 +135,6 @@ select:focus-visible,
   padding-left: var(--column-gap);
 }
 
-/* Sidebar toggle ---------------------------------------------------------- */
 
 .side-rail {
   grid-area: rail;
@@ -283,7 +281,6 @@ select:focus-visible,
 }
 .wheel-svg { z-index: 2; overflow: visible; }
 
-/* Chart wheel ------------------------------------------------------------- */
 
 .ring {
   fill: none;
@@ -471,7 +468,6 @@ select:focus-visible,
   100% { opacity: 0; transform: scale(1.36); }
 }
 
-/* Hover/readout ----------------------------------------------------------- */
 
 .readout {
   min-height: 114px;
@@ -544,7 +540,6 @@ select:focus-visible,
   text-transform: uppercase;
 }
 
-/* Control column ---------------------------------------------------------- */
 
 .side {
   grid-area: side;
@@ -632,7 +627,6 @@ select:focus-visible,
 .seg-btn:last-child { border-right: 0; }
 .seg-btn.is-active { background: var(--ink); color: #fff; }
 
-/* Forms ------------------------------------------------------------------- */
 
 .form {
   display: flex;
@@ -766,7 +760,6 @@ button.ghost:hover { background: #e5e5e1; }
   gap: 0.8rem 1rem;
 }
 
-/* Balance ----------------------------------------------------------------- */
 
 .balance {
   margin-top: 1.5rem !important;
@@ -810,7 +803,6 @@ button.ghost:hover { background: #e5e5e1; }
 
 .bal-val { width: 1.5rem; text-align: right; }
 
-/* Tables ------------------------------------------------------------------ */
 
 .table-wrap { margin: 0; }
 
@@ -887,7 +879,6 @@ table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none);
   text-align: center;
 }
 
-/* Sound legends ----------------------------------------------------------- */
 
 .control-block { margin-bottom: 1.5rem !important; }
 .control-block .note { margin-top: 0.35rem; }
@@ -922,7 +913,6 @@ table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none);
   line-height: 1.35;
 }
 
-/* Playback dock ----------------------------------------------------------- */
 
 .transport {
   position: fixed;
@@ -1020,7 +1010,6 @@ button.stop:disabled { cursor: default; opacity: 0.28; }
 .volume input[type="range"]::-webkit-slider-thumb { border-color: #fff; background: var(--ink); }
 .volume input[type="range"]::-moz-range-thumb { border-color: #fff; background: var(--ink); }
 
-/* About modal ------------------------------------------------------------- */
 
 .modal {
   position: fixed;
@@ -1239,7 +1228,6 @@ kbd {
 
 .modal-close:hover { background: var(--ink); color: #fff; }
 
-/* Responsive -------------------------------------------------------------- */
 
 @media (max-width: 1040px) {
   /* Stacked: the wheel already has the full width, so there is nothing to
@@ -1318,7 +1306,6 @@ kbd {
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
 
-/* Overlay ----------------------------------------------------------------- */
 
 /* Which chart a body came from. Small enough to read as a footnote. */
 .side-tag {

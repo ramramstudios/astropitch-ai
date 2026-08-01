@@ -1,8 +1,3 @@
-/**
- * The chart model: a set of longitudes turned into everything the wheel and the
- * synthesiser need.
- */
-
 import {
   SIGNS, HOUSES, BODIES, BODY_BY_KEY, SOUNDING_BODIES, ASPECTS,
   norm360, signIndexOf, degreeInSign, houseFromCusps, wholeSignHouse,
@@ -11,10 +6,6 @@ import {
 import { computeSky, centuriesSinceJ2000, julianDayFromBirth, deltaT, isRetrograde } from './ephemeris.js';
 import { frequencyFor, pitchLabel, centsOffset } from './audio/tuning.js';
 
-/**
- * @param {Record<string, number>} positions  body key -> ecliptic longitude
- * @param {object} opts
- */
 export function makeChart(positions, { cusps = null, system = 'whole', retrogrades = {}, meta = {} } = {}) {
   const ascSignIndex = positions.asc != null ? signIndexOf(positions.asc) : 0;
 
@@ -48,8 +39,6 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
 
   const byKey = Object.fromEntries(placements.map((p) => [p.key, p]));
 
-  // Aspects between the sounding bodies. Because 30 degrees is a semitone,
-  // the aspect angle divided by 30 is the interval in semitones.
   const aspects = [];
   const keys = SOUNDING_BODIES.filter((k) => byKey[k]);
   for (let i = 0; i < keys.length; i++) {
@@ -67,7 +56,6 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
             separation: sep,
             orbDelta: delta,
             exactness: 1 - delta / aspect.orb,
-            // The sounding interval, which follows from the angle itself.
             cents: (sep / 30) * 100,
           });
           break;
@@ -77,7 +65,6 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
   }
   aspects.sort((x, y) => y.exactness - x.exactness);
 
-  // Element and modality balance — the chart's overall "voicing".
   const balance = { fire: 0, earth: 0, air: 0, water: 0 };
   const modal = { cardinal: 0, fixed: 0, mutable: 0 };
   for (const p of placements) {
@@ -90,7 +77,6 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
   return { placements, byKey, aspects, cusps, system, balance, modal, meta, ascSignIndex };
 }
 
-/** Build a chart from a birth moment and place. */
 export function chartFromBirth(birth, place, houseSystem = 'whole') {
   const sky = computeSky(birth, { ...place, houseSystem });
   const jd = julianDayFromBirth(birth);
@@ -124,7 +110,6 @@ export function chartFromSigns(signMap, houseSystem = 'whole') {
   return makeChart(positions, { cusps, system: 'whole', meta: { manual: true, requestedSystem: houseSystem } });
 }
 
-/** A chart for right now, at a given place. */
 export function chartForNow(place, houseSystem = 'whole') {
   const d = new Date();
   return chartFromBirth(
@@ -141,27 +126,6 @@ export function chartForNow(place, houseSystem = 'whole') {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Synastry — two charts sharing one pitch space
-//
-// Both charts are tuned by the same rule, so they land in the same chromatic
-// octave. That is not a problem to be engineered around, it is the point: a
-// cross-chart conjunction is a unison, and its orb is audible as the beat rate
-// between the two tones. At A440, 8° of orb beats at 6.8Hz, 3° at 2.5Hz, 1° at
-// 0.85Hz, and exact fuses into one tone. Transposing either chart to "separate"
-// them would make every contact a lie, so neither chart is ever transposed.
-//
-// What is controlled instead is density. Twenty-two bodies at once is a wall.
-// But a relationship is not twenty-two bodies, it is the handful of places
-// where the two charts actually touch — so only bodies in contact sound, and
-// they sound in proportion to how tightly they are held. A close pair is dense
-// and busy; two strangers are sparse and open. The texture is the reading.
-// ---------------------------------------------------------------------------
-
-/**
- * Every aspect between a body in one chart and a body in the other, ranked by
- * how much it matters. Same-body pairs are included — Sun to Sun is a contact.
- */
 export function crossAspects(chartA, chartB) {
   const out = [];
   for (const ka of SOUNDING_BODIES) {
@@ -188,11 +152,6 @@ export function crossAspects(chartA, chartB) {
   return out.sort((x, y) => y.force - x.force);
 }
 
-/**
- * One number for "do these two sound good together": the consonance of the
- * contacts, weighted by how strong each contact is. 0 is all tritones, 1 is all
- * unisons and thirds.
- */
 export function harmonyOf(contacts) {
   let num = 0;
   let den = 0;
@@ -203,14 +162,6 @@ export function harmonyOf(contacts) {
   return den > 0 ? num / den : 0.5;
 }
 
-/**
- * Two charts merged into one chart-shaped object, so the wheel, the tables and
- * the performer all read it without knowing anything about synastry.
- *
- * Keys are prefixed `a:` / `b:` and the original is kept as `baseKey`. The
- * `aspects` list holds the cross-contacts only — neither chart's internal
- * aspects appear, because they are not what you are asking about here.
- */
 export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
   const all = crossAspects(chartA, chartB);
   const contacts = all.slice(0, maxContacts);
@@ -242,8 +193,7 @@ export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
         };
       });
 
-  // The second chart sits a little back in the mix, which is what you want
-  // whether it is a partner or the sky: one of them is the subject.
+  // Keep the subject forward in the mix.
   const placements = [...sideOf(chartA, 'a', 1), ...sideOf(chartB, 'b', 0.82)];
   const byKey = Object.fromEntries(placements.map((p) => [p.key, p]));
 
@@ -256,7 +206,6 @@ export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
     placements,
     byKey,
     aspects: contacts,
-    // The wheel needs one frame of reference, and it is the subject's.
     cusps: chartA.cusps,
     system: chartA.system,
     ascSignIndex: chartA.ascSignIndex,
@@ -274,7 +223,6 @@ export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
   };
 }
 
-/** Frequency for a placement under the current tuning. */
 export function placementFrequency(placement, tuning) {
   return frequencyFor(placement.longitude, {
     octave: placement.octave,
