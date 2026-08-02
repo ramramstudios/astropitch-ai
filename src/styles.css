@@ -1212,6 +1212,11 @@ body.is-modal-open { overflow: hidden; }
 .modal-card p { margin: 0 0 1rem; }
 .modal-card em,
 .modal-card strong { color: var(--ink); }
+.modal-card a {
+  color: var(--ink);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+}
 
 .formula {
   padding: 1rem;
@@ -1387,9 +1392,6 @@ kbd {
 .settings-item h3 { margin: 0 0 0.35rem; }
 .settings-item p { margin: 0; }
 
-/* A select needs a width of its own; the toggles are intrinsically sized. */
-.settings-item__control { flex: none; width: 9.5rem; }
-
 .theme-toggle { position: relative; flex: none; cursor: pointer; }
 
 .theme-toggle input {
@@ -1416,6 +1418,23 @@ kbd {
 
 .theme-toggle input:checked + span::after { transform: translateX(1.27rem); }
 .theme-toggle input:focus-visible + span { outline: 1px solid var(--ink); outline-offset: 3px; }
+
+.setting-switch {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.setting-switch__option {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.setting-switch__option.is-active { color: var(--ink); }
 
 
 @media (max-width: 1040px) {

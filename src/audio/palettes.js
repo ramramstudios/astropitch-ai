@@ -511,15 +511,15 @@ const harmonicGestures = {
 export const PALETTES = {
   astropitch: {
     id: 'astropitch',
-    name: 'AstroPitch',
-    blurb: 'Subtractive and physical. Each element sounds like what it is made of.',
+    name: 'Bright',
+    blurb: 'Brighter, rougher voices with more noise, drive, and punch.',
     materials: astropitchMaterials,
     gestures: astropitchGestures,
   },
   harmonic: {
     id: 'harmonic',
-    name: 'Harmonic',
-    blurb: 'Wavetable spectra, soft attacks. Built so whole charts blend.',
+    name: 'Warm',
+    blurb: 'Smoother overtone-based voices with less noise and softer gestures.',
     materials: harmonicMaterials,
     gestures: harmonicGestures,
   },

@@ -497,6 +497,14 @@
         <li><kbd>Esc</kbd> close this</li>
       </ul>
 
+      <h3>Contacts</h3>
+      <p>
+        Contact the designer of the AstroPitch system at
+        <a href="mailto:astropitch432@gmail.com">astropitch432@gmail.com</a>.
+        The repository is at
+        <a href="https://github.com/ramramstudios/astropitch-ai">ramramstudios/astropitch-ai</a>.
+      </p>
+
       <p class="colophon">
         Best with headphones.
       </p>
@@ -513,31 +521,44 @@
             <h3>Dark mode</h3>
             <p>Dark mode reverses the monochrome palette.</p>
           </div>
-          <label class="theme-toggle">
-            <span class="sr-only">Dark mode</span>
-            <input type="checkbox" id="darkMode" role="switch">
-            <span aria-hidden="true"></span>
-          </label>
+          <div class="setting-switch">
+            <span id="themeLight" class="setting-switch__option is-active">Light</span>
+            <label class="theme-toggle">
+              <span class="sr-only">Use dark mode</span>
+              <input type="checkbox" id="darkMode" role="switch" aria-label="Use dark mode">
+              <span aria-hidden="true"></span>
+            </label>
+            <span id="themeDark" class="setting-switch__option">Dark</span>
+          </div>
         </div>
         <div class="settings-item">
           <div>
             <h3>Microtonal pitch</h3>
             <p>Let pitch glide continuously within each sign.</p>
           </div>
-          <label class="theme-toggle">
-            <span class="sr-only">Enable microtonal pitch</span>
-            <input type="checkbox" id="microtonalPitch" role="switch">
-            <span aria-hidden="true"></span>
-          </label>
+          <div class="setting-switch">
+            <span id="pitchTwelve" class="setting-switch__option is-active">Twelve-tone</span>
+            <label class="theme-toggle">
+              <span class="sr-only">Use gliding pitch</span>
+              <input type="checkbox" id="microtonalPitch" role="switch" aria-label="Use gliding pitch">
+              <span aria-hidden="true"></span>
+            </label>
+            <span id="pitchGliss" class="setting-switch__option">Gliss</span>
+          </div>
         </div>
         <div class="settings-item">
           <div>
-            <h3>Palette</h3>
+            <h3>Tone palette</h3>
             <p id="paletteNote"></p>
           </div>
-          <div class="settings-item__control">
-            <label class="sr-only" for="palette">Synthesis palette</label>
-            <select id="palette"></select>
+          <div class="setting-switch">
+            <span id="paletteBright" class="setting-switch__option is-active">Bright</span>
+            <label class="theme-toggle">
+              <span class="sr-only">Use the Warm tone palette</span>
+              <input type="checkbox" id="palette" role="switch" aria-label="Use the Warm tone palette">
+              <span aria-hidden="true"></span>
+            </label>
+            <span id="paletteWarm" class="setting-switch__option">Warm</span>
           </div>
         </div>
       </div>

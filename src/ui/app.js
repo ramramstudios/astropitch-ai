@@ -832,14 +832,19 @@ function wireSettings() {
   const card = modal.querySelector('.modal-card');
   const toggle = $('#darkMode');
   const microtonalPitch = $('#microtonalPitch');
-  const palette = $('#palette');
+  const paletteToggle = $('#palette');
   let returnTo = null;
 
-  const applyTheme = (theme) => {
+  const applyTheme = (theme, { persist = true } = {}) => {
     const dark = theme === 'dark';
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     toggle.checked = dark;
-    try { localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light'); } catch { /* session-only preference */ }
+    toggle.setAttribute('aria-label', dark ? 'Use light mode' : 'Use dark mode');
+    $('#themeLight').classList.toggle('is-active', !dark);
+    $('#themeDark').classList.toggle('is-active', dark);
+    if (persist) {
+      try { localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light'); } catch { /* session-only preference */ }
+    }
   };
 
   const open = () => {
@@ -856,7 +861,10 @@ function wireSettings() {
   };
 
   const applyPalette = (id, { persist = true } = {}) => {
-    palette.value = id;
+    paletteToggle.checked = id === 'harmonic';
+    paletteToggle.setAttribute('aria-label', paletteToggle.checked ? 'Use the Bright tone palette' : 'Use the Warm tone palette');
+    $('#paletteBright').classList.toggle('is-active', !paletteToggle.checked);
+    $('#paletteWarm').classList.toggle('is-active', paletteToggle.checked);
     $('#paletteNote').textContent = PALETTES[id].blurb;
     performer.setPalette(id);
     if (persist) {
@@ -864,14 +872,16 @@ function wireSettings() {
     }
   };
 
-  palette.innerHTML = '';
-  for (const id of PALETTE_IDS) {
-    palette.append(new Option(PALETTES[id].name, id));
-  }
-
-  toggle.checked = document.documentElement.dataset.theme === 'dark';
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', { persist: false });
   try { microtonalPitch.checked = localStorage.getItem(MICROTONES_KEY) === '1'; } catch { /* sign-locked is the default */ }
   state.tuning.microtones = microtonalPitch.checked;
+  const syncMicrotonalToggle = () => {
+    const gliss = microtonalPitch.checked;
+    microtonalPitch.setAttribute('aria-label', gliss ? 'Use twelve-tone pitch' : 'Use gliding pitch');
+    $('#pitchTwelve').classList.toggle('is-active', !gliss);
+    $('#pitchGliss').classList.toggle('is-active', gliss);
+  };
+  syncMicrotonalToggle();
 
   let savedPalette = DEFAULT_PALETTE;
   try { savedPalette = localStorage.getItem(PALETTE_KEY) ?? DEFAULT_PALETTE; } catch { /* fall back to the default */ }
@@ -879,12 +889,13 @@ function wireSettings() {
   // that no longer names a palette.
   applyPalette(PALETTE_IDS.includes(savedPalette) ? savedPalette : DEFAULT_PALETTE, { persist: false });
 
-  palette.addEventListener('change', () => applyPalette(palette.value));
+  paletteToggle.addEventListener('change', () => applyPalette(paletteToggle.checked ? 'harmonic' : 'astropitch'));
   $('#settingsBtn').addEventListener('click', open);
   $('#settingsClose').addEventListener('click', close);
   toggle.addEventListener('change', () => applyTheme(toggle.checked ? 'dark' : 'light'));
   microtonalPitch.addEventListener('change', () => {
     state.tuning.microtones = microtonalPitch.checked;
+    syncMicrotonalToggle();
     performer.setTuning(state.tuning);
     try { localStorage.setItem(MICROTONES_KEY, microtonalPitch.checked ? '1' : '0'); } catch { /* session-only preference */ }
     renderPlacements();
