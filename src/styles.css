@@ -46,7 +46,7 @@
   --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, monospace;
   --symbol: "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", serif;
-  --transport-h: 76px;
+  --transport-h: 68px;
   --rail-w: 46px;
   --column-gap: clamp(2rem, 5vw, 7rem);
 }
@@ -1048,10 +1048,17 @@ button.stop {
 }
 
 .transport-hide {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--transport-h);
+  height: var(--transport-h);
+  display: grid;
+  place-items: center;
   appearance: none;
-  padding: 0.7rem 0.9rem;
+  padding: 0;
   border: 0;
-  border-right: 1px solid var(--transport-divider);
+  border-left: 1px solid var(--transport-divider);
   background: var(--transport-bg);
   color: var(--transport-fg);
   font-family: var(--mono);
@@ -1129,7 +1136,12 @@ button.play.is-active {
 }
 
 button.stop {
-  min-width: auto;
+  width: var(--transport-h);
+  min-width: var(--transport-h);
+  height: var(--transport-h);
+  padding: 0;
+  display: grid;
+  place-items: center;
   font-family: var(--mono);
   font-size: 0.62rem;
   letter-spacing: 0.06em;
@@ -1526,7 +1538,7 @@ kbd {
 }
 
 @media (max-width: 660px) {
-  :root { --transport-h: 112px; }
+  :root { --transport-h: 100px; }
 
   .stage { gap: 2.5rem; padding-top: 1rem; }
   .wheel-kicker { font-size: 0.56rem; }
@@ -1554,6 +1566,14 @@ kbd {
   .transport-hide {
     min-width: 0;
     padding: 0.7rem 0.45rem;
+  }
+
+  button.stop,
+  .transport-hide {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    padding: 0;
   }
 
   button.play { align-items: center; }
