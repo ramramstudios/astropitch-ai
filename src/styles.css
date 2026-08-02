@@ -1552,35 +1552,48 @@ kbd {
   .transport {
     height: var(--transport-h);
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
   }
 
   .transport-main {
     display: grid;
     width: 100%;
-    grid-template-columns: repeat(3, 1fr) auto auto;
+    min-height: 46px;
+    /* Keep every transport action in the grid. The hide button used to be
+       absolutely positioned here, which made the final grid column empty and
+       allowed controls to collide at narrow widths. */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   button.play,
   button.stop,
   .transport-hide {
     min-width: 0;
-    padding: 0.7rem 0.45rem;
+    padding: 0.55rem 0.35rem;
   }
 
   button.stop,
   .transport-hide {
-    width: 42px;
-    min-width: 42px;
-    height: 42px;
+    width: auto;
+    height: auto;
     padding: 0;
   }
 
-  button.play { align-items: center; }
+  .transport-hide {
+    position: static;
+    display: grid;
+    place-items: center;
+  }
+
+  button.play {
+    min-height: 46px;
+    align-items: center;
+  }
   .play-name { font-size: 0.88rem; }
   .play-sub { display: none; }
 
   .volume {
+    align-self: center;
     width: min(280px, 86vw);
     height: 42px;
     padding: 0;
