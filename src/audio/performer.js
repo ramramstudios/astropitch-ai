@@ -15,6 +15,7 @@
  */
 
 import { buildVoiceSpec, Voice } from './voices.js';
+import { DEFAULT_PALETTE } from './palettes.js';
 import { frequencyFor } from './tuning.js';
 import { SIGNS } from '../ontology.js';
 
@@ -30,7 +31,8 @@ export class Performer {
   constructor(engine) {
     this.engine = engine;
     this.chart = null;
-    this.tuning = { refA: 440, temperament: 'equal', microtones: false };
+    this.tuning = { refA: 432, temperament: 'equal', microtones: false };
+    this.palette = DEFAULT_PALETTE;
     this.tempo = 120;
     this.mode = null;
     this.active = [];
@@ -62,6 +64,20 @@ export class Performer {
     Object.assign(this.tuning, tuning);
   }
 
+  /**
+   * Swap the synthesis palette.
+   *
+   * A palette only decides how the next voice gets built, so anything already
+   * sounding keeps its old timbre until it ends. Releasing the live voices makes
+   * the change audible immediately rather than at the next transport event.
+   */
+  setPalette(id) {
+    if (id === this.palette) return;
+    this.palette = id;
+    this.endDesignerPreview();
+    this.engine.releaseAll(0.18);
+  }
+
   setTempo(bpm) {
     this.tempo = bpm;
     this.engine.setDelayTime(60 / bpm);
@@ -76,6 +92,7 @@ export class Performer {
       element: p.element,
       house: p.house,
       modality: p.modality,
+      palette: this.palette,
     });
     const freq = frequencyFor(p.longitude, {
       octave: p.octave + octaveShift,

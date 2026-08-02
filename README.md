@@ -8,7 +8,7 @@ API.
 
 ## The idea
 
-Each sign occupies a pitch region — Aries begins at A 440, Taurus at A♯,
+Each sign occupies a pitch region — Aries begins at A 432, Taurus at A♯,
 Gemini at B, and so on up to Pisces at G♯. That is a chromatic scale wrapped
 around a circle: twelve signs of 30° against twelve semitones.
 
@@ -211,7 +211,7 @@ That shared pitch space pays for itself. A cross-chart conjunction is a unison
 held slightly apart, so its orb is directly audible as the rate at which the two
 tones beat:
 
-| orb | beat at A 440 | what you hear |
+| orb | beat at A 432 | what you hear |
 | --- | --- | --- |
 | 8° | 6.8 Hz | roughness |
 | 3° | 2.5 Hz | a tremble |
@@ -286,6 +286,47 @@ Temperament is switchable. Equal keeps the mapping continuous; Just and
 Pythagorean quantise to the sign, which is a different and audible claim about
 what a sign is.
 
+### Palettes
+
+The synthesis is data. `palettes.js` holds one table of materials (per element)
+and one of gestures (per house); `voices.js` is the renderer that turns either
+into a graph. A palette changes what the voices are made of and nothing else —
+not the chart, not the scheduler, not the sign/house/modality mapping, and not
+the master chain. Modalities stay in `ontology.js`, because cardinal/fixed/mutable
+is a claim about phrasing that holds whatever the timbre is.
+
+Two ship, selectable in Settings:
+
+- **AstroPitch** — the original. Subtractive and physical: saws pushed into soft
+  clipping for fire, a wooden box for earth, a breath column for air, drifting
+  sines for water.
+- **Harmonic** — built so that whole charts blend. Partials specify their overtone
+  series outright through `createPeriodicWave` rather than picking the nearest of
+  the four built-in shapes, so amplitudes roll off smoothly, and noise and drive
+  are nearly gone. Gestures keep their meanings — the 2nd is still struck, the
+  5th still sings — with the extremes pulled in and the releases run longer.
+
+Two things about a palette have to be measured rather than chosen, and both were
+got wrong the first time here:
+
+- **Body ratios belong off the harmonic grid.** A body is a formant, a fixed
+  physical resonance, so there is nothing for it to be consonant with. Set it to
+  an integer ratio and the peaking filter lands on a partial that is already
+  there and boosts it by its full gain. The original palette's 2.7, 1.6 and 4.2
+  are deliberately between partials.
+- **Sends have to be set against the master chain.** Smooth spectra are louder
+  than rough ones at equal peak, and a reverb send returns sustained low-crest
+  energy that raises RMS without raising peak. Because the chain normalises, a
+  palette cannot be corrected by turning it down: measured, a 30% cut in voice
+  gain moved master RMS about 4%, while a 30% cut in send level moved it 8% and
+  brought time above the soft-clip ceiling from +39% to +2% against the original
+  palette. `palettes.test.mjs` bounds the mean send so this cannot drift again.
+
+Adding a third is adding a table. It is not adding a dependency: a wavetable, a
+resonant body and an FM operator are all already in the renderer, and anything
+they can't reach (a plucked string, say) is a small addition to the renderer
+rather than a reason to take on an audio framework.
+
 ## Using it
 
 The controls panel folds away against the left rail, which is worth doing once
@@ -299,6 +340,7 @@ remembered between visits.
 | `Space` | play the chart, or stop it |
 | `B` `S` `D` | bloom, sequence, drone |
 | `[` | fold or unfold the controls |
+| `]` | hide or show the player |
 | `←` `→` | in the designer, move the focused body by 1° (`Shift` for 5°) |
 | `Esc` | cancel a designer drag, or close *How it works* |
 
@@ -323,6 +365,7 @@ node tests/ephemeris.test.mjs    # astronomy vs. Meeus and JPL reference values
 node tests/synastry.test.mjs     # cross-chart contacts, density, harmony score
 node tests/performer.test.mjs    # what the arrangements schedule
 node tests/designer.test.mjs     # hand-placed bodies, switches, moved angles
+node tests/palettes.test.mjs     # every palette builds every combination
 ```
 
 `synastry.test.mjs` pins the claims the overlay depends on: that a merged
@@ -337,9 +380,16 @@ designed chart has to be shaped exactly like a cast one, a moved body has to
 carry every derived field with it, and a body switched off has to disappear from
 the aspects, the balance and the schedule rather than merely being turned down.
 
+`palettes.test.mjs` guards the thing a new palette is most likely to get wrong:
+that its tables cover all four elements and all twelve houses, and that every
+one of the 144 combinations builds a graph without sending a NaN — or a zero
+into an exponential ramp — to an `AudioParam`. It stubs Web Audio, so it runs
+in Node alongside the rest.
+
 For the audio, open `tests/audio.test.html` with the server running. It renders
 the graph through an `OfflineAudioContext` and measures the result: all 144
-element × house combinations for NaN, clipping, hard cuts and silence; envelope
+element × house combinations, for every palette, for NaN, clipping, hard cuts
+and silence; envelope
 endpoints; a full eleven-voice bloom for headroom and DC offset; voice teardown
 and polyphony capping; reverb and delay stability; and the tuning maths.
 
@@ -355,6 +405,7 @@ src/
   audio/
     engine.js        the persistent signal graph
     voices.js        material x gesture x phrasing -> one voice
+    palettes.js      the material and gesture tables the renderer reads
     tuning.js        longitude -> frequency, temperaments
     performer.js     bloom, sequence, drone
   ui/

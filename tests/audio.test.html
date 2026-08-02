@@ -17,6 +17,7 @@
 <script type="module">
 import { AudioEngine } from '../src/audio/engine.js';
 import { buildVoiceSpec, Voice } from '../src/audio/voices.js';
+import { PALETTES, PALETTE_IDS } from '../src/audio/palettes.js';
 import { frequencyFor } from '../src/audio/tuning.js';
 import { SIGNS } from '../src/ontology.js';
 
@@ -105,8 +106,11 @@ const fmt = (s) =>
 
 // ---------------------------------------------------------------------------
 
-head('Every element x house combination renders cleanly');
-{
+// Every palette has to survive the same 144 renders. A wavetable spectrum is a
+// new way to produce a signal that is too hot or too quiet, so a palette that
+// has never been rendered has never really been tested.
+for (const paletteId of PALETTE_IDS) {
+  head(`${PALETTES[paletteId].name}: every element x house combination renders cleanly`);
   let worstPeak = 0;
   let totalCuts = 0;
   let cutAt = [];
@@ -118,7 +122,9 @@ head('Every element x house combination renders cleanly');
     const sign = SIGNS[signIndex];
     for (let house = 1; house <= 12; house++) {
       const stats = await render(4, (engine) => {
-        const spec = buildVoiceSpec({ element: sign.element, house, modality: sign.modality });
+        const spec = buildVoiceSpec({
+          element: sign.element, house, modality: sign.modality, palette: paletteId,
+        });
         const freq = frequencyFor(signIndex * 30 + 15, { octave: 0 });
         new Voice(engine, spec, { freq, time: 0.05, duration: 2.0, gain: 0.35, pan: 0 });
       });
@@ -271,10 +277,10 @@ head('Tuning');
   const pisces = frequencyFor(330, { octave: 0, refA: 440 });
   check('Aries 0 degrees is A 440', Math.abs(a440 - 440) < 1e-9, `${a440}`);
   // 360 degrees IS 0 degrees; the octave is carried by the octave parameter.
-  check('the circle closes on itself', Math.abs(frequencyFor(360, { octave: 0 }) - 440) < 1e-9);
-  check('one octave up is a doubling', Math.abs(frequencyFor(0, { octave: 1 }) - 880) < 1e-9);
+  check('the circle closes on itself', Math.abs(frequencyFor(360, { octave: 0 }) - 432) < 1e-9);
+  check('one octave up is a doubling', Math.abs(frequencyFor(0, { octave: 1 }) - 864) < 1e-9);
   check('359.99 degrees is just under the octave',
-    Math.abs(frequencyFor(359.99, { octave: 0 }) - 880) / 880 < 2e-5,
+    Math.abs(frequencyFor(359.99, { octave: 0 }) - 864) / 864 < 2e-5,
     `${frequencyFor(359.99, { octave: 0 }).toFixed(3)}`);
   check('Taurus is A#/Bb 466.16', Math.abs(taurus - 466.16) < 0.01, `${taurus.toFixed(2)}`);
   check('Pisces is G#/Ab 830.61', Math.abs(pisces - 830.61) < 0.01, `${pisces.toFixed(2)}`);

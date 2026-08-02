@@ -90,10 +90,16 @@ console.log('\n--- Contacts are the intervals they claim to be ---');
 console.log('\n--- Conjunction orb is a beat rate ---');
 {
   // The whole reason not to transpose: orb is audible as beating.
-  for (const [orb, wantHz] of [[8, 6.83], [3, 2.55], [1, 0.85]]) {
-    const f1 = frequencyFor(0, { octave: 0 });
-    const f2 = frequencyFor(orb, { octave: 0 });
-    near(`${orb} deg orb beats at ~${wantHz}Hz`, f2 - f1, wantHz, 0.02);
+  //
+  // A beat rate is a difference of two frequencies, so it scales with the
+  // reference pitch. The reference is stated here rather than inherited from
+  // the default, so that changing the app's tuning moves the pitch without
+  // silently invalidating the claim being tested.
+  const refA = 432;
+  for (const [orb, wantHz] of [[8, 6.706], [3, 2.503], [1, 0.833]]) {
+    const f1 = frequencyFor(0, { octave: 0, refA });
+    const f2 = frequencyFor(orb, { octave: 0, refA });
+    near(`${orb} deg orb beats at ~${wantHz}Hz (A=${refA})`, f2 - f1, wantHz, 0.02);
   }
 }
 

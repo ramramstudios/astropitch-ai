@@ -73,8 +73,8 @@ console.log('\n--- sign-locked equal temperament ---');
 {
   const aries = frequencyFor(14.99, { microtones: false });
   const taurus = frequencyFor(30.01, { microtones: false });
-  ok('holds Aries at A until the cusp', Math.abs(aries - 440) < 1e-9, `${aries.toFixed(3)} Hz`);
-  ok('jumps to A-sharp immediately after the cusp', Math.abs(taurus - 440 * 2 ** (1 / 12)) < 1e-9, `${taurus.toFixed(3)} Hz`);
+  ok('holds Aries at A until the cusp', Math.abs(aries - 432) < 1e-9, `${aries.toFixed(3)} Hz`);
+  ok('jumps to A-sharp immediately after the cusp', Math.abs(taurus - 432 * 2 ** (1 / 12)) < 1e-9, `${taurus.toFixed(3)} Hz`);
 }
 
 console.log('\n--- designer audition: one held voice follows the dragged longitude ---');
@@ -95,7 +95,7 @@ console.log('\n--- designer audition: one held voice follows the dragged longitu
 
   ok('starts the body being dragged', p.designerPreview === null && retunes.length === 1);
   ok('retunes to its new longitude',
-    Math.abs(retunes[0].freq - 440 * 2 ** (120 / 360)) < 1e-9,
+    Math.abs(retunes[0].freq - 432 * 2 ** (120 / 360)) < 1e-9,
     `${retunes[0].freq.toFixed(3)} Hz`);
   ok('updates its wheel-derived pan', Math.abs(retunes[0].pan - Math.sin((120 * Math.PI) / 180) * 0.8) < 1e-9);
   ok('releases on drop', releases.length === 1);

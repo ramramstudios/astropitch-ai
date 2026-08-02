@@ -1345,6 +1345,9 @@ kbd {
 .settings-item h3 { margin: 0 0 0.35rem; }
 .settings-item p { margin: 0; }
 
+/* A select needs a width of its own; the toggles are intrinsically sized. */
+.settings-item__control { flex: none; width: 9.5rem; }
+
 .theme-toggle { position: relative; flex: none; cursor: pointer; }
 
 .theme-toggle input {

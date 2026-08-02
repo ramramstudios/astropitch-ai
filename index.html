@@ -267,8 +267,8 @@
 
         <div class="control-block">
           <label class="field">
-            <span>Reference A — <output id="refAOut">440</output> Hz</span>
-            <input type="range" id="refA" min="392" max="466" step="1" value="440">
+            <span>Reference A — <output id="refAOut">432</output> Hz</span>
+            <input type="range" id="refA" min="392" max="466" step="1" value="432">
           </label>
           <p class="note">
             Aries begins at the reference A. Everything else follows from
@@ -327,7 +327,7 @@
 
       <h3>The mapping</h3>
       <p>
-        Aries begins at A 440, Taurus at A♯, Gemini at B, and so on up to
+        Aries begins at A 432, Taurus at A♯, Gemini at B, and so on up to
         Pisces at G♯. This lays a chromatic scale around the zodiac: twelve
         signs of 30° against twelve semitones. The conversion is arithmetic:
       </p>
@@ -489,6 +489,7 @@
         <li><kbd>Space</kbd> play the chart, or stop it</li>
         <li><kbd>B</kbd> bloom · <kbd>S</kbd> sequence · <kbd>D</kbd> drone</li>
         <li><kbd>[</kbd> hide or show the controls, for a wider wheel</li>
+        <li><kbd>]</kbd> hide or show the player</li>
         <li><kbd>Esc</kbd> close this</li>
       </ul>
 
@@ -524,6 +525,16 @@
             <input type="checkbox" id="microtonalPitch" role="switch">
             <span aria-hidden="true"></span>
           </label>
+        </div>
+        <div class="settings-item">
+          <div>
+            <h3>Palette</h3>
+            <p id="paletteNote"></p>
+          </div>
+          <div class="settings-item__control">
+            <label class="sr-only" for="palette">Synthesis palette</label>
+            <select id="palette"></select>
+          </div>
         </div>
       </div>
     </div>

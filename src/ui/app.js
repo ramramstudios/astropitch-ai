@@ -9,6 +9,7 @@ import {
   chartFromBirth, chartFromSigns, chartForNow, makeSynastry, designChart, DESIGNABLE_BODIES,
 } from '../chart.js';
 import { TEMPERAMENTS, frequencyFor } from '../audio/tuning.js';
+import { PALETTES, PALETTE_IDS, DEFAULT_PALETTE } from '../audio/palettes.js';
 import { engine } from '../audio/engine.js';
 import { Performer } from '../audio/performer.js';
 import { Wheel } from './wheel.js';
@@ -66,6 +67,7 @@ const DESIGN_KEY = 'astropitch.design.v1';
 const DESIGN_VERSION = 1;
 const THEME_KEY = 'astropitch.theme';
 const MICROTONES_KEY = 'astropitch.microtones';
+const PALETTE_KEY = 'astropitch.palette';
 
 const SOURCES = ['birth', 'signs', 'designer'];
 
@@ -133,7 +135,7 @@ const state = {
     : savedSource,
   design: readSavedDesign(),
   overlaySource: 'sky',
-  tuning: { refA: 440, temperament: 'equal', microtones: false },
+  tuning: { refA: 432, temperament: 'equal', microtones: false },
   // The sign-only fallback is a pure A-major voicing: A (Aries), C♯ (Leo),
   // and E (Scorpio). Bodies still keep their own octaves and roles, so the
   // chord is spread across the ensemble rather than packed into one register.
@@ -780,6 +782,7 @@ function wireSettings() {
   const card = modal.querySelector('.modal-card');
   const toggle = $('#darkMode');
   const microtonalPitch = $('#microtonalPitch');
+  const palette = $('#palette');
   let returnTo = null;
 
   const applyTheme = (theme) => {
@@ -802,9 +805,31 @@ function wireSettings() {
     (returnTo ?? $('#settingsBtn')).focus();
   };
 
+  const applyPalette = (id, { persist = true } = {}) => {
+    palette.value = id;
+    $('#paletteNote').textContent = PALETTES[id].blurb;
+    performer.setPalette(id);
+    if (persist) {
+      try { localStorage.setItem(PALETTE_KEY, id); } catch { /* session-only preference */ }
+    }
+  };
+
+  palette.innerHTML = '';
+  for (const id of PALETTE_IDS) {
+    palette.append(new Option(PALETTES[id].name, id));
+  }
+
   toggle.checked = document.documentElement.dataset.theme === 'dark';
   try { microtonalPitch.checked = localStorage.getItem(MICROTONES_KEY) === '1'; } catch { /* sign-locked is the default */ }
   state.tuning.microtones = microtonalPitch.checked;
+
+  let savedPalette = DEFAULT_PALETTE;
+  try { savedPalette = localStorage.getItem(PALETTE_KEY) ?? DEFAULT_PALETTE; } catch { /* fall back to the default */ }
+  // Don't write the default back out on first load, and don't trust a stored id
+  // that no longer names a palette.
+  applyPalette(PALETTE_IDS.includes(savedPalette) ? savedPalette : DEFAULT_PALETTE, { persist: false });
+
+  palette.addEventListener('change', () => applyPalette(palette.value));
   $('#settingsBtn').addEventListener('click', open);
   $('#settingsClose').addEventListener('click', close);
   toggle.addEventListener('change', () => applyTheme(toggle.checked ? 'dark' : 'light'));
@@ -855,6 +880,7 @@ function stored(key, value) {
 }
 
 let collapseSide = () => {};
+let toggleTransport = () => {};
 
 function wireSidebar() {
   const stage = $('#stage');
@@ -895,14 +921,17 @@ function wireTransportVisibility() {
     show.setAttribute('aria-expanded', String(!hidden));
   };
 
+  toggleTransport = () => {
+    apply(!hidden);
+    stored(TRANSPORT_KEY, hidden ? '1' : '0');
+  };
+
   hide.addEventListener('click', () => {
-    apply(true);
-    stored(TRANSPORT_KEY, '1');
+    toggleTransport();
     show.focus();
   });
   show.addEventListener('click', () => {
-    apply(false);
-    stored(TRANSPORT_KEY, '0');
+    toggleTransport();
     hide.focus();
   });
   apply(hidden);
@@ -913,8 +942,12 @@ function wireKeyboard() {
     const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (!$('#aboutModal').hidden || !$('#settingsModal').hidden) return;
-    if (e.key === '[' || e.key === ']') {
+    if (e.key === '[') {
       collapseSide();
+      return;
+    }
+    if (e.key === ']') {
+      toggleTransport();
       return;
     }
     if (e.key === ' ') {

@@ -42,7 +42,7 @@ const norm360 = (d) => ((d % 360) + 360) % 360;
  * @param {boolean} opts.microtones whether equal temperament glides within signs
  */
 export function frequencyFor(longitude, {
-  octave = 0, refA = 440, temperament = 'equal', microtones = true,
+  octave = 0, refA = 432, temperament = 'equal', microtones = true,
 } = {}) {
   const lon = norm360(longitude);
   const t = TEMPERAMENTS[temperament] ?? TEMPERAMENTS.equal;

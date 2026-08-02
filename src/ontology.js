@@ -3,7 +3,7 @@
  *
  * The mapping begins with a simple correspondence: the zodiac has 12 signs of
  * 30 degrees, and an octave has 12 semitones. Walking chromatically from Aries
- * (A, 440 Hz) to Pisces (G#, 830.61 Hz) makes the mapping exact and lossless:
+ * (A, 432 Hz) to Pisces (G#, 815.50 Hz) makes the mapping exact and lossless:
  *
  *     30 degrees of ecliptic longitude == 1 semitone
  *     one trip around the zodiac       == one octave

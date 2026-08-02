@@ -14,9 +14,14 @@
  * So Fire always sounds like fire and the 2nd house always sounds struck, but
  * fire-struck (Aries in the 2nd) and water-struck (Cancer in the 2nd) are
  * different instruments. 12 x 12 x 3 combinations, none of them samples.
+ *
+ * The material and gesture tables themselves live in palettes.js. This file is
+ * the renderer: it knows how to turn one of those specs into a graph, and it is
+ * the same renderer whichever palette supplied the numbers.
  */
 
 import { MODALITIES } from '../ontology.js';
+import { getPalette } from './palettes.js';
 
 const noiseBuffers = new WeakMap();
 function noiseBuffer(ctx) {
@@ -54,225 +59,40 @@ function driveCurve(amount) {
   return curve;
 }
 
-export const MATERIALS = {
-  // Dense, bright, every harmonic present. Saws beating against each other,
-  // pushed into soft clipping so the spectrum keeps growing with level.
-  fire: {
-    partials: [
-      { type: 'sawtooth', detune: 0, gain: 1.0 },
-      { type: 'sawtooth', detune: 8, gain: 0.62 },
-      { type: 'square', detune: -11, gain: 0.22 },
-    ],
-    sub: 0.10,
-    noise: { gain: 0.30, decay: 0.05, filter: 'highpass', freq: 1800, Q: 0.7 },
-    body: { ratio: 2.7, Q: 1.2, gain: 4.5 },
-    tilt: 3.5,
-    drive: 0.5,
-    cutoffMul: 7.0,
-    resonance: 3.4,
-    drift: { rate: 0, depth: 0 },
-    send: { reverb: 0.16, delay: 0.10 },
-    width: 0.35,
-  },
+/**
+ * Wavetable cache.
+ *
+ * A partial may specify `harmonics` — an explicit list of overtone amplitudes —
+ * instead of one of the four built-in oscillator types. PeriodicWave objects are
+ * immutable and shareable, and building one per note would be wasteful, so they
+ * are cached per context and per spectrum.
+ */
+const periodicWaves = new WeakMap();
+function periodicWave(ctx, harmonics) {
+  let byShape = periodicWaves.get(ctx);
+  if (!byShape) {
+    byShape = new Map();
+    periodicWaves.set(ctx, byShape);
+  }
+  const key = harmonics.join(',');
+  let wave = byShape.get(key);
+  if (!wave) {
+    // Index 0 is the DC term and must stay silent; harmonic k lives at index k.
+    const real = new Float32Array(harmonics.length + 1);
+    const imag = new Float32Array(harmonics.length + 1);
+    for (let k = 0; k < harmonics.length; k++) imag[k + 1] = harmonics[k];
+    // Normalisation keeps peak amplitude comparable to the built-in types, so a
+    // partial's `gain` means the same thing whichever kind of source it is.
+    wave = ctx.createPeriodicWave(real, imag);
+    byShape.set(key, wave);
+  }
+  return wave;
+}
 
-  // Low-order harmonics only, a wooden box resonance, and a thud rather than a
-  // crack. Everything above the fourth partial is rolled away.
-  earth: {
-    partials: [
-      { type: 'triangle', detune: 0, gain: 1.0 },
-      { type: 'sine', detune: 4, gain: 0.55 },
-      { type: 'triangle', detune: -6, gain: 0.34 },
-    ],
-    sub: 0.42,
-    noise: { gain: 0.22, decay: 0.03, filter: 'lowpass', freq: 900, Q: 1.4 },
-    body: { ratio: 1.6, Q: 3.2, gain: 6.5 },
-    tilt: -5.5,
-    drive: 0.14,
-    cutoffMul: 3.0,
-    resonance: 1.5,
-    drift: { rate: 0, depth: 0 },
-    send: { reverb: 0.11, delay: 0.04 },
-    width: 0.2,
-  },
-
-  // Hollow odd harmonics from a narrow pulse, plus an audible column of breath
-  // that tracks the pitch. Thin on purpose, and very wide.
-  air: {
-    partials: [
-      { type: 'square', detune: 0, gain: 0.75 },
-      { type: 'sawtooth', detune: 6, gain: 0.30 },
-      { type: 'square', detune: -1202, gain: 0.26 },
-    ],
-    sub: 0.05,
-    noise: { gain: 0.34, decay: 1.4, filter: 'bandpass', freq: 3.0, Q: 1.6, tracks: true },
-    body: { ratio: 4.2, Q: 1.8, gain: 3.5 },
-    tilt: 4.5,
-    drive: 0.06,
-    cutoffMul: 6.0,
-    resonance: 2.2,
-    drift: { rate: 0.12, depth: 0.06 },
-    send: { reverb: 0.32, delay: 0.30 },
-    width: 0.9,
-  },
-
-  // Sine cores that will not hold still: heavy detune, slow independent drift,
-  // and a low-index FM wobble that keeps the spectrum sliding.
-  water: {
-    partials: [
-      { type: 'sine', detune: 0, gain: 1.0 },
-      { type: 'triangle', detune: 13, gain: 0.66 },
-      { type: 'sine', detune: -15, gain: 0.66 },
-    ],
-    sub: 0.26,
-    noise: { gain: 0.10, decay: 0.5, filter: 'lowpass', freq: 1400, Q: 0.9 },
-    body: { ratio: 2.05, Q: 2.0, gain: 3.0 },
-    tilt: -1.5,
-    drive: 0.05,
-    cutoffMul: 4.0,
-    resonance: 2.6,
-    drift: { rate: 0.22, depth: 0.22 },
-    fm: { ratio: 1.5, index: 0.6, decay: 3.0 },
-    send: { reverb: 0.5, delay: 0.2 },
-    width: 0.62,
-  },
-};
-
-const G = (o) => ({
-  ampMul: { attack: 1, decay: 1, sustain: 1, release: 1 },
-  filter: { start: 1, env: 0.6, attack: 0.01, decay: 0.6, qMul: 1 },
-  noiseMul: 1,
-  driveMul: 1,
-  subMul: 1,
-  glide: 0,
-  gate: null,
-  double: null,
-  fm: null,
-  send: { reverb: 1, delay: 1 },
-  widthMul: 1,
-  ...o,
-});
-
-export const GESTURES = {
-  // 1st — ego. Nothing in front of the voice. Dry, immediate, unprocessed.
-  1: G({
-    ampMul: { attack: 0.5, decay: 1, sustain: 1.05, release: 0.9 },
-    filter: { start: 1.4, env: 0.35, attack: 0.006, decay: 0.4, qMul: 0.8 },
-    send: { reverb: 0.35, delay: 0.3 },
-    widthMul: 0.5,
-  }),
-
-  // 2nd — possessions. Struck. Mass, then immediate decay; nothing sustains.
-  2: G({
-    ampMul: { attack: 0.05, decay: 0.55, sustain: 0.06, release: 0.7 },
-    filter: { start: 2.6, env: 1.5, attack: 0.002, decay: 0.28, qMul: 1.4 },
-    noiseMul: 1.7,
-    subMul: 1.5,
-    send: { reverb: 0.7, delay: 0.4 },
-  }),
-
-  // 3rd — communication. Consonants: a hard transient and a fast flutter.
-  3: G({
-    ampMul: { attack: 0.08, decay: 0.5, sustain: 0.35, release: 0.5 },
-    filter: { start: 3.0, env: 1.1, attack: 0.003, decay: 0.16, qMul: 1.6 },
-    noiseMul: 2.0,
-    gate: { rate: 11, depth: 0.5, cycles: 5 },
-    send: { reverb: 0.6, delay: 1.5 },
-  }),
-
-  // 4th — home. Heard through a wall: soft, muffled, close.
-  4: G({
-    ampMul: { attack: 2.2, decay: 1.2, sustain: 1.0, release: 1.3 },
-    filter: { start: 0.45, env: 0.3, attack: 0.12, decay: 1.0, qMul: 0.7 },
-    noiseMul: 0.4,
-    subMul: 1.4,
-    send: { reverb: 0.8, delay: 0.3 },
-    widthMul: 0.6,
-  }),
-
-  // 5th — creativity. Sung: scoops up to pitch, then opens out with vibrato.
-  5: G({
-    ampMul: { attack: 3.0, decay: 1.1, sustain: 1.1, release: 1.2 },
-    filter: { start: 0.7, env: 1.0, attack: 0.35, decay: 1.4, qMul: 1.3 },
-    glide: 0.22,
-    vibrato: { rate: 5.4, depth: 22, delay: 0.35 },
-    send: { reverb: 1.0, delay: 0.7 },
-  }),
-
-  // 6th — routine. Runs to a clock, and the clock does not vary.
-  6: G({
-    ampMul: { attack: 0.12, decay: 0.6, sustain: 0.75, release: 0.5 },
-    filter: { start: 1.5, env: 0.5, attack: 0.004, decay: 0.2, qMul: 1.5 },
-    gate: { rate: 8, depth: 0.85, cycles: Infinity },
-    send: { reverb: 0.4, delay: 0.5 },
-    widthMul: 0.4,
-  }),
-
-  // 7th — partnership. Two of everything, detuned apart and panned apart, one
-  // arriving a beat after the other.
-  7: G({
-    ampMul: { attack: 1.4, decay: 1.0, sustain: 1.0, release: 1.2 },
-    filter: { start: 1.1, env: 0.5, attack: 0.05, decay: 0.8, qMul: 1.0 },
-    double: { detune: 9, delay: 0.055, pan: 0.7, gain: 0.85 },
-    send: { reverb: 0.9, delay: 0.5 },
-    widthMul: 1.3,
-  }),
-
-  // 8th — transformation. Sub-heavy, driven, and it opens slowly from nearly
-  // closed, so the timbre at the end is not the timbre at the start.
-  8: G({
-    ampMul: { attack: 1.6, decay: 1.4, sustain: 1.0, release: 1.5 },
-    filter: { start: 0.28, env: 2.6, attack: 1.4, decay: 3.0, qMul: 2.2 },
-    driveMul: 2.6,
-    subMul: 2.0,
-    noiseMul: 0.5,
-    send: { reverb: 0.9, delay: 0.6 },
-  }),
-
-  // 9th — travel. A long horizon: distant, wide, mostly reflected sound.
-  9: G({
-    ampMul: { attack: 2.4, decay: 1.3, sustain: 0.95, release: 1.8 },
-    filter: { start: 1.2, env: 0.6, attack: 0.5, decay: 1.6, qMul: 0.9 },
-    noiseMul: 0.5,
-    send: { reverb: 2.1, delay: 1.6 },
-    widthMul: 1.6,
-  }),
-
-  // 10th — career. Brass: the filter overshoots on the attack and settles,
-  // which is exactly what makes a horn read as a horn.
-  10: G({
-    ampMul: { attack: 0.7, decay: 0.9, sustain: 1.0, release: 0.9 },
-    filter: { start: 0.55, env: 3.2, attack: 0.09, decay: 0.5, qMul: 1.2 },
-    driveMul: 1.5,
-    send: { reverb: 0.6, delay: 0.35 },
-    widthMul: 0.7,
-  }),
-
-  // 11th — technology. FM at an inharmonic ratio: a bell that no physical bell
-  // could be cast to make.
-  11: G({
-    ampMul: { attack: 0.04, decay: 1.8, sustain: 0.12, release: 2.4 },
-    filter: { start: 3.5, env: 0.4, attack: 0.002, decay: 1.2, qMul: 0.8 },
-    fm: { ratio: 3.47, index: 5.5, decay: 1.1 },
-    noiseMul: 0.3,
-    send: { reverb: 1.3, delay: 1.2 },
-    widthMul: 1.2,
-  }),
-
-  // 12th — the unconscious. Arrives before it begins: a very long swell, almost
-  // all of it reverb, pitch never quite fixed.
-  12: G({
-    ampMul: { attack: 9.0, decay: 1.6, sustain: 0.85, release: 2.6 },
-    filter: { start: 0.5, env: 1.2, attack: 1.8, decay: 3.0, qMul: 1.1 },
-    noiseMul: 0.6,
-    glide: 0.5,
-    send: { reverb: 2.6, delay: 1.4 },
-    widthMul: 1.5,
-  }),
-};
-
-export function buildVoiceSpec({ element, house, modality }) {
-  const material = MATERIALS[element] ?? MATERIALS.fire;
-  const gesture = GESTURES[house] ?? GESTURES[1];
+export function buildVoiceSpec({ element, house, modality, palette }) {
+  const { materials, gestures } = getPalette(palette);
+  const material = materials[element] ?? materials.fire;
+  const gesture = gestures[house] ?? gestures[1];
   const phrasing = (MODALITIES[modality] ?? MODALITIES.cardinal).envelope;
 
   const amp = {
@@ -505,7 +325,11 @@ export class Voice {
 
       for (const p of material.partials) {
         const osc = ctx.createOscillator();
-        osc.type = p.type;
+        // A partial is either one of the four built-in spectra or an explicit
+        // overtone series. `setPeriodicWave` supersedes `type`, so it is one or
+        // the other, never both.
+        if (p.harmonics) osc.setPeriodicWave(periodicWave(ctx, p.harmonics));
+        else osc.type = p.type;
         osc.detune.value = p.detune + detune + layer.detuneOffset;
         if (gesture.glide > 0) {
           osc.frequency.setValueAtTime(freq * 0.79, start);
