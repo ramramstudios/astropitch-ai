@@ -1107,6 +1107,9 @@ function aspectRow(a) {
 
   tr.append(pair, kind, interval, orb);
   tr.addEventListener('click', () => {
+    // Table rows are another way to audition a chord, so keep the wheel in
+    // the same selected state as if its connector had been clicked directly.
+    wheel.toggleAspectSelection(a);
     performer.playAspect(a);
     showAspect(a);
   });
