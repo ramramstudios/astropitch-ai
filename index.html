@@ -546,19 +546,33 @@
             <span id="pitchGliss" class="setting-switch__option">Gliss</span>
           </div>
         </div>
-        <div class="settings-item">
+        <div class="settings-item settings-item--palette" tabindex="0" aria-describedby="paletteTooltip">
           <div>
             <h3>Tone palette</h3>
             <p id="paletteNote"></p>
           </div>
           <div class="setting-switch">
-            <span id="paletteBright" class="setting-switch__option is-active">Bright</span>
+            <span id="paletteWarm" class="setting-switch__option is-active">Warm</span>
             <label class="theme-toggle">
-              <span class="sr-only">Use the Warm tone palette</span>
-              <input type="checkbox" id="palette" role="switch" aria-label="Use the Warm tone palette">
+              <span class="sr-only">Use the Bright tone palette</span>
+              <input type="checkbox" id="palette" role="switch" aria-label="Use the Bright tone palette">
               <span aria-hidden="true"></span>
             </label>
-            <span id="paletteWarm" class="setting-switch__option">Warm</span>
+            <span id="paletteBright" class="setting-switch__option">Bright</span>
+          </div>
+          <div class="palette-tooltip" id="paletteTooltip" role="tooltip">
+            <table>
+              <caption>How the tone palettes differ</caption>
+              <thead>
+                <tr><th>Layer</th><th>Warm</th><th>Bright</th></tr>
+              </thead>
+              <tbody>
+                <tr><th>Oscillators</th><td>Custom overtone spectra</td><td>Built-in saw, square, triangle, and sine waves</td></tr>
+                <tr><th>Harmonics</th><td>Smoother high-frequency rolloff</td><td>Denser, sharper spectra</td></tr>
+                <tr><th>Noise + drive</th><td>Less noise and saturation</td><td>More attack noise and saturation</td></tr>
+                <tr><th>House gestures</th><td>Softer motion, shallower gates, longer releases</td><td>Stronger filter, gate, and attack changes</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

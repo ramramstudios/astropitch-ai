@@ -1392,6 +1392,8 @@ kbd {
 .settings-item h3 { margin: 0 0 0.35rem; }
 .settings-item p { margin: 0; }
 
+.settings-item--palette { position: relative; }
+
 .theme-toggle { position: relative; flex: none; cursor: pointer; }
 
 .theme-toggle input {
@@ -1435,6 +1437,73 @@ kbd {
 }
 
 .setting-switch__option.is-active { color: var(--ink); }
+
+.palette-tooltip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.5rem);
+  z-index: 2;
+  width: min(460px, calc(100vw - 3rem));
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--ink);
+  background: var(--paper-bright);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.3rem);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+  visibility: hidden;
+}
+
+.settings-item--palette:hover .palette-tooltip,
+.settings-item--palette:focus .palette-tooltip,
+.settings-item--palette:focus-within .palette-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.palette-tooltip table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--graphite);
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.palette-tooltip caption {
+  margin-bottom: 0.55rem;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.palette-tooltip th,
+.palette-tooltip td {
+  padding: 0.4rem 0.45rem;
+  border-top: 1px solid var(--hairline);
+  text-align: left;
+  vertical-align: top;
+}
+
+.palette-tooltip thead th {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.palette-tooltip tbody th {
+  width: 22%;
+  color: var(--ink);
+  font-weight: 500;
+}
 
 
 @media (max-width: 1040px) {

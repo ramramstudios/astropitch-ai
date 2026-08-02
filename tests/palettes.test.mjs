@@ -202,7 +202,8 @@ const usesWavetables = Object.values(PALETTES.harmonic.materials)
 check('harmonic uses wavetable spectra', usesWavetables);
 
 const omitted = buildVoiceSpec({ element: 'fire', house: 2, modality: 'cardinal' });
-check('omitting the palette gives the default', JSON.stringify(omitted) === JSON.stringify(a));
+const defaultSpec = buildVoiceSpec({ element: 'fire', house: 2, modality: 'cardinal', palette: DEFAULT_PALETTE });
+check('omitting the palette gives the default', JSON.stringify(omitted) === JSON.stringify(defaultSpec));
 
 head('No palette is wetter than the master chain can take');
 

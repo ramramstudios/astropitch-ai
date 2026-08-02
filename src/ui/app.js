@@ -861,10 +861,10 @@ function wireSettings() {
   };
 
   const applyPalette = (id, { persist = true } = {}) => {
-    paletteToggle.checked = id === 'harmonic';
-    paletteToggle.setAttribute('aria-label', paletteToggle.checked ? 'Use the Bright tone palette' : 'Use the Warm tone palette');
-    $('#paletteBright').classList.toggle('is-active', !paletteToggle.checked);
-    $('#paletteWarm').classList.toggle('is-active', paletteToggle.checked);
+    paletteToggle.checked = id === 'astropitch';
+    paletteToggle.setAttribute('aria-label', paletteToggle.checked ? 'Use the Warm tone palette' : 'Use the Bright tone palette');
+    $('#paletteBright').classList.toggle('is-active', paletteToggle.checked);
+    $('#paletteWarm').classList.toggle('is-active', !paletteToggle.checked);
     $('#paletteNote').textContent = PALETTES[id].blurb;
     performer.setPalette(id);
     if (persist) {
@@ -889,7 +889,7 @@ function wireSettings() {
   // that no longer names a palette.
   applyPalette(PALETTE_IDS.includes(savedPalette) ? savedPalette : DEFAULT_PALETTE, { persist: false });
 
-  paletteToggle.addEventListener('change', () => applyPalette(paletteToggle.checked ? 'harmonic' : 'astropitch'));
+  paletteToggle.addEventListener('change', () => applyPalette(paletteToggle.checked ? 'astropitch' : 'harmonic'));
   $('#settingsBtn').addEventListener('click', open);
   $('#settingsClose').addEventListener('click', close);
   toggle.addEventListener('change', () => applyTheme(toggle.checked ? 'dark' : 'light'));

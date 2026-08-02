@@ -525,7 +525,7 @@ export const PALETTES = {
   },
 };
 
-export const DEFAULT_PALETTE = 'astropitch';
+export const DEFAULT_PALETTE = 'harmonic';
 
 export const PALETTE_IDS = Object.keys(PALETTES);
 
