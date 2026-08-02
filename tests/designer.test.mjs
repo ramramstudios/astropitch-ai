@@ -51,6 +51,16 @@ console.log('--- shape: a designed chart is an ordinary chart ---');
     designChart(base, {}).placements.every((p, i) => p.longitude === base.placements[i].longitude));
 }
 
+console.log('--- sign-only charts can leave bodies unknown ---');
+{
+  const partial = chartFromSigns({ asc: null, sun: 0, moon: null, venus: 6 });
+  ok('only known bodies are placed',
+    JSON.stringify(partial.placements.map((p) => p.key)) === JSON.stringify(['sun', 'venus']),
+    partial.placements.map((p) => p.key).join(', '));
+  ok('an unknown Ascendant does not become Aries', !partial.byKey.asc);
+  ok('unknown Ascendant keeps the house ring on Aries', partial.cusps[0] === 0);
+}
+
 console.log('--- moving a body rebuilds everything derived from it ---');
 {
   // 14°30\' Scorpio: fixed water, in the 3rd house from an Ascendant in Aries.

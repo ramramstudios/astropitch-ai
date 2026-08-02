@@ -112,8 +112,10 @@ export function chartFromSigns(signMap, houseSystem = 'whole') {
     if (signIndex == null || signIndex < 0) continue;
     positions[key] = signIndex * 30 + 15;
   }
-  if (positions.asc == null) positions.asc = 15;
-  const ascSignIndex = signIndexOf(positions.asc);
+  // Without a known Ascendant there is no angle to draw. Keep the otherwise
+  // arbitrary house ring anchored to Aries so the remaining signs still have
+  // a stable whole-sign reference.
+  const ascSignIndex = positions.asc == null ? 0 : signIndexOf(positions.asc);
   const cusps = Array.from({ length: 12 }, (_, i) => norm360(ascSignIndex * 30 + i * 30));
   return makeChart(positions, { cusps, system: 'whole', meta: { manual: true, requestedSystem: houseSystem } });
 }

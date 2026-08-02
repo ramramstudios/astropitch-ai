@@ -98,7 +98,10 @@ function savedSignSelections(raw) {
   const selections = { ...DEFAULT_MAJOR_SIGN_SELECTIONS };
   for (const key of SOUNDING_BODIES) {
     const sign = raw?.[key];
-    if (Number.isInteger(sign) && sign >= 0 && sign < SIGNS.length) selections[key] = sign;
+    // An empty sign picker is meaningful: this body is unknown and should not
+    // be invented again when a saved sign-only chart is restored.
+    if (sign === null) selections[key] = null;
+    else if (Number.isInteger(sign) && sign >= 0 && sign < SIGNS.length) selections[key] = sign;
   }
   return selections;
 }
@@ -227,6 +230,7 @@ function buildSignPickers() {
       const select = document.createElement('select');
       select.dataset.body = body.key;
       select.replaceChildren(
+        Object.assign(document.createElement('option'), { value: '', textContent: '— unknown —' }),
         ...SIGNS.map((s, i) => {
           const opt = document.createElement('option');
           opt.value = String(i);
@@ -234,9 +238,11 @@ function buildSignPickers() {
           return opt;
         })
       );
-      select.value = String(state.signSelections[body.key] ?? 0);
+      select.value = state.signSelections[body.key] == null
+        ? ''
+        : String(state.signSelections[body.key]);
       select.addEventListener('change', () => {
-        state.signSelections[body.key] = Number(select.value);
+        state.signSelections[body.key] = select.value === '' ? null : Number(select.value);
         saveChartConfig();
       });
       label.append(span, select);
