@@ -113,7 +113,11 @@ export class AudioEngine {
     this.ctx = null;
     this.ready = false;
     this.voices = new Set();
-    this.maxVoices = 30;
+    this.maxVoices = 24;
+    this.stealFade = 0.06;
+    this.duckAt = 10;
+    this.duckFloor = 0.6;
+    this.sendDuckFloor = 0.4;
     this._analyserData = null;
     this._providedContext = context;
     if (context) {
@@ -282,6 +286,23 @@ export class AudioEngine {
     return n;
   }
 
+  _updateDuck() {
+    if (!this.ctx) return;
+    const n = this.activeVoiceCount();
+    const t = this.now;
+    let mixTarget, sendTarget;
+    if (n <= this.duckAt) {
+      mixTarget = 1;
+      sendTarget = 1;
+    } else {
+      mixTarget = Math.max(this.duckFloor, Math.sqrt(this.duckAt / n));
+      sendTarget = Math.max(this.sendDuckFloor, this.duckAt / n);
+    }
+    this.mixBus.gain.setTargetAtTime(mixTarget, t, 0.05);
+    this.reverbSend.gain.setTargetAtTime(sendTarget, t, 0.05);
+    this.delaySend.gain.setTargetAtTime(sendTarget, t, 0.05);
+  }
+
   register(voice) {
     this.voices.add(voice);
     // A voice stays in the set until its nodes are torn down. In particular,
@@ -293,12 +314,14 @@ export class AudioEngine {
         if (!v.stolen) { oldest = v; break; }
       }
       if (!oldest) break;
-      oldest.steal(this.now, 0.12);
+      oldest.steal(this.now, this.stealFade);
     }
+    this._updateDuck();
   }
 
   unregister(voice) {
     this.voices.delete(voice);
+    this._updateDuck();
   }
 
   releaseAll(fade = 0.25) {

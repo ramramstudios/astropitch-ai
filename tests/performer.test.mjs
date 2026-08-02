@@ -132,6 +132,72 @@ console.log('\n--- designer audition: sign changes replace the held voice ---');
   p.endDesignerPreview('venus');
 }
 
+console.log('\n--- click-burst dedup: same key chokes the previous voice ---');
+{
+  const releases = [];
+  const created = [];
+  const engine2 = { ...engine, now: 0 };
+  const p = new Performer(engine2);
+  p.setChart(A);
+
+  // Stub out the voice to track releases (simulate finite-duration voice behavior)
+  p._voiceFor = (placement) => {
+    const v = {
+      key: placement.key,
+      released: true, // finite-duration voices already scheduled a future release in their constructor
+      release: (at, fade) => releases.push({ key: placement.key, at, fade }),
+    };
+    created.push(v);
+    return v;
+  };
+
+  await p.playPlacement('venus');
+  await p.playPlacement('venus');
+  await p.playPlacement('venus');
+
+  ok('three rapid clicks on the same body create three voices', created.length === 3);
+  ok('but choke (release early) the two preceding ones', releases.length === 2 && releases.every(r => Math.abs(r.fade - 0.05) < 1e-9));
+  ok('the current voice for that key is still stored', p._choked.get('p:venus') === created[2]);
+
+  releases.length = 0;
+  await p.playPlacement('mars');
+  await p.playPlacement('sun');
+  ok('clicking different bodies chokes nothing', releases.length === 0);
+}
+
+console.log('\n--- click-burst dedup: retrigger releases even if already scheduled ---');
+{
+  const releases = [];
+  const engine2 = { ...engine, now: 0.5 };
+  const p = new Performer(engine2);
+  p.setChart(A);
+
+  // First voice with release already scheduled
+  const v1 = {
+    key: 'venus',
+    released: true, // already scheduled a future release (as per finite-duration voice behavior)
+    releaseAt: 3.0, // scheduled to release at 3.0 seconds
+  };
+  v1.release = function(at, fade) {
+    releases.push({ at, fade, earlier: at < v1.releaseAt });
+  };
+  p._choked.set('p:venus', v1);
+
+  // Now retrigger before its natural release time
+  const v2 = {
+    key: 'venus',
+    released: false,
+    release() {},
+  };
+  p._voiceFor = () => v2;
+
+  await p.playPlacement('venus');
+
+  ok('retrigger calls release on prior voice even though released is already true', releases.length === 1);
+  ok('retrigger pulls the release time earlier', releases[0].earlier === true);
+  ok('retrigger uses CHOKE_FADE (0.05)', Math.abs(releases[0].fade - 0.05) < 1e-9);
+}
+
 console.log('--- bloom: one chart unfolds from the solar centre ---');
 {
   const out = await run(A, 'bloom');

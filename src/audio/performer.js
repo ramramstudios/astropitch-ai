@@ -20,6 +20,7 @@ import { frequencyFor } from './tuning.js';
 import { SIGNS } from '../ontology.js';
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const CHOKE_FADE = 0.05;
 
 /** Bass costs more headroom than treble; trim it back toward parity. */
 function loudnessTrim(freq) {
@@ -40,6 +41,7 @@ export class Performer {
     this.loopHandle = null;
     this.listeners = new Set();
     this.designerPreview = null;
+    this._choked = new Map();
   }
 
   onEvent(fn) {
@@ -58,6 +60,7 @@ export class Performer {
 
   setChart(chart) {
     this.chart = chart;
+    this._choked.clear();
   }
 
   setTuning(tuning) {
@@ -114,6 +117,17 @@ export class Performer {
     return voice;
   }
 
+  _retrigger(groupKey, voiceOrVoices) {
+    const prev = this._choked.get(groupKey);
+    if (prev) {
+      const now = this.engine.now;
+      for (const v of Array.isArray(prev) ? prev : [prev]) {
+        if (v) v.release(now, CHOKE_FADE);
+      }
+    }
+    this._choked.set(groupKey, voiceOrVoices);
+  }
+
   /**
    * Nudge bodies that land on nearly the same pitch so they beat instead of
    * cancel.
@@ -146,7 +160,8 @@ export class Performer {
     const p = this.chart?.byKey?.[key];
     if (!p) return;
     const t = this.engine.now + 0.02;
-    this._voiceFor(p, { time: t, duration, gainMul: 1.5 });
+    const voice = this._voiceFor(p, { time: t, duration, gainMul: 1.5 });
+    this._retrigger(`p:${key}`, voice);
     this._emit({ type: 'note', key, time: t });
   }
 
@@ -259,7 +274,8 @@ export class Performer {
       gain: 1,
     };
     const t = this.engine.now + 0.02;
-    this._voiceFor(p, { time: t, duration, gainMul: 1.6 });
+    const voice = this._voiceFor(p, { time: t, duration, gainMul: 1.6 });
+    this._retrigger(`s:${signIndex}`, voice);
     this._emit({ type: 'sign', signIndex, time: t });
   }
 
@@ -270,8 +286,9 @@ export class Performer {
     if (!a || !b) return;
     const t = this.engine.now + 0.02;
     // Same octave for both, otherwise the interval is not what you hear.
-    this._voiceFor(a, { time: t, duration, gainMul: 1.3, octaveShift: -a.octave });
-    this._voiceFor(b, { time: t + 0.06, duration, gainMul: 1.3, octaveShift: -b.octave });
+    const voiceA = this._voiceFor(a, { time: t, duration, gainMul: 1.3, octaveShift: -a.octave });
+    const voiceB = this._voiceFor(b, { time: t + 0.06, duration, gainMul: 1.3, octaveShift: -b.octave });
+    this._retrigger(`a:${aspect.a}:${aspect.b}`, [voiceA, voiceB]);
     this._emit({ type: 'aspect', aspect, time: t });
   }
 
@@ -455,6 +472,7 @@ export class Performer {
       if (!v.released) v.release(now, fade);
     }
     this.active.length = 0;
+    this._choked.clear();
     this._emit({ type: 'stop' });
   }
 }

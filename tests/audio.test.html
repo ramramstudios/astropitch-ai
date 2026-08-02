@@ -231,6 +231,69 @@ head('Voice stealing caps scheduled polyphony');
   const s = analyse(buffer);
   log('info', `      ${fmt(s)}`);
   check('90 simultaneous requests still do not clip', s.clipped === 0, `${s.clipped} samples`);
+  check('polyphony cap comfortably covers a full two-chart bloom', engine.maxVoices >= 22, `${engine.maxVoices}`);
+  check('polyphony cap is tighter than the old headroom budget', engine.maxVoices < 30, `${engine.maxVoices}`);
+}
+
+head('Polyphony cap vs. legitimate synastry bloom');
+{
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 10, sampleRate: 48000 });
+  const engine = new AudioEngine({ context: ctx });
+  const specs = [
+    { element: 'air', house: 1, modality: 'cardinal' },
+    { element: 'water', house: 8, modality: 'fixed' },
+    { element: 'earth', house: 4, modality: 'mutable' },
+    { element: 'fire', house: 10, modality: 'cardinal' },
+  ];
+  // Simulate a two-chart bloom: 11 bodies × 2 sides, arriving over ~10s in staggered pairs
+  for (let side = 0; side < 2; side++) {
+    for (let i = 0; i < 11; i++) {
+      const spec = buildVoiceSpec(specs[i % specs.length]);
+      const startTime = (side * 5.5) + (i * 0.45);
+      new Voice(engine, spec, { freq: 200 + i * 50 + side * 1000, time: startTime, duration: 8, gain: 0.08 });
+    }
+  }
+  check('a full two-chart bloom (22 voices) is not stolen', engine.voices.size === 22, `${engine.voices.size} voices`);
+  check('all bloom voices count toward active polyphony', engine.activeVoiceCount() === 22, `${engine.activeVoiceCount()} active`);
+  for (const v of engine.voices) {
+    if (v.stolen) check('no voices were stolen', false, `${v} stolen before render`);
+  }
+  const buffer = await ctx.startRendering();
+  for (const v of engine.voices) {
+    if (v.stolen) check('bloom voices never stolen during render', false, `a voice was stolen`);
+  }
+}
+
+head('Click-burst dynamics: staggered burst is not squashed flat');
+{
+  const soloStats = await render(2.5, (engine) => {
+    // Solo reference: one dense voice
+    const spec = buildVoiceSpec({ element: 'water', house: 8, modality: 'fixed' });
+    new Voice(engine, spec, { freq: 200, time: 0.05, duration: 2.0, gain: 0.15 });
+  });
+
+  const burstStats = await render(3.6, (engine) => {
+    // Staggered burst: ~20 dense voices at jittered onsets (not simultaneous)
+    const specs = [
+      { element: 'air', house: 1, modality: 'cardinal' },
+      { element: 'water', house: 8, modality: 'fixed' },
+      { element: 'earth', house: 4, modality: 'mutable' },
+      { element: 'fire', house: 10, modality: 'cardinal' },
+    ];
+    for (let i = 0; i < 20; i++) {
+      const spec = buildVoiceSpec(specs[i % specs.length]);
+      const onset = 0.05 + (i * 0.04) + (Math.random() * 0.02);
+      new Voice(engine, spec, { freq: 150 + i * 30, time: onset, duration: 2.5, gain: 0.08 });
+    }
+  });
+
+  const soloCrest = soloStats.peak / Math.max(1e-6, soloStats.rms);
+  const burstCrest = burstStats.peak / Math.max(1e-6, burstStats.rms);
+  check('burst keeps meaningful dynamic range (not squashed flat by saturator)',
+    burstCrest > soloCrest * 0.45,
+    `burst crest ${burstCrest.toFixed(2)} vs solo ${soloCrest.toFixed(2)}`);
+  check('burst RMS stays under saturator friendly level', burstStats.rms < 0.6, `rms ${burstStats.rms.toFixed(3)}`);
+  log('info', `      solo: ${fmt(soloStats)}  |  burst: ${fmt(burstStats)}`);
 }
 
 head('Reverb impulse response is well formed');
