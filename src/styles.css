@@ -705,6 +705,31 @@ select:focus-visible,
 .field-row .field.narrow { flex: 0 0 5rem; }
 .field { display: flex; flex-direction: column; gap: 0.4rem; }
 
+.time-stepper {
+  display: flex;
+  justify-content: center;
+  margin-top: -0.35rem;
+}
+
+.time-stepper button {
+  appearance: none;
+  width: 2.25rem;
+  height: 2rem;
+  margin-left: -1px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.55rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.time-stepper button:first-child { margin-left: 0; }
+.time-stepper button:hover,
+.time-stepper button:focus-visible { background: var(--ink); color: var(--on-ink); outline: none; }
+
 .field > span {
   color: var(--graphite);
   font-family: var(--mono);

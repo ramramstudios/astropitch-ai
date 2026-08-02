@@ -498,6 +498,11 @@ function wireForms() {
     castFromBirthForm();
   });
 
+  $('#monthBackBtn').addEventListener('click', () => stepBirthDate({ months: -1 }));
+  $('#dayBackBtn').addEventListener('click', () => stepBirthDate({ days: -1 }));
+  $('#dayForwardBtn').addEventListener('click', () => stepBirthDate({ days: 1 }));
+  $('#monthForwardBtn').addEventListener('click', () => stepBirthDate({ months: 1 }));
+
   $('#signsForm').addEventListener('submit', (e) => {
     e.preventDefault();
     setSubject(chartFromSigns(state.signSelections));
@@ -599,6 +604,30 @@ function castFromBirthForm() {
   };
   setSubject(chartFromBirth(birth, readPlace(), $('#houseSystem').value));
   saveChartConfig();
+}
+
+/** Move the birth-date input without letting JavaScript's local timezone shift it. */
+function stepBirthDate({ days = 0, months = 0 }) {
+  const [year, month, day] = $('#birthDate').value.split('-').map(Number);
+  if (!year || !month || !day) return;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (months) {
+    // Set the day to one before moving months, then clamp it — e.g. Jan 31
+    // becomes Feb 28/29 rather than spilling into March.
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + months);
+    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(Math.min(day, lastDay));
+  }
+  if (days) date.setUTCDate(date.getUTCDate() + days);
+
+  $('#birthDate').value = [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0'),
+  ].join('-');
+  castFromBirthForm();
 }
 
 function wireOverlay() {
