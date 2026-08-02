@@ -75,11 +75,11 @@ console.log('--- moving a body rebuilds everything derived from it ---');
   ok('element follows', p.element === sign.element, p.element);
   ok('modality follows', p.modality === sign.modality, p.modality);
   ok('house follows', p.house === 8, String(p.house));
-  ok('pitch follows the exact degree',
-    p.pitch === 'E +48c' && Math.abs(p.cents - 48.333) < 0.01, `${p.pitch} ${p.cents.toFixed(2)}c`);
+  ok('pitch follows the exact degree from the centre of its sign',
+    p.pitch === 'E −2c' && Math.abs(p.cents + 1.667) < 0.01, `${p.pitch} ${p.cents.toFixed(2)}c`);
   ok('the sounded frequency follows the new longitude',
     Math.abs(frequencyFor(p.longitude, { octave: 0, refA: 440, temperament: 'equal' })
-      - 440 * 2 ** (224.5 / 360)) < 1e-9);
+      - 440 * 2 ** ((224.5 - 15) / 360)) < 1e-9);
 
   // Register, weight and role belong to the body, not to where it sits.
   ok('octave, gain and role are untouched',

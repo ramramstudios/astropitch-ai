@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AstroPitch</title>
-  <meta name="description" content="A natal chart synthesiser. 30 degrees of zodiac is one semitone, so aspects are intervals. Sign sets pitch, house sets gesture, element sets material.">
+  <meta name="description" content="A natal chart synthesiser. Chromatic mode locks each sign to one note; Gliss mode lets exact degree set continuous pitch. House sets gesture and element sets material.">
   <script>
     try {
       if (localStorage.getItem('astropitch.theme') === 'dark') {
@@ -139,11 +139,10 @@
 
         <form id="designerForm" class="form is-hidden">
           <p class="note">
-            Hold and drag any body around the wheel to hear its sign pitch, or
-            enable Microtonal pitch in Settings to glide continuously. Switch a
-            body off to take it out of the chord. Sign,
-            house, pitch and aspects are recomputed as it moves. Moving the
-            Ascendant turns the houses with it.
+            In Chromatic mode, each sign holds one note. In Gliss mode, drag a
+            body to glide continuously through its sign. Switch a body off to
+            take it out of the chord. Sign, house, pitch and aspects are
+            recomputed as it moves. Moving the Ascendant turns the houses with it.
           </p>
           <div id="designerList" class="designer-list"></div>
           <div class="form-actions">
@@ -158,7 +157,8 @@
 
       <section class="tabpanel" id="panel-placements" role="tabpanel" aria-labelledby="tab-placements" tabindex="0" data-panel="placements">
         <p class="panel-lede">
-          Sign gives the pitch. House gives the gesture. Element gives the
+          Chromatic mode gives each sign one note; Gliss mode gives its exact
+          degree a continuous pitch. House gives the gesture. Element gives the
           material. Click a row to hear that one voice alone.
         </p>
         <div class="table-wrap">
@@ -275,8 +275,9 @@
             <input type="range" id="refA" min="392" max="466" step="1" value="432">
           </label>
           <p class="note">
-            Aries begins at the reference A. Everything else follows from
-            wherever you put that A.
+            In Chromatic mode, each sign locks to one note in a twelve-tone
+            chromatic scale. In Gliss mode, the pitch center of Aries is the
+            reference A (default = 432 hz).
           </p>
         </div>
 
@@ -331,10 +332,11 @@
 
       <h3>Your chart, as sound</h3>
       <p>
-        AstroPitch reads the chart as one ensemble. Each sign has a note, so a
+        AstroPitch reads the chart as one ensemble. In Chromatic mode, each
+        sign locks to one note in a twelve-tone chromatic scale. In Gliss mode,
+        the pitch center of Aries is the reference A (default = 432 hz), and a
         planet's exact degree gives it a precise pitch. The whole zodiac makes
-        one musical octave: Aries begins at A, then each sign moves one step
-        around a twelve-note scale.
+        one musical octave: each sign moves one step around a twelve-note scale.
       </p>
 
       <h3>Chart as notation</h3>
@@ -375,17 +377,17 @@
           <use href="#notehead" x="300" y="362" /><text class="notation-label" x="315" y="365">Ura</text>
         </svg>
         <figcaption>
-          The first two examples use the beginning of each sign to keep the
-          notes easy to read. The final stack is one chart chord: its body
-          labels sit beside their notes. A real chart uses each placement's
-          exact degree.
+          The first two examples use each sign's Chromatic note to keep the
+          notation easy to read. In Gliss mode, a real chart uses each
+          placement's exact degree. The final stack is one chart chord: its
+          body labels sit beside their notes.
         </figcaption>
       </figure>
 
       <h3>What each part of the chart does</h3>
       <ul class="plain">
-        <li><strong>Sign and degree set pitch.</strong> A placement moves higher
-          as it moves through its sign.</li>
+        <li><strong>Chromatic locks a note; Gliss lets degree set pitch.</strong>
+          In Gliss mode, a placement moves higher as it moves through its sign.</li>
         <li><strong>Element sets the tone.</strong> Fire is bright, Earth is
           weighty, Air is open, and Water is fluid.</li>
         <li><strong>House sets the gesture.</strong> The same placement may be
@@ -424,7 +426,7 @@
         <strong>Designer</strong> lets you move or mute bodies without changing
         the chart underneath. In Settings, choose <strong>Warm</strong> for the
         smoother default palette or <strong>Bright</strong> for more attack and
-        edge. Choose <strong>Twelve-tone</strong> for one note per sign or
+        edge. Choose <strong>Chromatic</strong> for one note per sign or
         <strong>Gliss</strong> to let pitch move continuously through each sign.
       </p>
 
@@ -480,13 +482,14 @@
         </div>
         <div class="settings-item">
           <div>
-            <h3>Microtonal pitch</h3>
-            <p>Let pitch glide continuously within each sign.</p>
+            <h3>Pitch mode</h3>
+            <p>Chromatic locks each sign to one note. Gliss lets pitch move
+              continuously through each sign.</p>
           </div>
           <div class="setting-switch">
-            <span id="pitchTwelve" class="setting-switch__option is-active">Twelve-tone</span>
+            <span id="pitchTwelve" class="setting-switch__option is-active">Chromatic</span>
             <label class="theme-toggle">
-              <span class="sr-only">Use gliding pitch</span>
+              <span class="sr-only">Switch between Chromatic and Gliss pitch</span>
               <input type="checkbox" id="microtonalPitch" role="switch" aria-label="Use gliding pitch">
               <span aria-hidden="true"></span>
             </label>

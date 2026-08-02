@@ -335,20 +335,20 @@ head('Delay feedback is stable (does not self-oscillate)');
 
 head('Tuning');
 {
-  const a440 = frequencyFor(0, { octave: 0, refA: 440 });
-  const taurus = frequencyFor(30, { octave: 0, refA: 440 });
-  const pisces = frequencyFor(330, { octave: 0, refA: 440 });
-  check('Aries 0 degrees is A 440', Math.abs(a440 - 440) < 1e-9, `${a440}`);
+  const a440 = frequencyFor(15, { octave: 0, refA: 440 });
+  const taurus = frequencyFor(45, { octave: 0, refA: 440 });
+  const pisces = frequencyFor(345, { octave: 0, refA: 440 });
+  check('the centre of Aries is A 440', Math.abs(a440 - 440) < 1e-9, `${a440}`);
   // 360 degrees IS 0 degrees; the octave is carried by the octave parameter.
-  check('the circle closes on itself', Math.abs(frequencyFor(360, { octave: 0 }) - 432) < 1e-9);
-  check('one octave up is a doubling', Math.abs(frequencyFor(0, { octave: 1 }) - 864) < 1e-9);
-  check('359.99 degrees is just under the octave',
-    Math.abs(frequencyFor(359.99, { octave: 0 }) - 864) / 864 < 2e-5,
+  check('the circle closes on itself', Math.abs(frequencyFor(360, { octave: 0 }) - frequencyFor(0, { octave: 0 })) < 1e-9);
+  check('one octave up is a doubling', Math.abs(frequencyFor(15, { octave: 1 }) - 880) < 1e-9);
+  check('359.99 degrees is just under the upper Aries cusp',
+    Math.abs(frequencyFor(359.99, { octave: 0 }) - 432 * 2 ** ((359.99 - 15) / 360)) < 1e-9,
     `${frequencyFor(359.99, { octave: 0 }).toFixed(3)}`);
   check('Taurus is A#/Bb 466.16', Math.abs(taurus - 466.16) < 0.01, `${taurus.toFixed(2)}`);
   check('Pisces is G#/Ab 830.61', Math.abs(pisces - 830.61) < 0.01, `${pisces.toFixed(2)}`);
-  const mid = frequencyFor(15, { octave: 0, refA: 440 });
-  check('half a sign is half a semitone', Math.abs(mid - 440 * 2 ** (0.5 / 12)) < 1e-9, `${mid.toFixed(3)}`);
+  const cusp = frequencyFor(0, { octave: 0, refA: 440 });
+  check('an Aries cusp is 50 cents below its centre pitch', Math.abs(cusp - 440 * 2 ** (-0.5 / 12)) < 1e-9, `${cusp.toFixed(3)}`);
   const just = frequencyFor(120, { octave: 0, refA: 440, temperament: 'just' });
   check('just intonation gives a pure 5/4 on the trine', Math.abs(just - 440 * 5 / 4) < 1e-9, `${just.toFixed(3)}`);
 }

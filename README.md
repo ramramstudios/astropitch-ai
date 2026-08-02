@@ -12,20 +12,22 @@ No build step, dependencies, server, or API: static files and the Web Audio API.
 
 ## The idea
 
-Each sign occupies a pitch region — Aries begins at A 432, Taurus at A♯,
-Gemini at B, and so on up to Pisces at G♯. That is a chromatic scale wrapped
-around a circle: twelve signs of 30° against twelve semitones.
+Each sign occupies a pitch region. In Chromatic mode, each sign locks to one
+note in a twelve-tone chromatic scale: Aries is A, Taurus is A♯, Gemini is B,
+and so on up to Pisces at G♯. In Gliss mode, the pitch center of Aries is the
+reference A (default = 432 hz). That is a chromatic scale wrapped around a
+circle: twelve signs of 30° against twelve semitones.
 
 ```
 30° of ecliptic longitude  ==  1 semitone
 one trip around the zodiac ==  1 octave
 
-frequency = A × 2^(longitude / 360)
+Gliss frequency = A × 2^((longitude - 15) / 360)
 ```
 
-So the conversion is arithmetic, not a lookup table, and it is *continuous*. A
-planet at 14°22′ Aries is not "an A" — it is an A raised by 29 cents, and you can
-hear the difference.
+So the conversion is arithmetic, not a lookup table, and it is *continuous*.
+The reference A sits dead-center in Aries; a planet at 14°22′ Aries is just
+below that pitch center, and you can hear the difference.
 
 The useful consequence is that **every aspect is an interval**, with no extra
 assumptions:
@@ -58,7 +60,7 @@ placements; they do not replace either placement's instrument.
 
 | Layer | Comes from | What it changes in sound |
 |---|---|---|
-| **Pitch** | Sign + exact degree | Fundamental pitch. In equal temperament, each degree raises it by 3⅓ cents; pitch-tracking filters and resonant body move with it. |
+| **Pitch** | Chromatic: sign; Gliss: sign + exact degree | Fundamental pitch. Chromatic locks each sign to one note in the twelve-tone chromatic system. In Gliss mode, each degree raises pitch by 3⅓ cents; pitch-tracking filters and resonant body move with it. |
 | **Material** | Element | Oscillator stack, harmonic density, noise, sub, resonance, spectral tilt, drift, and default space. |
 | **Gesture** | House | Attack and filter contours, plus behavior such as gating, glide, doubling, or FM. |
 | **Phrasing** | Modality | Base ADSR contour and vibrato amount, multiplied by the house gesture. |
@@ -72,8 +74,9 @@ aspects say how it sounds with the other voices.**
 ### Sign, element, and modality
 
 The sign is not a single preset. It supplies a pitch region, an element, and a
-modality. In equal temperament, moving from 0° to 30° within a sign raises the
-fundamental by a semitone. In Just and Pythagorean modes, AstroPitch
+modality. In Chromatic mode, equal temperament locks each sign to one note in
+the twelve-tone chromatic system. In Gliss mode, moving through a 30° sign
+raises the fundamental by a semitone. In Just and Pythagorean modes, AstroPitch
 intentionally quantises to the sign pitch class, so degree no longer changes the
 tuned fundamental.
 
@@ -296,9 +299,11 @@ first; **Sequence** walks the zodiac from the Ascendant with note length set by
 modality; **Drone** sustains the anchors and surfaces the other bodies at a rate
 driven by how tightly they aspect each other.
 
-Temperament is switchable. Equal keeps the mapping continuous; Just and
-Pythagorean quantise to the sign, which is a different and audible claim about
-what a sign is.
+Temperament is switchable. In Chromatic mode, Equal locks each sign to its
+place in the twelve-tone chromatic system. In Gliss mode, Equal keeps the
+mapping continuous around each sign's pitch center; Just and Pythagorean
+quantise to the sign, which is a different and audible claim about what a sign
+is.
 
 ### Tone palettes
 

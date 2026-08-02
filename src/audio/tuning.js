@@ -1,9 +1,10 @@
 /**
  * Longitude to frequency.
  *
- * The zodiac is a chromatic octave: Aries 0 degrees is A, and every 30 degrees
- * is one semitone. That makes the mapping continuous, so a planet at 14 degrees
- * 22 minutes of Aries is not "an A" but an A raised by 28.7 cents. Equal
+ * The zodiac is a chromatic octave: the centre of Aries is A, and every 30
+ * degrees is one semitone. That makes the mapping continuous, so a planet at
+ * 14 degrees 22 minutes of Aries is not "an A" but an A just below centre.
+ * Equal
  * temperament preserves that continuity; the historical temperaments quantise
  * to the sign, which is a different and audible claim about what a sign is.
  */
@@ -32,6 +33,7 @@ export const TEMPERAMENTS = {
 };
 
 const norm360 = (d) => ((d % 360) + 360) % 360;
+const SIGN_CENTRE = 15;
 
 /**
  * @param {number} longitude ecliptic longitude in degrees, Aries 0 == A
@@ -48,19 +50,20 @@ export function frequencyFor(longitude, {
   const t = TEMPERAMENTS[temperament] ?? TEMPERAMENTS.equal;
   const base = refA * 2 ** octave;
   // Equal temperament can be heard two ways: continuously across the full
-  // wheel, or as twelve exact pitches that hold until a sign cusp.
+  // wheel, with each sign's named note at its centre, or as twelve exact
+  // pitches that hold until a sign cusp.
   if (t.continuous && !microtones) {
     const signIndex = Math.floor(lon / 30) % 12;
     return base * 2 ** (signIndex / 12);
   }
-  if (t.continuous) return base * 2 ** (lon / 360);
+  if (t.continuous) return base * 2 ** ((lon - SIGN_CENTRE) / 360);
   const signIndex = Math.floor(lon / 30) % 12;
   return base * t.ratios[signIndex];
 }
 
 /** Cents away from the nearest equal-tempered semitone. */
 export function centsOffset(longitude) {
-  const semis = norm360(longitude) / 30;
+  const semis = (norm360(longitude) - SIGN_CENTRE) / 30;
   const frac = semis - Math.round(semis);
   return frac * 100;
 }
@@ -68,7 +71,7 @@ export function centsOffset(longitude) {
 /** Pretty name for the nearest note, e.g. "A+29c". */
 export function pitchLabel(longitude) {
   const NAMES = ['A', 'A♯', 'B', 'C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯'];
-  const semis = norm360(longitude) / 30;
+  const semis = (norm360(longitude) - SIGN_CENTRE) / 30;
   const nearest = Math.round(semis) % 12;
   const cents = centsOffset(longitude);
   const sign = cents >= 0 ? '+' : '−';

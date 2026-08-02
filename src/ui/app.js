@@ -877,7 +877,7 @@ function wireSettings() {
   state.tuning.microtones = microtonalPitch.checked;
   const syncMicrotonalToggle = () => {
     const gliss = microtonalPitch.checked;
-    microtonalPitch.setAttribute('aria-label', gliss ? 'Use twelve-tone pitch' : 'Use gliding pitch');
+    microtonalPitch.setAttribute('aria-label', gliss ? 'Use Chromatic pitch' : 'Use Gliss pitch');
     $('#pitchTwelve').classList.toggle('is-active', !gliss);
     $('#pitchGliss').classList.toggle('is-active', gliss);
   };

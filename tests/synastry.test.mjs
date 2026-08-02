@@ -96,7 +96,9 @@ console.log('\n--- Conjunction orb is a beat rate ---');
   // the default, so that changing the app's tuning moves the pitch without
   // silently invalidating the claim being tested.
   const refA = 432;
-  for (const [orb, wantHz] of [[8, 6.706], [3, 2.503], [1, 0.833]]) {
+  // The Aries cusp is 50 cents below the reference A in Gliss mode; its beat
+  // rates therefore start from that lower frequency.
+  for (const [orb, wantHz] of [[8, 6.515], [3, 2.431], [1, 0.809]]) {
     const f1 = frequencyFor(0, { octave: 0, refA });
     const f2 = frequencyFor(orb, { octave: 0, refA });
     near(`${orb} deg orb beats at ~${wantHz}Hz (A=${refA})`, f2 - f1, wantHz, 0.02);
