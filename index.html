@@ -329,164 +329,110 @@
       <button class="modal-close" id="aboutClose" aria-label="Close">×</button>
       <h2 id="aboutTitle">How it works</h2>
 
-      <h3>The mapping</h3>
+      <h3>Your chart, as sound</h3>
       <p>
-        Aries begins at A 432, Taurus at A♯, Gemini at B, and so on up to
-        Pisces at G♯. This lays a chromatic scale around the zodiac: twelve
-        signs of 30° against twelve semitones. The conversion is arithmetic:
-      </p>
-      <p class="formula">frequency = A × 2<sup>(longitude / 360)</sup></p>
-      <p>
-        One trip around the zodiac is one octave. A planet at 14°22′ Aries is
-        not "an A" — it is an A raised by 29 cents, and you can hear it.
+        AstroPitch reads the chart as one ensemble. Each sign has a note, so a
+        planet's exact degree gives it a precise pitch. The whole zodiac makes
+        one musical octave: Aries begins at A, then each sign moves one step
+        around a twelve-note scale.
       </p>
 
       <h3>Chart as notation</h3>
       <p>
-        The same mapping can be read on a staff. First, two placements make an
-        aspect dyad; add a third placement and the three pitch classes can make
-        a triad. A full chart is the larger voicing that results when every
-        sounding body keeps its own register.
+        You can also read this on a musical staff. Two placements make a pair
+        of notes; a fuller chart makes a larger chord, spread across high and
+        low registers rather than packed into one spot.
       </p>
       <figure class="notation-figure">
-        <svg viewBox="0 0 600 520" role="img" aria-labelledby="notationTitle notationDesc">
-          <title id="notationTitle">AstroPitch notation examples</title>
-          <desc id="notationDesc">An A and C dyad for an Aries-Cancer square, an A minor triad made by adding Scorpio E, and an eleven-voice chart voicing across a grand staff.</desc>
+        <svg viewBox="0 0 600 520" role="img" aria-label="Three AstroPitch notation examples">
+          <desc id="notationDesc">An A and C pair for an Aries-Cancer square, an A minor chord made by adding Scorpio E, and an eleven-voice chart voicing across a grand staff.</desc>
           <defs>
-            <g id="staff">
-              <path class="notation-line" d="M44 0H560 M44 12H560 M44 24H560 M44 36H560 M44 48H560" />
-            </g>
-            <g id="note">
-              <ellipse class="notation-notehead" cx="0" cy="0" rx="7" ry="5.2" transform="rotate(-18)" />
-              <path class="notation-stem" d="M6 -1V-37" />
-            </g>
+            <g id="staff"><path class="notation-line" d="M44 0H560 M44 12H560 M44 24H560 M44 36H560 M44 48H560" /></g>
+            <g id="notehead"><ellipse class="notation-notehead" cx="0" cy="0" rx="7" ry="5.2" transform="rotate(-18)" /></g>
+            <g id="note"><ellipse class="notation-notehead" cx="0" cy="0" rx="7" ry="5.2" transform="rotate(-18)" /><path class="notation-stem" d="M6 -1V-37" /></g>
           </defs>
-
-          <text class="notation-heading" x="44" y="20">1 · aspect dyad</text>
-          <text class="notation-detail" x="556" y="20" text-anchor="end">Aries 0° + Cancer 0° = A–C</text>
-          <use href="#staff" y="48" />
-          <use href="#note" x="250" y="78" />
-          <use href="#note" x="350" y="66" />
-          <text class="notation-label" x="250" y="117" text-anchor="middle">A</text>
-          <text class="notation-label" x="350" y="117" text-anchor="middle">C</text>
-          <path class="notation-bracket" d="M250 132V138H350V132" />
-          <text class="notation-detail" x="300" y="153" text-anchor="middle">square → minor third</text>
-
-          <text class="notation-heading" x="44" y="190">2 · three placements, voiced together</text>
-          <text class="notation-detail" x="556" y="190" text-anchor="end">+ Scorpio 0° = E</text>
-          <use href="#staff" y="218" />
-          <use href="#note" x="300" y="248" />
-          <use href="#note" x="300" y="236" />
-          <use href="#note" x="300" y="224" />
-          <text class="notation-label" x="324" y="251">A</text>
-          <text class="notation-label" x="324" y="239">C</text>
-          <text class="notation-label" x="324" y="227">E</text>
-          <text class="notation-detail" x="300" y="290" text-anchor="middle">A minor triad</text>
-
-          <text class="notation-heading" x="44" y="326">3 · full chart voicing</text>
-          <text class="notation-detail" x="556" y="326" text-anchor="end">11 sounding bodies across several octaves</text>
-          <use href="#staff" y="350" />
-          <use href="#staff" y="428" />
-          <path class="notation-brace" d="M31 350C16 350 16 374 31 389C16 404 16 428 31 476" />
-          <path class="notation-line" d="M44 338H560 M44 488H560" />
-
-          <use href="#note" x="278" y="488" />
-          <use href="#note" x="292" y="452" />
-          <use href="#note" x="306" y="428" />
-          <use href="#note" x="320" y="416" />
-          <use href="#note" x="334" y="458" />
-          <use href="#note" x="348" y="446" />
-          <use href="#note" x="362" y="434" />
-          <use href="#note" x="376" y="422" />
-          <use href="#note" x="390" y="410" />
-          <use href="#note" x="404" y="386" />
-          <use href="#note" x="418" y="374" />
-
-          <text class="notation-detail" x="300" y="507" text-anchor="middle">Pl  Sa  Mo  Ma</text>
-          <text class="notation-detail" x="432" y="507" text-anchor="middle">Asc  Su  Ve  Ju  Ne  Me  Ur</text>
+          <text class="notation-heading" x="44" y="20">1 · aspect pair</text>
+          <use href="#staff" y="48" /><use href="#note" x="250" y="78" /><use href="#note" x="350" y="66" />
+          <text class="notation-label" x="250" y="117" text-anchor="middle">A</text><text class="notation-label" x="350" y="117" text-anchor="middle">C</text>
+          <path class="notation-bracket" d="M250 132V138H350V132" /><text class="notation-detail" x="300" y="153" text-anchor="middle">square → minor third</text>
+          <text class="notation-heading" x="44" y="190">2 · three placements together</text>
+          <use href="#staff" y="218" /><use href="#note" x="300" y="248" /><use href="#note" x="300" y="236" /><use href="#note" x="300" y="224" />
+          <text class="notation-label" x="324" y="251">A</text><text class="notation-label" x="324" y="239">C</text><text class="notation-label" x="324" y="227">E</text>
+          <text class="notation-detail" x="300" y="290" text-anchor="middle">A minor chord</text>
+          <text class="notation-heading" x="44" y="326">3 · full chart</text>
+          <use href="#staff" y="350" /><use href="#staff" y="428" /><path class="notation-brace" d="M31 350C16 350 16 374 31 389C16 404 16 428 31 476" /><path class="notation-line" d="M44 338H560 M44 488H560" />
+          <path class="notation-stem" d="M306 482V350" />
+          <use href="#notehead" x="300" y="482" /><text class="notation-label" x="315" y="485">Plu</text>
+          <use href="#notehead" x="300" y="470" /><text class="notation-label" x="315" y="473">Sat</text>
+          <use href="#notehead" x="300" y="458" /><text class="notation-label" x="315" y="461">Moo</text>
+          <use href="#notehead" x="300" y="446" /><text class="notation-label" x="315" y="449">Mar</text>
+          <use href="#notehead" x="300" y="434" /><text class="notation-label" x="315" y="437">Asc</text>
+          <use href="#notehead" x="300" y="422" /><text class="notation-label" x="315" y="425">Sun</text>
+          <use href="#notehead" x="300" y="410" /><text class="notation-label" x="315" y="413">Ven</text>
+          <use href="#notehead" x="300" y="398" /><text class="notation-label" x="315" y="401">Jup</text>
+          <use href="#notehead" x="300" y="386" /><text class="notation-label" x="315" y="389">Nep</text>
+          <use href="#notehead" x="300" y="374" /><text class="notation-label" x="315" y="377">Mer</text>
+          <use href="#notehead" x="300" y="362" /><text class="notation-label" x="315" y="365">Ura</text>
         </svg>
         <figcaption>
-          The first two examples use exact sign beginnings for clarity: 90° is
-          three semitones, and adding Scorpio's E completes A–C–E. The chart
-          staff is schematic rather than a particular natal chart. In Bloom,
-          its eleven voices form a chordal aggregate, but body registers spread
-          that aggregate across several octaves instead of crushing it into one
-          eleven-note cluster.
+          The first two examples use the beginning of each sign to keep the
+          notes easy to read. The final stack is one chart chord: its body
+          labels sit beside their notes. A real chart uses each placement's
+          exact degree.
         </figcaption>
       </figure>
 
-      <h3>Why aspects are intervals</h3>
+      <h3>What each part of the chart does</h3>
+      <ul class="plain">
+        <li><strong>Sign and degree set pitch.</strong> A placement moves higher
+          as it moves through its sign.</li>
+        <li><strong>Element sets the tone.</strong> Fire is bright, Earth is
+          weighty, Air is open, and Water is fluid.</li>
+        <li><strong>House sets the gesture.</strong> The same placement may be
+          struck, sustained, muted, doubled, or allowed to swell in.</li>
+        <li><strong>Modality sets its movement.</strong> Cardinal starts,
+          fixed holds, and mutable shifts.</li>
+        <li><strong>The planet sets its place in the ensemble.</strong> The
+          lights and Ascendant lead; other bodies sit higher, lower, or further
+          back in the sound.</li>
+      </ul>
+
+      <h3>Aspects and synastry</h3>
       <p>
-        If 30° is a semitone, then every classical aspect is an interval, with
-        no extra assumptions:
+        An aspect is heard when two placements sound together. The angle between
+        them becomes an interval, so the relationship in the chart becomes a
+        relationship in sound. Tighter aspects are given more weight.
       </p>
       <ul class="aspect-key" id="aspectKey"></ul>
       <p>
-        The tritone falling on the opposition is a nice accident. So is the
-        trine landing on a major third.
+        In <strong>Overlay</strong>, add the sky or another chart to hear
+        synastry. The two charts stay in the same pitch space; the strongest
+        contacts are the ones that sound, keeping the comparison clear rather
+        than crowded.
       </p>
 
-      <h3>How to read a placement</h3>
-      <p>A placement is one instrument assembled from several independent layers:</p>
-      <ul class="plain">
-        <li><strong>Sign + exact degree → pitch.</strong> The fundamental moves
-          continuously with longitude in equal temperament: a degree is 3⅓
-          cents. Sign also supplies element and modality.</li>
-        <li><strong>Element → material.</strong> Fire is bright and driven;
-          Earth is low-order, wooden, and sub-heavy; Air is hollow, breathy,
-          and wide; Water is detuned, drifting, and wet.</li>
-        <li><strong>House → gesture.</strong> It performs that material. The
-          2nd is struck, 3rd speaks with a flutter, 4th is muffled and close,
-          5th sings, 6th is gated, 7th is doubled, 11th is an inharmonic bell,
-          and 12th swells in before it arrives.</li>
-        <li><strong>Modality → phrasing.</strong> Cardinal begins immediately,
-          fixed sustains, mutable carries the most movement and vibrato.</li>
-        <li><strong>Planetary body → register and role.</strong> It uses the
-          same sign × house instrument but changes octave and prominence:
-          Moon and Mars sit an octave down, Mercury and Uranus an octave up,
-          Saturn and Pluto two octaves down. Sun, Moon, and Ascendant anchor
-          the mix.</li>
-      </ul>
-
-      <h3>Same sign, different house</h3>
+      <h3>Start listening</h3>
       <p>
-        Moon in Virgo is mutable Earth in either house: a D-region, wooden,
-        low-order sound, voiced one octave down for the Moon. In the <strong>3rd
-        house</strong>, its bright transient, extra noise, short contour, and
-        brief flutter make it speak. In the <strong>4th house</strong>, the same
-        material starts softer and darker, with less noise and more sub, so it
-        sounds muffled, close, and warm. The house changes articulation,
-        spectral envelope, density, and space—not Virgo's material or the
-        Moon's register.
+        Cast a chart from birth data, or use <strong>Just the signs</strong>
+        when that is all you know. Click any sign, planet, or aspect to hear it.
+        Use <strong>Bloom</strong> for the chart as a chord, <strong>Sequence</strong>
+        to move through it, and <strong>Drone</strong> for a changing sustain.
       </p>
 
-      <h3>What aspects change</h3>
+      <h3>Shape the chart and the sound</h3>
       <p>
-        Aspects do not alter an individual voice's oscillator recipe. They make
-        two placements an interval when heard together; the aspect list above
-        gives those intervals. During an aspect audition both bodies use the
-        same octave, so the interval is direct. Tighter aspects are treated as
-        more important: they rise first in the contact list and make their
-        bodies surface more often in Drone mode.
+        <strong>Designer</strong> lets you move or mute bodies without changing
+        the chart underneath. In Settings, choose <strong>Warm</strong> for the
+        smoother default palette or <strong>Bright</strong> for more attack and
+        edge. Choose <strong>Twelve-tone</strong> for one note per sign or
+        <strong>Gliss</strong> to let pitch move continuously through each sign.
       </p>
 
-      <h3>The astronomy</h3>
+      <h3>Private, local calculations</h3>
       <p>
-        Positions are computed in the browser, with no server and no API. The
-        Sun and Moon follow Meeus (the Moon with its full 60-term longitude
-        series); the planets use JPL's approximate Keplerian elements, good to
-        well under a degree from 1800 to 2050. Houses are whole sign, equal, or
-        Placidus by semi-arc division, falling back to Porphyry inside the
-        polar circles where Placidus has no solution.
-      </p>
-
-      <h3>The sound</h3>
-      <p>
-        Raw Web Audio, no library. One signal graph is built once and reused:
-        a glue compressor, soft-clip saturation, a synthetic stereo reverb whose
-        tail darkens as it decays, a ping-pong delay with a damped feedback
-        loop, and a limiter. Each note allocates only its own oscillators and
-        gains, and tears them down when it finishes.
+        Chart positions are calculated in your browser. No birth data is sent to
+        a server. You can choose whole sign, equal, or Placidus houses; Placidus
+        falls back to Porphyry where it has no polar solution.
       </p>
       <h3>Keyboard</h3>
       <ul class="keys">
@@ -502,7 +448,8 @@
         Contact the designer of the AstroPitch system at
         <a href="mailto:astropitch432@gmail.com">astropitch432@gmail.com</a>.
         The repository is at
-        <a href="https://github.com/ramramstudios/astropitch-ai">ramramstudios/astropitch-ai</a>.
+        <a href="https://github.com/ramramstudios/astropitch-ai">ramramstudios/astropitch-ai</a>;
+        see its README for a deeper explanation of the system.
       </p>
 
       <p class="colophon">

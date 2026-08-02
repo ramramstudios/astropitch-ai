@@ -1,10 +1,14 @@
 # AstroPitch
 
-AstroPitch turns a natal chart into sound: zodiac longitude maps to pitch, and
-chart relationships become musical intervals.
+AstroPitch is a browser-based astrological sonification system. Zodiac longitude
+maps to pitch; chart structure controls timbre, articulation, register, and
+relationships between notes.
 
-No build step, no dependencies, no server, no API. Static files and the Web Audio
-API.
+This is the technical reference. It assumes familiarity with astrology, basic
+music theory, and Web Audio concepts. The in-app **How it works** guide is the
+shorter, astrology-first introduction.
+
+No build step, dependencies, server, or API: static files and the Web Audio API.
 
 ## The idea
 
@@ -34,6 +38,12 @@ assumptions:
 | Trine       | 120°  | 4         | major third    |
 | Quincunx    | 150°  | 5         | perfect fourth |
 | Opposition  | 180°  | 6         | tritone        |
+
+The table uses the shortest, undirected distance between two placements, so it
+ends at 180° / the tritone. The intervals beyond that point are inversions of
+the ones already listed: for example, 210° is a perfect fifth, but it is the
+same contact as a 150° quincunx heard in the opposite direction—a perfect
+fourth. Listing both would duplicate the same aspect.
 
 The tritone landing on the opposition is a happy accident. So is the major third
 landing on the trine.
@@ -196,6 +206,12 @@ has something to go back to, and nothing you drag ever edits the chart underneat
 Designing is one chart at a time: entering the designer clears any overlay, since
 synastry puts two of everything on the wheel and cuts the sound density by contact.
 
+The label above the wheel records the chart that is actually sounding rather than
+the form currently being edited. Birth, sky-now, random, sign-only, and designer
+charts each identify themselves with their cast details. An overlay shortens this
+to a one-line `chart × chart` or `chart × sky` label; the complete details remain
+available as the label's tooltip.
+
 ## Two charts at once
 
 The **Overlay** tab plays a chart against the sky right now, or against another
@@ -271,7 +287,6 @@ voices ─┬──────────────────────�
 - The final ceiling is a `WaveShaper`, not a compressor. A limiter has a finite
   attack and lets fast transients through — measured at 1.012 with a full chart
   sustaining. A `WaveShaper` clamps its input before the curve lookup, so
-  overshoot is arithmetically impossible rather than merely unlikely.
 - A note allocates only its own oscillators and gains, and tears them down when
   it finishes. Polyphony is capped, counting sounding voices rather than
   registered ones, and the oldest is stolen when the cap is reached.
@@ -285,7 +300,7 @@ Temperament is switchable. Equal keeps the mapping continuous; Just and
 Pythagorean quantise to the sign, which is a different and audible claim about
 what a sign is.
 
-### Palettes
+### Tone palettes
 
 The synthesis is data. `palettes.js` holds one table of materials (per element)
 and one of gestures (per house); `voices.js` is the renderer that turns either
@@ -294,19 +309,17 @@ not the chart, not the scheduler, not the sign/house/modality mapping, and not
 the master chain. Modalities stay in `ontology.js`, because cardinal/fixed/mutable
 is a claim about phrasing that holds whatever the timbre is.
 
-Two ship, selectable in Settings:
+Two palettes ship. **Warm** is the default and sits on the left of the Settings
+switch; **Bright** is the right-hand alternative. The internal ids remain
+`harmonic` and `astropitch` respectively.
 
-- **AstroPitch** — the original. Subtractive and physical: saws pushed into soft
-  clipping for fire, a wooden box for earth, a breath column for air, drifting
-  sines for water.
-- **Harmonic** — built so that whole charts blend. Partials specify their overtone
-  series outright through `createPeriodicWave` rather than picking the nearest of
-  the four built-in shapes, so amplitudes roll off smoothly, and noise and drive
-  are nearly gone. Gestures keep their meanings — the 2nd is still struck, the
-  5th still sings — with the extremes pulled in and the releases run longer.
+- **Warm** (`harmonic`) uses explicit overtone series via `createPeriodicWave`,
+  lower noise and drive, gentler filter/gate movement, and longer releases. It
+  is intended to keep dense charts clear and blended.
+- **Bright** (`astropitch`) uses built-in saw, square, triangle, and sine sources
+  with denser spectra, more attack noise, more drive, and stronger gestures.
 
-Two things about a palette have to be measured rather than chosen, and both were
-got wrong the first time here:
+Two palette constraints are measured and tested:
 
 - **Body ratios belong off the harmonic grid.** A body is a formant, a fixed
   physical resonance, so there is nothing for it to be consonant with. Set it to
