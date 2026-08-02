@@ -447,6 +447,15 @@ select:focus-visible,
   stroke-width: 4 !important;
 }
 
+/* A clicked chord stays illuminated. Its stroke is supplied by the wheel as
+   an SVG gradient between the two connected placements' elemental colours. */
+.aspect-line.is-selected {
+  stroke: var(--aspect-selection-stroke) !important;
+  stroke-opacity: 1 !important;
+  stroke-width: 5 !important;
+  filter: drop-shadow(0 0 4px var(--aspect-selection-glow));
+}
+
 .aspect-hit {
   stroke: transparent;
   stroke-width: 16;

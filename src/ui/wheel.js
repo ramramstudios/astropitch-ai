@@ -53,6 +53,7 @@ export class Wheel {
     this.rotation = 0;
     this.handlers = {};
     this.aspectFocusKey = null;
+    this.selectedAspectKey = null;
     this.designer = false;
     this.drag = null;
     // While a body is being dragged the wheel stops turning under it. The
@@ -199,10 +200,25 @@ export class Wheel {
   }
 
   clearAspectFocus() {
-    if (!this.aspectFocusKey) return;
+    const hadFocus = !!this.aspectFocusKey;
+    const hadSelection = !!this.selectedAspectKey;
     this.aspectFocusKey = null;
+    this.selectedAspectKey = null;
+    if (!hadFocus && !hadSelection) return;
     this._drawAspects();
-    this._drawPlanets();
+    if (hadFocus) this._drawPlanets();
+  }
+
+  _aspectKey(asp) {
+    return `${asp.a}-${asp.b}`;
+  }
+
+  /** Keep a clicked chord visible until another chord or the empty wheel is clicked. */
+  toggleAspectSelection(asp) {
+    const key = this._aspectKey(asp);
+    this.selectedAspectKey = this.selectedAspectKey === key ? null : key;
+    this._drawAspects();
+    return this.selectedAspectKey;
   }
 
   _drawSigns() {
@@ -347,17 +363,40 @@ export class Wheel {
       const related = !this.aspectFocusKey
         || asp.a === this.aspectFocusKey
         || asp.b === this.aspectFocusKey;
+      const selected = this.selectedAspectKey === this._aspectKey(asp);
+      const gradientId = 'selected-aspect-gradient';
+
+      if (selected) {
+        // The chord inherits its endpoints' elemental tones, making a shared
+        // element a solid line and a cross-element contact a directional blend.
+        nodes.push(el('linearGradient', {
+          id: gradientId,
+          gradientUnits: 'userSpaceOnUse',
+          x1, y1, x2, y2,
+        }, [
+          el('stop', { offset: '0%', 'stop-color': ELEMENTS[a.element]?.color ?? asp.color }),
+          el('stop', { offset: '100%', 'stop-color': ELEMENTS[b.element]?.color ?? asp.color }),
+        ]));
+      }
       const line = el('line', {
         x1, y1, x2, y2,
         class: `aspect-line aspect-${asp.name.toLowerCase()}`
-          + (related ? ' is-related' : ' is-dimmed'),
+          + (related ? ' is-related' : ' is-dimmed')
+          + (selected ? ' is-selected' : ''),
         stroke: asp.color,
         'stroke-opacity': (0.2 + asp.exactness * 0.6).toFixed(3),
         'stroke-width': (1 + asp.exactness * 2.4).toFixed(2),
-        'data-aspect': `${asp.a}-${asp.b}`,
+        'data-aspect': this._aspectKey(asp),
+        ...(selected ? {
+          style: `--aspect-selection-stroke: url(#${gradientId}); `
+            + `--aspect-selection-glow: ${ELEMENTS[a.element]?.glow ?? 'rgba(255, 255, 255, 0.45)'}`,
+        } : {}),
       });
       const hit = el('line', { x1, y1, x2, y2, class: 'aspect-hit' });
-      hit.addEventListener('click', () => this._emit('aspect', asp));
+      hit.addEventListener('click', () => {
+        this.toggleAspectSelection(asp);
+        this._emit('aspect', asp);
+      });
       hit.addEventListener('mouseenter', () => {
         line.classList.add('is-hot');
         this._emit('hoverAspect', asp);
