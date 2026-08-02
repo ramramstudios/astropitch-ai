@@ -94,6 +94,8 @@ function readSavedChartConfig() {
 
 const savedChartConfig = readSavedChartConfig();
 
+const CAST_KINDS = ['birth', 'sky', 'random', 'signs', 'random-signs'];
+
 function savedSignSelections(raw) {
   const selections = { ...DEFAULT_MAJOR_SIGN_SELECTIONS };
   for (const key of SOUNDING_BODIES) {
@@ -144,6 +146,9 @@ const state = {
   // chord is spread across the ensemble rather than packed into one register.
   signSelections: savedSignSelections(savedChartConfig?.signSelections),
   savedBirthForm: savedChartConfig?.birthForm ?? null,
+  savedCastKind: CAST_KINDS.includes(savedChartConfig?.castKind) ? savedChartConfig.castKind : 'birth',
+  subjectDescriptor: null,
+  partnerDescriptor: null,
 };
 
 const performer = new Performer(engine);
@@ -183,8 +188,12 @@ function boot() {
   performer.onEvent(onPerformerEvent);
   performer.setTempo(120);
 
-  if (state.baseSource === 'birth') castFromBirthForm();
-  else setSubject(chartFromSigns(state.signSelections));
+  if (state.baseSource === 'birth') castFromBirthForm(state.savedCastKind);
+  else {
+    const chart = chartFromSigns(state.signSelections);
+    const kind = state.savedCastKind === 'random-signs' ? 'random-signs' : 'signs';
+    setSubject(chart, makeChartDescriptor(kind, chart, 'primary'));
+  }
   loop();
 }
 
@@ -505,7 +514,8 @@ function wireForms() {
 
   $('#signsForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    setSubject(chartFromSigns(state.signSelections));
+    const chart = chartFromSigns(state.signSelections);
+    setSubject(chart, makeChartDescriptor('signs', chart, 'primary'));
     saveChartConfig();
   });
 
@@ -520,12 +530,13 @@ function wireForms() {
 
   $('#nowBtn').addEventListener('click', () => {
     const place = readPlace();
-    setSubject(chartForNow(place, $('#houseSystem').value));
+    const chart = chartForNow(place, $('#houseSystem').value);
     const now = new Date();
     $('#birthDate').value = now.toISOString().slice(0, 10);
     $('#birthTime').value = now.toISOString().slice(11, 16);
     $('#utcOffset').value = 0;
     $('#placePreset').value = 'custom';
+    setSubject(chart, makeChartDescriptor('sky', chart, 'primary'));
     saveChartConfig();
   });
 
@@ -543,7 +554,7 @@ function wireForms() {
     $('#lon').value = place.lon;
     $('#utcOffset').value = place.utc;
     $('#placePreset').value = String(PLACES.indexOf(place));
-    castFromBirthForm();
+    castFromBirthForm('random');
   });
 
   $('#randomSignsBtn').addEventListener('click', () => {
@@ -552,7 +563,8 @@ function wireForms() {
       select.value = String(v);
       state.signSelections[select.dataset.body] = v;
     }
-    setSubject(chartFromSigns(state.signSelections));
+    const chart = chartFromSigns(state.signSelections);
+    setSubject(chart, makeChartDescriptor('random-signs', chart, 'primary'));
     saveChartConfig();
   });
 }
@@ -585,13 +597,14 @@ function saveChartConfig() {
     localStorage.setItem(CHART_CONFIG_KEY, JSON.stringify({
       source: state.source,
       baseSource: state.baseSource,
+      castKind: state.subjectDescriptor?.kind ?? state.savedCastKind,
       signSelections: state.signSelections,
       birthForm: birthFormValues(),
     }));
   } catch { /* private mode and disabled storage still receive the first-load chord */ }
 }
 
-function castFromBirthForm() {
+function castFromBirthForm(kind = 'birth') {
   const [year, month, day] = $('#birthDate').value.split('-').map(Number);
   const [hour, minute] = $('#birthTime').value.split(':').map(Number);
   if (!year || !month || !day) return;
@@ -602,7 +615,8 @@ function castFromBirthForm() {
     minute: minute || 0,
     utcOffset: Number($('#utcOffset').value) || 0,
   };
-  setSubject(chartFromBirth(birth, readPlace(), $('#houseSystem').value));
+  const chart = chartFromBirth(birth, readPlace(), $('#houseSystem').value);
+  setSubject(chart, makeChartDescriptor(kind, chart, 'primary'));
   saveChartConfig();
 }
 
@@ -643,13 +657,14 @@ function wireOverlay() {
   $('#skyForm').addEventListener('submit', (e) => {
     e.preventDefault();
     // The sky is read at the subject's own place, so its angles mean something.
-    setPartner(chartForNow(readPlace(), $('#houseSystem').value), 'the sky now');
+    const chart = chartForNow(readPlace(), $('#houseSystem').value);
+    setPartner(chart, makeChartDescriptor('sky', chart, 'primary'));
   });
 
   $('#partnerForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const chart = readPartnerChart();
-    if (chart) setPartner(chart, 'another chart');
+    if (chart) setPartner(chart, makeChartDescriptor('birth', chart, 'partner'));
   });
 
   $('#bRandomBtn').addEventListener('click', () => {
@@ -664,7 +679,7 @@ function wireOverlay() {
     $('#bUtcOffset').value = place.utc;
     $('#bPlacePreset').value = String(PLACES.indexOf(place));
     const chart = readPartnerChart();
-    if (chart) setPartner(chart, 'another chart');
+    if (chart) setPartner(chart, makeChartDescriptor('random', chart, 'partner'));
   });
 
   $('#clearOverlayBtn').addEventListener('click', () => setPartner(null));
@@ -995,15 +1010,110 @@ function wireKeyboard() {
   });
 }
 
-function setSubject(chart) {
+function setSubject(chart, descriptor = null) {
   state.subject = chart;
+  state.subjectDescriptor = descriptor ?? makeChartDescriptor('birth', chart, 'primary');
   render();
 }
 
-function setPartner(chart, label = null) {
+function setPartner(chart, descriptor = null) {
   state.partner = chart;
-  state.partnerLabel = label;
+  state.partnerDescriptor = chart
+    ? (descriptor ?? makeChartDescriptor('birth', chart, 'partner'))
+    : null;
   render();
+}
+
+/** A concise record of the inputs that produced a chart, frozen at cast time. */
+function makeChartDescriptor(kind, chart, form) {
+  const partner = form === 'partner';
+  const select = $(partner ? '#bPlacePreset' : '#placePreset');
+  const lat = Number($(partner ? '#bLat' : '#lat').value) || 0;
+  const lon = Number($(partner ? '#bLon' : '#lon').value) || 0;
+  const utcOffset = Number($(partner ? '#bUtcOffset' : '#utcOffset').value) || 0;
+  const selectedPlace = PLACES[Number(select?.value)];
+  const place = selectedPlace?.name ?? formatCoordinates(lat, lon);
+  const birth = chart?.meta?.birth;
+
+  return {
+    kind,
+    date: birth ? formatChartDate(birth) : null,
+    time: birth ? formatChartTime(birth) : null,
+    utcOffset: birth?.utcOffset ?? utcOffset,
+    place,
+    coordinates: formatCoordinates(lat, lon),
+    houseSystem: chart?.meta?.requestedSystem ?? $('#houseSystem').value,
+    placements: chart?.placements.filter((p) => p.key !== 'mc').length ?? 0,
+  };
+}
+
+function formatChartDate({ year, month, day }) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${day} ${months[month - 1] ?? month} ${year}`;
+}
+
+function formatChartTime({ hour, minute }) {
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function formatCoordinates(lat, lon) {
+  const coordinate = (value, positive, negative) => `${Math.abs(value).toFixed(3)}°${value >= 0 ? positive : negative}`;
+  return `${coordinate(lat, 'N', 'S')}, ${coordinate(lon, 'E', 'W')}`;
+}
+
+function formatUtcOffset(offset) {
+  if (offset === 0) return 'UTC';
+  return `UTC${offset > 0 ? '+' : '−'}${Math.abs(offset)}`;
+}
+
+function descriptorName(kind) {
+  return {
+    birth: 'Birth data',
+    sky: 'Sky right now',
+    random: 'Random',
+    signs: 'Just the signs',
+    'random-signs': 'Random signs',
+  }[kind] ?? 'Chart';
+}
+
+function descriptorDetails(descriptor, { compact = false } = {}) {
+  if (!descriptor) return 'Chart';
+  if (descriptor.kind === 'signs' || descriptor.kind === 'random-signs') {
+    const name = compact && descriptor.kind === 'signs' ? 'Signs' : descriptorName(descriptor.kind);
+    return compact ? name : `${name} · ${descriptor.placements} placements`;
+  }
+  const name = compact && descriptor.kind === 'birth' ? 'Birth' : descriptorName(descriptor.kind);
+  const parts = [name, descriptor.date, compact ? null : `${descriptor.time} ${formatUtcOffset(descriptor.utcOffset)}`, compact ? null : descriptor.place]
+    .filter(Boolean);
+  return parts.join(' · ');
+}
+
+function descriptorTitle(descriptor) {
+  if (!descriptor) return 'Chart';
+  const details = descriptorDetails(descriptor);
+  if (descriptor.kind === 'signs' || descriptor.kind === 'random-signs') return details;
+  return `${details} · ${descriptor.coordinates} · ${descriptor.houseSystem} houses`;
+}
+
+function renderChartLabel() {
+  const label = $('#chartLabel');
+  const subject = state.subjectDescriptor;
+  const partner = state.partnerDescriptor;
+  if (!label || !subject) return;
+
+  let text = descriptorDetails(subject);
+  let title = descriptorTitle(subject);
+  if (state.source === 'designer') {
+    text = `Designer · ${descriptorDetails(subject, { compact: true })}`;
+    title = `Designer chart based on ${descriptorTitle(subject)}`;
+  } else if (state.partner && partner) {
+    text = `${descriptorDetails(subject, { compact: true })} × ${descriptorDetails(partner, { compact: true })}`;
+    title = `${descriptorTitle(subject)} × ${descriptorTitle(partner)}`;
+  }
+
+  label.textContent = text;
+  label.title = title;
+  label.setAttribute('aria-label', title);
 }
 
 /**
@@ -1020,6 +1130,7 @@ function render() {
     ? makeSynastry(subject, state.partner)
     : subject;
 
+  renderChartLabel();
   performer.stop();
   performer.setChart(state.chart);
   performer.setTuning(state.tuning);

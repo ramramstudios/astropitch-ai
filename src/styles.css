@@ -218,6 +218,7 @@ select:focus-visible,
 .wheel-kicker {
   display: flex;
   justify-content: space-between;
+  gap: 1rem;
   padding-bottom: 0.65rem;
   border-bottom: 1px solid var(--ink);
   font-family: var(--mono);
@@ -225,7 +226,14 @@ select:focus-visible,
   letter-spacing: 0.08em;
 }
 
-.wheel-actions { display: flex; gap: 1rem; }
+.chart-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wheel-actions { display: flex; flex: none; gap: 1rem; }
 
 .wheel-holder {
   position: relative;
