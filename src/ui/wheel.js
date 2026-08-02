@@ -187,10 +187,6 @@ export class Wheel {
     this.svg.classList.toggle('is-designing', this.designer);
   }
 
-  focusBody(key) {
-    this.markers?.[key]?.focus();
-  }
-
   /** Focus the aspect network of one placement; repeating the key clears it. */
   toggleAspectFocus(key) {
     this.aspectFocusKey = this.aspectFocusKey === key ? null : key;
@@ -567,7 +563,7 @@ export class Wheel {
         tabindex: 0,
         role: 'button',
         'aria-label': `${p.name}${p.side ? `, chart ${p.side.toUpperCase()}` : ''} at ${p.label}, house ${p.house}`
-          + (draggable ? '. Drag or use the arrow keys to move it.' : ''),
+          + (draggable ? '. Drag to move it.' : ''),
       });
       // A draggable body auditions from the pointer sequence instead, so that a
       // drag ending over its own marker does not also play it.
@@ -576,15 +572,7 @@ export class Wheel {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           this._emit('body', p.key);
-          return;
         }
-        if (!draggable) return;
-        const dir = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
-        if (dir === undefined) return;
-        e.preventDefault();
-        this._emit('designerCommit', p.key, norm360(p.longitude + dir * (e.shiftKey ? 5 : 1)));
-        // The redraw that just ran replaced this node, so follow the focus over.
-        this.focusBody(p.key);
       });
       group.addEventListener('mouseenter', () => this._emit('hoverBody', p.key));
       group.addEventListener('mouseleave', () => this._emit('hoverBody', null));

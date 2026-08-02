@@ -176,8 +176,7 @@ Historical daylight saving cannot be derived from coordinates, and guessing it
 silently would be worse than asking.
 
 Use **Designer** to build a chart by hand on top of whichever of those two you
-cast. Drag any of the eleven sounding bodies around the wheel, or focus one and
-nudge it with the arrow keys — `Shift` for 5° at a time. Only the angular
+cast. Drag any of the eleven sounding bodies around the wheel. Only the angular
 position changes; a body stays on its ring however far the pointer wanders. Sign,
 exact degree, house, pitch, element, modality and aspects are all recomputed as
 it moves, so the chord you are looking at is the chord you will hear.
@@ -341,7 +340,6 @@ remembered between visits.
 | `B` `S` `D` | bloom, sequence, drone |
 | `[` | fold or unfold the controls |
 | `]` | hide or show the player |
-| `←` `→` | in the designer, move the focused body by 1° (`Shift` for 5°) |
 | `Esc` | cancel a designer drag, or close *How it works* |
 
 ## Run locally
