@@ -270,8 +270,8 @@ console.log('\n--- drone: anchors resolve under prefixed keys ---');
 
   const single = await run(A, 'drone');
   const singleBases = new Set(single.map((v) => baseOf(A, v.key)));
-  ok('one chart keeps its five anchors',
-    [...singleBases].every((b) => ['asc', 'sun', 'moon', 'saturn', 'pluto'].includes(b)),
+  ok('one chart keeps its four anchors',
+    singleBases.size === 4 && [...singleBases].every((b) => ['asc', 'sun', 'moon', 'saturn'].includes(b)),
     [...singleBases].join(','));
 }
 

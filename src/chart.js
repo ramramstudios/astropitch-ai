@@ -39,6 +39,7 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
       modality: sign.modality,
       retrograde: !!retrogrades[body.key],
       silent: !!silent[body.key],
+      voice: body.voice ?? null,
       label: formatLongitude(longitude),
       pitch: pitchLabel(longitude),
       cents: centsOffset(longitude),

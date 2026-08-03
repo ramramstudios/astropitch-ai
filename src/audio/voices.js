@@ -131,7 +131,7 @@ export class Voice {
   /**
    * @param {AudioEngine} engine
    * @param {object} spec       from buildVoiceSpec
-   * @param {object} opts       { freq, time, duration, gain, pan, detune }
+   * @param {object} opts       { freq, time, duration, gain, pan, detune, reverbMul, delayMul, panDrift }
    */
   constructor(engine, spec, opts) {
     this.id = voiceSerial++;
@@ -158,7 +158,10 @@ export class Voice {
     this._build(opts);
   }
 
-  _build({ freq, time, duration = null, gain = 1, pan = 0, detune = 0 }) {
+  _build({
+    freq, time, duration = null, gain = 1, pan = 0, detune = 0,
+    reverbMul = 1, delayMul = 1, panDrift = null,
+  }) {
     const { ctx } = this.engine;
     const t0 = Math.max(time ?? ctx.currentTime, ctx.currentTime);
     const { material, gesture, amp, vibrato } = this.spec;
@@ -169,26 +172,43 @@ export class Voice {
     panner.pan.value = Math.max(-1, Math.min(1, pan * this.spec.width));
     this.panner = panner;
 
+    // Most bodies stay fixed at their chart-derived position. A body may add a
+    // very slow orbit here without changing the chart position itself.
+    if (panDrift?.depth > 0 && panDrift?.rate > 0) {
+      const drift = ctx.createOscillator();
+      drift.type = 'sine';
+      drift.frequency.value = panDrift.rate;
+      const driftAmt = ctx.createGain();
+      driftAmt.gain.value = Math.min(0.95, panDrift.depth);
+      drift.connect(driftAmt);
+      driftAmt.connect(panner.pan);
+      drift.start(t0);
+      this.sources.push(drift);
+      this.nodes.push(driftAmt);
+    }
+
     const vca = ctx.createGain();
     vca.gain.value = 0.0001;
     vca.connect(panner);
     this.vca = vca;
 
+    const reverbSend = Math.min(1, this.spec.send.reverb * reverbMul);
+    const delaySend = Math.min(1, this.spec.send.delay * delayMul);
     const dryGain = ctx.createGain();
-    dryGain.gain.value = 1 - 0.4 * this.spec.send.reverb;
+    dryGain.gain.value = 1 - 0.4 * reverbSend;
     panner.connect(dryGain);
     dryGain.connect(this.engine.dryBus);
 
-    if (this.spec.send.reverb > 0.001) {
+    if (reverbSend > 0.001) {
       const rs = ctx.createGain();
-      rs.gain.value = this.spec.send.reverb * 0.55;
+      rs.gain.value = reverbSend * 0.55;
       panner.connect(rs);
       rs.connect(this.engine.reverbSend);
       this.nodes.push(rs);
     }
-    if (this.spec.send.delay > 0.001) {
+    if (delaySend > 0.001) {
       const ds = ctx.createGain();
-      ds.gain.value = this.spec.send.delay * 0.4;
+      ds.gain.value = delaySend * 0.4;
       panner.connect(ds);
       ds.connect(this.engine.delaySend);
       this.nodes.push(ds);

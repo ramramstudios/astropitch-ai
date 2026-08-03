@@ -124,7 +124,16 @@ export const BODIES = [
   { key: 'saturn',  name: 'Saturn',    glyph: '♄\uFE0E', octave: -2, gain: 0.72, role: 'The structural bass' },
   { key: 'uranus',  name: 'Uranus',    glyph: '♅\uFE0E', octave:  1, gain: 0.40, role: 'The interruption' },
   { key: 'neptune', name: 'Neptune',   glyph: '♆\uFE0E', octave:  0, gain: 0.42, role: 'The wash' },
-  { key: 'pluto',   name: 'Pluto',     glyph: '♇\uFE0E', octave: -2, gain: 0.46, role: 'The drone under everything' },
+  {
+    key: 'pluto', name: 'Pluto', glyph: '♇\uFE0E', octave: 1, gain: 0.30,
+    role: 'The distant icy glint',
+    voice: {
+      reverbMul: 1.65,
+      delayMul: 1.35,
+      panWidth: 1.25,
+      panDrift: { rate: 0.045, depth: 0.58 },
+    },
+  },
   { key: 'mc',      name: 'Midheaven', glyph: 'MC',  octave:  0, gain: 0.55, role: 'The pitch you aim at', angle: true },
 ];
 

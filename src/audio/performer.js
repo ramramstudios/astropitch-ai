@@ -5,8 +5,9 @@
  * them all at one pitch level and you get a tone cluster, which is honest but
  * unlistenable. Four things keep it musical:
  *
- *   1. Register. Each body has a fixed octave (Pluto two down, Mercury one up),
- *      so a chromatic cluster in longitude is spread over five octaves in pitch.
+ *   1. Register. Each body has a fixed octave (Saturn two down, Pluto and
+ *      Mercury one up),
+ *      so a chromatic cluster in longitude is spread across four octave registers.
  *   2. Entry. Voices arrive in an order that means something, not all at once.
  *   3. Balance. The Sun, Moon and Ascendant are loud; the outer planets are
  *      atmosphere. Low voices get trimmed because bass carries more energy.
@@ -113,8 +114,8 @@ export class Performer {
       temperament: this.tuning.temperament,
       microtones: this.tuning.microtones,
     });
-    // Position on the wheel becomes position in the stereo field.
-    const pan = Math.sin((p.longitude * Math.PI) / 180) * 0.8;
+    const bodyVoice = p.voice ?? {};
+    const pan = this._panFor(p);
     // Equal-power headroom: however many voices are already sounding, from
     // whichever playback path put them there, each new one yields enough gain
     // to keep the sum in check. A lone voice is unaffected (n=1); ten together
@@ -122,7 +123,12 @@ export class Performer {
     const headroom = solo ? 1 : 1 / Math.sqrt(this.engine.activeVoiceCount() + 1);
     const gain = 0.22 * p.gain * gainMul * headroom * loudnessTrim(freq);
 
-    const voice = new Voice(this.engine, spec, { freq, time, duration, gain, pan, detune });
+    const voice = new Voice(this.engine, spec, {
+      freq, time, duration, gain, pan, detune,
+      reverbMul: bodyVoice.reverbMul,
+      delayMul: bodyVoice.delayMul,
+      panDrift: bodyVoice.panDrift,
+    });
     this.active.push(voice);
     return voice;
   }
@@ -136,6 +142,15 @@ export class Performer {
       }
     }
     this._choked.set(groupKey, voiceOrVoices);
+  }
+
+  _panFor(placement, longitude = placement.longitude) {
+    const bodyVoice = placement.voice ?? {};
+    const driftDepth = Math.min(0.95, bodyVoice.panDrift?.depth ?? 0);
+    // Leave room at the edge of the stereo field for a body's optional pan
+    // orbit, rather than allowing an AudioParam sum beyond its legal range.
+    return Math.sin((longitude * Math.PI) / 180)
+      * 0.8 * (bodyVoice.panWidth ?? 1) * (1 - driftDepth);
   }
 
   /**
@@ -256,7 +271,7 @@ export class Performer {
       temperament: this.tuning.temperament,
       microtones: this.tuning.microtones,
     });
-    const pan = Math.sin((longitude * Math.PI) / 180) * 0.8;
+    const pan = this._panFor(placement, longitude);
     preview.voice.retune({ freq, pan, time });
   }
 
@@ -395,7 +410,7 @@ export class Performer {
     // anchors drop to the lights and the angle to leave the same room.
     const anchorBases = this.chart.meta?.synastry
       ? ['asc', 'sun', 'moon']
-      : ['asc', 'sun', 'moon', 'saturn', 'pluto'];
+      : ['asc', 'sun', 'moon', 'saturn'];
     const anchorSet = new Set(anchorBases);
     const anchorPlacements = placements.filter((p) => anchorSet.has(baseOf(p)));
     const anchorKeys = new Set(anchorPlacements.map((p) => p.key));

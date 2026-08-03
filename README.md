@@ -68,7 +68,7 @@ do not replace either placement's instrument.
 | **Timbre** | Element | Oscillator stack, harmonic density, noise, sub, resonance, spectral tilt, drift, and default space. |
 | **Gesture** | House | Attack and filter contours, plus behavior such as gating, glide, doubling, or FM. |
 | **Articulation** | Modality | Base ADSR contour and vibrato depth, multiplied by the house gesture. |
-| **Register / role** | Planetary body | Octave, gain, arrangement priority, and stereo position—not a separate timbre recipe. |
+| **Register / role** | Planetary body | Octave, gain, arrangement priority, and occasional body-level spatial treatment—not a separate timbre recipe. |
 | **Relationship** | Aspects | The interval two placements form, and the importance or activity of that pairing. |
 
 In brief: **the sign gives pitch, timbre, and articulation; the house gives
@@ -141,7 +141,8 @@ for headroom.
 | Moon / Mars | one octave down | body beneath the tone / transient |
 | Mercury / Uranus | one octave up | fast upper partial / interruption |
 | Venus / Jupiter / Neptune | unshifted | consonance / expansion / wash |
-| Saturn / Pluto | two octaves down | structural bass / underlying drone |
+| Saturn | two octaves down | structural bass |
+| Pluto | one octave up | distant icy glint: quiet, wide, and reflected |
 
 The Midheaven is displayed as an angle and target pitch, but does not sound as a
 standalone voice.
