@@ -12,11 +12,13 @@ No build step, dependencies, server, or API: static files and the Web Audio API.
 
 ## The idea
 
-Each sign occupies a pitch region. In Chromatic mode, each sign locks to one
-note in a twelve-tone chromatic scale: Aries is A, Taurus is A♯, Gemini is B,
-and so on up to Pisces at G♯. In Gliss mode, the pitch center of Aries is the
-reference A (default = 432 hz). That is a chromatic scale wrapped around a
-circle: twelve signs of 30° against twelve semitones.
+Each sign occupies a pitch region. Pitch presentation has two modes:
+**Chromatic**, which locks a sign to one pitch, and **Gliss**, which moves
+continuously through it. Temperament is a separate choice. In Equal
+temperament, Chromatic maps Aries to A, Taurus to A♯, Gemini to B, and so on up
+to Pisces at G♯; Gliss sets the center of Aries to the reference A (default =
+432 hz). That is a chromatic scale wrapped around a circle: twelve signs of
+30° against twelve semitones.
 
 ```
 30° of ecliptic longitude  ==  1 semitone
@@ -47,8 +49,10 @@ the ones already listed: for example, 210° is a perfect fifth, but it is the
 same contact as a 150° quincunx heard in the opposite direction—a perfect
 fourth. Listing both would duplicate the same aspect.
 
-The tritone landing on the opposition is a happy accident. So is the major third
-landing on the trine.
+The clean interval landings are arithmetic, not accidental. The happy
+coincidence is expressive: the opposition maps to a dissonant tritone and the
+trine to a consonant major third, broadly echoing their traditional hard and
+easy readings.
 
 ## What makes a placement sound the way it does
 
@@ -74,11 +78,14 @@ aspects say how it sounds with the other voices.**
 ### Sign: pitch, timbre, and articulation
 
 The sign is not a single preset. It supplies a pitch region, an element, and a
-modality. In Chromatic mode, equal temperament locks each sign to one note in
-the twelve-tone chromatic system. In Gliss mode, moving through a 30° sign
-raises the fundamental by a semitone. In Just and Pythagorean modes, AstroPitch
-intentionally quantises to the sign pitch class, so degree no longer changes the
-tuned fundamental.
+modality. Pitch presentation and temperament are separate controls:
+
+- **Chromatic** locks a placement to its sign's pitch class.
+- **Gliss** makes Equal temperament continuous: moving through a 30° sign
+  raises the fundamental by a semitone.
+- **Just** and **Pythagorean** are temperaments, not additional pitch modes.
+  Both intentionally quantise to the sign pitch class, so degree no longer
+  changes the tuned fundamental.
 
 | Element → Timbre | Heard as | Timbre recipe |
 |---|---|---|
@@ -176,9 +183,11 @@ exact contacts are ordered first, and in Drone mode bodies with tighter aspects
 surface more often. In an overlay, the strongest eight cross-chart contacts
 determine which bodies sound, so aspects also shape the texture's density.
 
-This yields 12 sign pitch-and-timbre combinations × 12 house gestures × 3 modal
-articulations, before body register and relationships are applied. These are
-synthesized combinations, not samples.
+This yields 12 distinct sign recipes × 12 house gestures = 144 combinations,
+before body register and relationships are applied. Each sign recipe already
+includes its element's timbre and its modality's articulation; modality is not
+an additional independent factor. These are synthesized combinations, not
+samples.
 
 ## Chart inputs
 
@@ -295,7 +304,9 @@ voices ─┬──────────────────────�
   shriller.
 - The final ceiling is a `WaveShaper`, not a compressor. A limiter has a finite
   attack and lets fast transients through — measured at 1.012 with a full chart
-  sustaining. A `WaveShaper` clamps its input before the curve lookup, so
+  sustaining. A `WaveShaper` clamps its input before the curve lookup, so its
+  output cannot exceed the curve's endpoint: overshoot is arithmetically
+  impossible rather than merely unlikely.
 - A note allocates only its own oscillators and gains, and tears them down when
   it finishes. Polyphony is capped, counting sounding voices rather than
   registered ones, and the oldest is stolen when the cap is reached.
@@ -305,11 +316,11 @@ first; **Sequence** walks the zodiac from the Ascendant with note length set by
 modality; **Drone** sustains the anchors and surfaces the other bodies at a rate
 driven by how tightly they aspect each other.
 
-Temperament is switchable. In Chromatic mode, Equal locks each sign to its
-place in the twelve-tone chromatic system. In Gliss mode, Equal keeps the
-mapping continuous around each sign's pitch center; Just and Pythagorean
-quantise to the sign, which is a different and audible claim about what a sign
-is.
+Temperament is switchable. Equal supports both pitch presentations: Chromatic
+locks each sign to its place in the twelve-tone chromatic system, while Gliss
+keeps the mapping continuous around the sign's pitch center. Just and
+Pythagorean instead quantise to the sign in either presentation, which is a
+different and audible claim about what a sign is.
 
 ### Tone palettes
 
@@ -403,15 +414,16 @@ carry every derived field with it, and a body switched off has to disappear from
 the aspects, the balance and the schedule rather than merely being turned down.
 
 `palettes.test.mjs` guards the thing a new palette is most likely to get wrong:
-that its tables cover all four elements and all twelve houses, and that every
-one of the 144 combinations builds a graph without sending a NaN — or a zero
-into an exponential ramp — to an `AudioParam`. It stubs Web Audio, so it runs
-in Node alongside the rest.
+that its tables cover all four elements, three modalities, and twelve houses,
+and that every one of the 144 element × modality × house combinations
+(equivalently, 12 sign recipes × 12 houses) builds a graph without sending a
+NaN — or a zero into an exponential ramp — to an `AudioParam`. It stubs Web
+Audio, so it runs in Node alongside the rest.
 
 For the audio, open `tests/audio.test.html` with the server running. It renders
 the graph through an `OfflineAudioContext` and measures the result: all 144
-element × house combinations, for every palette, for NaN, clipping, hard cuts
-and silence; envelope
+sign × house combinations, for every palette, for NaN, clipping, hard cuts and
+silence; envelope
 endpoints; a full eleven-voice bloom for headroom and DC offset; voice teardown
 and polyphony capping; reverb and delay stability; and the tuning maths.
 
