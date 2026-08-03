@@ -53,25 +53,25 @@ landing on the trine.
 ## What makes a placement sound the way it does
 
 A placement is a stack of independent musical decisions. The sign supplies the
-pitch region, element supplies the source material, house supplies the
-performance gesture, modality supplies basic phrasing, and the planetary body
-places the result in the ensemble. Aspects describe relationships between
-placements; they do not replace either placement's instrument.
+pitch region; its element supplies timbre, its modality supplies articulation,
+and its house supplies the performance gesture. The planetary body places the
+result in the ensemble. Aspects describe relationships between placements; they
+do not replace either placement's instrument.
 
 | Layer | Comes from | What it changes in sound |
 |---|---|---|
 | **Pitch** | Chromatic: sign; Gliss: sign + exact degree | Fundamental pitch. Chromatic locks each sign to one note in the twelve-tone chromatic system. In Gliss mode, each degree raises pitch by 3⅓ cents; pitch-tracking filters and resonant body move with it. |
-| **Material** | Element | Oscillator stack, harmonic density, noise, sub, resonance, spectral tilt, drift, and default space. |
+| **Timbre** | Element | Oscillator stack, harmonic density, noise, sub, resonance, spectral tilt, drift, and default space. |
 | **Gesture** | House | Attack and filter contours, plus behavior such as gating, glide, doubling, or FM. |
-| **Phrasing** | Modality | Base ADSR contour and vibrato amount, multiplied by the house gesture. |
+| **Articulation** | Modality | Base ADSR contour and vibrato depth, multiplied by the house gesture. |
 | **Register / role** | Planetary body | Octave, gain, arrangement priority, and stereo position—not a separate timbre recipe. |
 | **Relationship** | Aspects | The interval two placements form, and the importance or activity of that pairing. |
 
-In brief: **the sign gives the note and its substance; the house gives that
-substance a way of being played; the body says where it sits in the texture;
+In brief: **the sign gives pitch, timbre, and articulation; the house gives
+them a performance gesture; the body says where the voice sits in the texture;
 aspects say how it sounds with the other voices.**
 
-### Sign, element, and modality
+### Sign: pitch, timbre, and articulation
 
 The sign is not a single preset. It supplies a pitch region, an element, and a
 modality. In Chromatic mode, equal temperament locks each sign to one note in
@@ -80,22 +80,27 @@ raises the fundamental by a semitone. In Just and Pythagorean modes, AstroPitch
 intentionally quantises to the sign pitch class, so degree no longer changes the
 tuned fundamental.
 
-| Element | Heard as | Synthesis material |
+| Element → Timbre | Heard as | Timbre recipe |
 |---|---|---|
 | **Fire** | bright, dense, urgent | Beating saws and square wave, sharp high-passed attack noise, soft clipping, bright tilt |
 | **Earth** | weighty, wooden, contained | Triangles and sines over a strong sub, rolled-off upper partials, box resonance |
-| **Air** | hollow, breathy, wide | Odd-rich pulse material, octave shadow, pitch-tracking band-passed breath, broad stereo image |
+| **Air** | hollow, breathy, wide | Odd-rich pulse spectrum, octave shadow, pitch-tracking band-passed breath, broad stereo image |
 | **Water** | smooth, unstable, submerged | Detuned sine/triangle core, slow filter drift, low-index FM, long reverb tail |
 
-| Modality | Heard as | Base phrasing |
+| Modality → Articulation | Heard as | Base articulation |
 |---|---|---|
 | **Cardinal** | initiating | Near-instant onset, lower sustain, shorter decay |
 | **Fixed** | held | Slower onset, high sustain, long release |
 | **Mutable** | changing | Moderate onset and sustain, with the most base vibrato |
 
+**Articulation changes expression, not the instrument:** modality multiplies
+the house's amplitude envelope (attack, decay, sustain, and release) and sets
+base vibrato depth. It does not change the oscillator spectrum, filters, noise,
+FM, or spatial treatment.
+
 ### House: the performance gesture
 
-Houses act on the element's material; they do not replace it. A house can alter
+Houses shape the element's timbre; they do not replace it. A house can alter
 an envelope or filter, change noise or sub weight, widen the image, or add a
 time-based behavior.
 
@@ -117,10 +122,11 @@ time-based behavior.
 ### Planetary body: register and orchestration
 
 The body identifies the part in the ensemble. A Moon, Sun, or Mercury in the
-same sign and house starts with the same element × house × modality instrument;
-the body shifts its octave, changes its mix weight, and gives it a role. The Sun,
-Moon, and Ascendant are the loudest anchors, while outer planets are more
-atmospheric. Low bodies are also trimmed for headroom.
+same sign and house starts with the same Element → Timbre, House → Gesture, and
+Modality → Articulation mapping; the body shifts its octave, changes its mix
+weight, and gives it a role. The Sun, Moon, and Ascendant are the loudest
+anchors, while outer planets are more atmospheric. Low bodies are also trimmed
+for headroom.
 
 | Body | Register relative to the sign pitch | Role |
 |---|---:|---|
@@ -136,9 +142,9 @@ standalone voice.
 ### Example: Moon in Virgo, 3rd house vs. 4th house
 
 Assume the same exact Virgo degree. Virgo is mutable Earth, so both placements
-begin with the same D-region pitch, triangle/sine material, box resonance,
-strong low end, and mutable movement. As the Moon, both are voiced one octave
-down and given anchor-level prominence.
+begin with the same D-region pitch, triangle/sine timbre, box resonance, strong
+low end, and mutable articulation. As the Moon, both are voiced one octave down
+and given anchor-level prominence.
 
 | Same Moon in Virgo | House changes | Result |
 |---|---|---|
@@ -170,8 +176,8 @@ exact contacts are ordered first, and in Drone mode bodies with tighter aspects
 surface more often. In an overlay, the strongest eight cross-chart contacts
 determine which bodies sound, so aspects also shape the texture's density.
 
-This yields 12 sign pitch/material combinations × 12 house gestures × 3 modal
-phrasings, before body register and relationships are applied. These are
+This yields 12 sign pitch-and-timbre combinations × 12 house gestures × 3 modal
+articulations, before body register and relationships are applied. These are
 synthesized combinations, not samples.
 
 ## Chart inputs
@@ -307,12 +313,12 @@ is.
 
 ### Tone palettes
 
-The synthesis is data. `palettes.js` holds one table of materials (per element)
-and one of gestures (per house); `voices.js` is the renderer that turns either
-into a graph. A palette changes what the voices are made of and nothing else —
-not the chart, not the scheduler, not the sign/house/modality mapping, and not
-the master chain. Modalities stay in `ontology.js`, because cardinal/fixed/mutable
-is a claim about phrasing that holds whatever the timbre is.
+The synthesis is data. `palettes.js` holds one timbre table per element and one
+gesture table per house; `voices.js` is the renderer that turns either into a
+graph. A palette changes the voices' timbre and nothing else — not the chart,
+the scheduler, the sign/house/modality mapping, or the master chain. Modalities
+stay in `ontology.js`, because cardinal/fixed/mutable is a claim about
+articulation that holds whatever the timbre is.
 
 Two palettes ship. **Warm** is the default and sits on the left of the Settings
 switch; **Bright** is the right-hand alternative. The internal ids remain
@@ -420,8 +426,8 @@ src/
   styles.css
   audio/
     engine.js        the persistent signal graph
-    voices.js        material x gesture x phrasing -> one voice
-    palettes.js      the material and gesture tables the renderer reads
+    voices.js        timbre x gesture x articulation -> one voice
+    palettes.js      the timbre and gesture tables the renderer reads
     tuning.js        longitude -> frequency, temperaments
     performer.js     bloom, sequence, drone
   ui/

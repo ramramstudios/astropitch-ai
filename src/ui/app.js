@@ -1399,8 +1399,8 @@ function renderBalance() {
   };
 
   holder.replaceChildren(
-    section('Material', balance, (k) => ELEMENTS[k].color),
-    section('Phrasing', modal, () => 'var(--accent)')
+    section('Element → Timbre', balance, (k) => ELEMENTS[k].color),
+    section('Modality → Articulation', modal, () => 'var(--accent)')
   );
 }
 
@@ -1463,9 +1463,9 @@ function showSign(index, house) {
     element.color,
     sign.pitch,
     [
-      em(`${element.name} material`),
+      em(`${element.name} timbre`),
       document.createTextNode(` — ${element.texture}. `),
-      em(`${modality.name} phrasing`),
+      em(`${modality.name} articulation`),
       document.createTextNode(` — ${modality.quality.split('—')[1].trim()}. Heard here with the `),
       em(`${house}${ordinal(house)}-house gesture`),
       document.createTextNode(`: ${lowerFirst(houseInfo.timbre)}.`),
@@ -1488,11 +1488,11 @@ function showBody(key) {
     [
       document.createTextNode(`${p.label}${p.retrograde ? ', retrograde' : ''}. `),
       em(p.role),
-      document.createTextNode('. Made of '),
+      document.createTextNode('. Timbre: '),
       em(`${element.name.toLowerCase()} — ${element.texture}`),
       document.createTextNode(`, played with the ${p.house}${ordinal(p.house)}-house gesture: `),
       em(lowerFirst(p.houseInfo.timbre)),
-      document.createTextNode(`. ${modality.name} phrasing.`),
+      document.createTextNode(`. Articulation: ${modality.name.toLowerCase()}.`),
     ],
     [
       `house ${p.house}: ${p.houseInfo.meaning}`,

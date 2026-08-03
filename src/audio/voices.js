@@ -3,19 +3,18 @@
  *
  * Three independent axes compose into one voice:
  *
- *   ELEMENT  is the material   — what the tone is physically made of: the
- *                                oscillator stack, its harmonic content, the
- *                                noise layer, the resonant body, how it drifts.
- *   HOUSE    is the gesture    — how that material gets played: struck, bowed,
+ *   ELEMENT  sets timbre       — oscillator stack, harmonic content, noise,
+ *                                resonant body, and drift.
+ *   HOUSE    sets gesture      — how that timbre gets played: struck, bowed,
  *                                gated, doubled, blurred, sung.
- *   MODALITY is the phrasing   — how long the gesture lasts and how much it
+ *   MODALITY sets articulation — how long the gesture lasts and how much it
  *                                moves while it lasts.
  *
  * So Fire always sounds like fire and the 2nd house always sounds struck, but
  * fire-struck (Aries in the 2nd) and water-struck (Cancer in the 2nd) are
  * different instruments. 12 x 12 x 3 combinations, none of them samples.
  *
- * The material and gesture tables themselves live in palettes.js. This file is
+ * The timbre and gesture tables themselves live in palettes.js. This file is
  * the renderer: it knows how to turn one of those specs into a graph, and it is
  * the same renderer whichever palette supplied the numbers.
  */

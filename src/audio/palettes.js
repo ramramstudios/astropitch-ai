@@ -11,7 +11,7 @@
  * changes when the palette changes — only what the voices are made of.
  *
  * MODALITIES stay in ontology.js on purpose. Cardinal/fixed/mutable is a claim
- * about phrasing that holds regardless of timbre, and each palette's gestures
+ * about articulation that holds regardless of timbre, and each palette's gestures
  * already scale those envelopes through `ampMul`.
  *
  * Adding a palette means adding a table here. It does not mean adding a

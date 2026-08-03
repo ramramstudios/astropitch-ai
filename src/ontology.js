@@ -8,10 +8,9 @@
  *     30 degrees of ecliptic longitude == 1 semitone
  *     one trip around the zodiac       == one octave
  *
- * Everything else follows from that. Sign sets pitch. Element is the material
- * the tone is made of. House is the gesture that plays it. Modality is the
- * phrasing. Planet picks register and role in the mix. Aspects, being angular
- * distances, become intervals for free.
+ * Everything else follows from that. Sign sets pitch. Element sets timbre.
+ * House sets gesture. Modality sets articulation. Planet picks register and
+ * role in the mix. Aspects, being angular distances, become intervals for free.
  */
 
 export const ELEMENTS = {

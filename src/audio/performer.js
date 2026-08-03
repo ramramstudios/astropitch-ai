@@ -208,7 +208,7 @@ export class Performer {
     this._emit({ type: 'note', key, time: t });
   }
 
-  /** Sign supplies material and phrasing; the current house supplies gesture. */
+  /** Sign supplies timbre and articulation; the current house supplies gesture. */
   _designerTimbre(placement) {
     // The index deliberately participates too: each sign crossing gets a
     // fresh articulation, even when two neighbouring signs share an element
