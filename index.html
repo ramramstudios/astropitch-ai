@@ -13,7 +13,7 @@
     } catch { /* The default light theme still works when storage is unavailable. */ }
   </script>
   <link rel="stylesheet" href="src/styles.css">
-  <link rel="icon" href="favicon.ico?v=6" sizes="any">
+  <link rel="icon" type="image/png" href="favicon.png?v=8">
 </head>
 <body>
   <canvas id="stars" aria-hidden="true"></canvas>
@@ -290,6 +290,8 @@
 
   <footer class="transport" id="transportBar">
     <div class="transport-main">
+      <!-- TODO: replace the temporary PNG mark with a production SVG logo. -->
+      <img class="transport-brand" src="favicon.png" alt="AstroPitch">
       <button class="play" id="bloomBtn" aria-pressed="false" title="The chart assembles itself into one chord. Click again to stop.">
         <span class="play-name">Bloom</span>
         <span class="play-sub">chart as chord</span>

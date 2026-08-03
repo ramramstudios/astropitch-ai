@@ -1076,6 +1076,16 @@ table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none);
 
 .transport-main { display: flex; align-items: stretch; }
 
+.transport-brand {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--transport-h);
+  height: var(--transport-h);
+  padding: 0.7rem;
+  object-fit: contain;
+}
+
 button.play {
   appearance: none;
   min-width: 9.4rem;
@@ -1608,7 +1618,14 @@ kbd {
     /* Keep every transport action in the grid. The hide button used to be
        absolutely positioned here, which made the final grid column empty and
        allowed controls to collide at narrow widths. */
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .transport-brand {
+    position: static;
+    width: 100%;
+    height: 46px;
+    padding: 0.4rem;
   }
 
   button.play,
