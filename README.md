@@ -414,11 +414,11 @@ carry every derived field with it, and a body switched off has to disappear from
 the aspects, the balance and the schedule rather than merely being turned down.
 
 `palettes.test.mjs` guards the thing a new palette is most likely to get wrong:
-that its tables cover all four elements, three modalities, and twelve houses,
-and that every one of the 144 element × modality × house combinations
-(equivalently, 12 sign recipes × 12 houses) builds a graph without sending a
-NaN — or a zero into an exponential ramp — to an `AudioParam`. It stubs Web
-Audio, so it runs in Node alongside the rest.
+that its tables cover all four elements and twelve houses. It also exercises
+the renderer with all three fixed modalities, so every one of the 144 element ×
+modality × house combinations (equivalently, 12 sign recipes × 12 houses)
+builds a graph without sending a NaN — or a zero into an exponential ramp — to
+an `AudioParam`. It stubs Web Audio, so it runs in Node alongside the rest.
 
 For the audio, open `tests/audio.test.html` with the server running. It renders
 the graph through an `OfflineAudioContext` and measures the result: all 144
