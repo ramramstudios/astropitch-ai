@@ -100,12 +100,19 @@ function savedSignSelections(raw) {
   const selections = { ...DEFAULT_MAJOR_SIGN_SELECTIONS };
   for (const key of SOUNDING_BODIES) {
     const sign = raw?.[key];
-    // An empty sign picker is meaningful: this body is unknown and should not
-    // be invented again when a saved sign-only chart is restored.
-    if (sign === null) selections[key] = null;
-    else if (Number.isInteger(sign) && sign >= 0 && sign < SIGNS.length) selections[key] = sign;
+    if (Number.isInteger(sign) && sign >= 0 && sign < SIGNS.length) selections[key] = sign;
   }
   return selections;
+}
+
+/** Sign-only bodies are always assigned a sign; visibility is controlled separately. */
+function savedSignEnabled(rawSelections, rawEnabled) {
+  const enabled = Object.fromEntries(SOUNDING_BODIES.map((key) => [key, true]));
+  for (const key of SOUNDING_BODIES) {
+    // Migrate the former “unknown” option to an explicit off switch.
+    if (rawSelections?.[key] === null || rawEnabled?.[key] === false) enabled[key] = false;
+  }
+  return enabled;
 }
 
 /** Hand-placed overrides, `{ [bodyKey]: { longitude?, enabled? } }`. */
@@ -145,6 +152,7 @@ const state = {
   // and E (Scorpio). Bodies still keep their own octaves and roles, so the
   // chord is spread across the ensemble rather than packed into one register.
   signSelections: savedSignSelections(savedChartConfig?.signSelections),
+  signEnabled: savedSignEnabled(savedChartConfig?.signSelections, savedChartConfig?.signEnabled),
   savedBirthForm: savedChartConfig?.birthForm ?? null,
   savedCastKind: CAST_KINDS.includes(savedChartConfig?.castKind) ? savedChartConfig.castKind : 'birth',
   subjectDescriptor: null,
@@ -214,7 +222,7 @@ function boot() {
 
   if (state.baseSource === 'birth') castFromBirthForm(state.savedCastKind);
   else {
-    const chart = chartFromSigns(state.signSelections);
+    const chart = chartFromSelectedSigns();
     const kind = state.savedCastKind === 'random-signs' ? 'random-signs' : 'signs';
     setSubject(chart, makeChartDescriptor(kind, chart, 'primary'));
   }
@@ -256,14 +264,25 @@ function buildSignPickers() {
   const holder = $('#signPickers');
   holder.replaceChildren(
     ...BODIES.filter((b) => b.key !== 'mc').map((body) => {
+      const row = document.createElement('div');
+      row.className = 'sign-picker';
+      row.classList.toggle('is-off', !state.signEnabled[body.key]);
+
       const label = document.createElement('label');
-      label.className = 'field';
-      const span = document.createElement('span');
-      span.textContent = body.name;
+      label.className = 'sign-picker-switch';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = state.signEnabled[body.key];
+      const glyph = document.createElement('span');
+      glyph.className = 'g';
+      glyph.textContent = body.glyph;
+      const name = document.createElement('span');
+      name.className = 'nm';
+      name.textContent = body.name;
+
       const select = document.createElement('select');
       select.dataset.body = body.key;
       select.replaceChildren(
-        Object.assign(document.createElement('option'), { value: '', textContent: '— unknown —' }),
         ...SIGNS.map((s, i) => {
           const opt = document.createElement('option');
           opt.value = String(i);
@@ -271,17 +290,33 @@ function buildSignPickers() {
           return opt;
         })
       );
-      select.value = state.signSelections[body.key] == null
-        ? ''
-        : String(state.signSelections[body.key]);
-      select.addEventListener('change', () => {
-        state.signSelections[body.key] = select.value === '' ? null : Number(select.value);
+      select.value = String(state.signSelections[body.key]);
+      select.disabled = !box.checked;
+      box.addEventListener('change', () => {
+        state.signEnabled[body.key] = box.checked;
+        select.disabled = !box.checked;
+        row.classList.toggle('is-off', !box.checked);
         saveChartConfig();
       });
-      label.append(span, select);
-      return label;
+      select.addEventListener('change', () => {
+        state.signSelections[body.key] = Number(select.value);
+        saveChartConfig();
+      });
+      label.append(box, glyph, name);
+      row.append(label, select);
+      return row;
     })
   );
+}
+
+function chartFromSelectedSigns() {
+  const chart = chartFromSigns(state.signSelections);
+  const mutedBodies = Object.fromEntries(
+    SOUNDING_BODIES
+      .filter((key) => state.signEnabled[key] === false)
+      .map((key) => [key, { enabled: false }])
+  );
+  return Object.keys(mutedBodies).length ? designChart(chart, mutedBodies) : chart;
 }
 
 // ---------------------------------------------------------------------------
@@ -538,7 +573,7 @@ function wireForms() {
 
   $('#signsForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const chart = chartFromSigns(state.signSelections);
+    const chart = chartFromSelectedSigns();
     setSubject(chart, makeChartDescriptor('signs', chart, 'primary'));
     saveChartConfig();
   });
@@ -587,7 +622,7 @@ function wireForms() {
       select.value = String(v);
       state.signSelections[select.dataset.body] = v;
     }
-    const chart = chartFromSigns(state.signSelections);
+    const chart = chartFromSelectedSigns();
     setSubject(chart, makeChartDescriptor('random-signs', chart, 'primary'));
     saveChartConfig();
   });
@@ -623,6 +658,7 @@ function saveChartConfig() {
       baseSource: state.baseSource,
       castKind: state.subjectDescriptor?.kind ?? state.savedCastKind,
       signSelections: state.signSelections,
+      signEnabled: state.signEnabled,
       birthForm: birthFormValues(),
     }));
   } catch { /* private mode and disabled storage still receive the first-load chord */ }

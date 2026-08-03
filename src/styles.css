@@ -854,10 +854,52 @@ button.ghost { margin-left: -1px; }
 button.ghost:hover { background: var(--hover); }
 
 .sign-pickers {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.8rem 1rem;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hairline);
 }
+
+.sign-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.34rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.sign-picker-switch {
+  display: flex;
+  flex: 1 1 8.5rem;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sign-picker-switch input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+.sign-picker-switch .g {
+  flex: 0 0 1.1rem;
+  font-family: var(--symbol);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.sign-picker-switch .nm { white-space: nowrap; }
+.sign-picker select { flex: 1 1 10rem; min-width: 0; }
+.sign-picker.is-off { opacity: 0.42; }
+.sign-picker.is-off select { text-decoration: line-through; }
 
 
 .balance {
@@ -1602,7 +1644,6 @@ kbd {
   }
 
   .field-row { gap: 0.55rem; }
-  .sign-pickers { grid-template-columns: 1fr; }
   .tabpanel > *:not(.table-wrap) { margin-left: 0.75rem; margin-right: 0.75rem; }
 }
 
