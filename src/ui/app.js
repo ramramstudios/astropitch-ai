@@ -155,6 +155,7 @@ const performer = new Performer(engine);
 let wheel;
 let starfield;
 let muted = false;
+let lastTransportMode = 'bloom';
 
 function applyVolume() {
   engine.setVolume(muted ? 0 : Number($('#volume').value));
@@ -168,6 +169,14 @@ function setMuted(next) {
   toggle.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
   toggle.title = muted ? 'Unmute' : 'Mute';
   applyVolume();
+}
+
+function playLastTransportMode() {
+  ({
+    bloom: () => performer.bloom(),
+    sequence: () => performer.sequence(),
+    drone: () => performer.drone(),
+  }[lastTransportMode] ?? (() => performer.bloom()))();
 }
 
 function boot() {
@@ -1060,7 +1069,7 @@ function wireKeyboard() {
     if (e.key === ' ') {
       e.preventDefault();
       if (performer.mode) performer.stop();
-      else performer.bloom();
+      else playLastTransportMode();
     } else if (e.key.toLowerCase() === 'b') performer.bloom();
     else if (e.key.toLowerCase() === 's') performer.sequence();
     else if (e.key.toLowerCase() === 'd') performer.drone();
@@ -1623,6 +1632,7 @@ function onPerformerEvent(event) {
     const b = state.chart?.byKey?.[event.aspect.b];
     wheel.setScopeTone([a?.element, b?.element]);
   } else if (event.type === 'start') {
+    lastTransportMode = event.mode;
     setActiveTransportMode(event.mode);
   } else if (event.type === 'stop' || event.type === 'end') {
     setActiveTransportMode();
