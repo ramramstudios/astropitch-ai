@@ -1034,8 +1034,7 @@ table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none);
 
 .transport-main { display: flex; align-items: stretch; }
 
-button.play,
-button.stop {
+button.play {
   appearance: none;
   min-width: 9.4rem;
   padding: 0.7rem 1.2rem;
@@ -1103,8 +1102,7 @@ button.play {
 }
 
 button.play:first-child { border-left: 1px solid var(--transport-divider); }
-button.play:hover,
-button.stop:not(:disabled):hover { background: var(--transport-hover); }
+button.play:hover { background: var(--transport-hover); }
 
 button.play.is-active {
   background: var(--transport-fg);
@@ -1135,21 +1133,6 @@ button.play.is-active {
   opacity: 0.62;
 }
 
-button.stop {
-  width: var(--transport-h);
-  min-width: var(--transport-h);
-  height: var(--transport-h);
-  padding: 0;
-  display: grid;
-  place-items: center;
-  font-family: var(--mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-button.stop:disabled { cursor: default; opacity: 0.28; }
-
 .volume {
   display: flex;
   width: clamp(110px, 14vw, 190px);
@@ -1158,6 +1141,27 @@ button.stop:disabled { cursor: default; opacity: 0.28; }
   padding: 0 1.25rem;
   color: var(--transport-fg);
 }
+
+.volume-toggle {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  flex: none;
+  place-items: center;
+  appearance: none;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.volume-toggle:hover { background: var(--transport-hover); }
+.volume-toggle:focus-visible { outline: 1px solid var(--transport-fg); outline-offset: 2px; }
+.volume-mute-mark { display: none; }
+.volume-toggle.is-muted .volume-wave { display: none; }
+.volume-toggle.is-muted .volume-mute-mark { display: block; }
 
 .volume input[type="range"]::-webkit-slider-runnable-track { background: var(--transport-fg); }
 .volume input[type="range"]::-moz-range-track { background: var(--transport-fg); }
@@ -1562,17 +1566,15 @@ kbd {
     /* Keep every transport action in the grid. The hide button used to be
        absolutely positioned here, which made the final grid column empty and
        allowed controls to collide at narrow widths. */
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   button.play,
-  button.stop,
   .transport-hide {
     min-width: 0;
     padding: 0.55rem 0.35rem;
   }
 
-  button.stop,
   .transport-hide {
     width: auto;
     height: auto;

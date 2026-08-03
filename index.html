@@ -290,26 +290,31 @@
 
   <footer class="transport" id="transportBar">
     <div class="transport-main">
-      <button class="play" id="bloomBtn" title="The chart assembles itself into one chord">
+      <button class="play" id="bloomBtn" aria-pressed="false" title="The chart assembles itself into one chord. Click again to stop.">
         <span class="play-name">Bloom</span>
         <span class="play-sub">chart as chord</span>
       </button>
-      <button class="play" id="sequenceBtn" title="Walk the zodiac from the Ascendant">
+      <button class="play" id="sequenceBtn" aria-pressed="false" title="Walk the zodiac from the Ascendant. Click again to stop.">
         <span class="play-name">Sequence</span>
         <span class="play-sub">walk the wheel</span>
       </button>
-      <button class="play" id="droneBtn" title="Generative sustain driven by your aspects">
+      <button class="play" id="droneBtn" aria-pressed="false" title="Generative sustain driven by your aspects. Click again to stop.">
         <span class="play-name">Drone</span>
         <span class="play-sub">generative</span>
       </button>
-      <button class="stop" id="stopBtn" disabled>Stop</button>
       <button class="transport-hide" id="transportHide" aria-controls="transportBar" aria-expanded="true" title="Hide the player">Hide</button>
     </div>
-    <label class="volume">
-      <span class="sr-only">Volume</span>
-      <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor"/></svg>
+    <div class="volume">
+      <button class="volume-toggle" id="volumeToggle" type="button" aria-pressed="false" aria-label="Mute" title="Mute">
+        <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+          <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>
+          <path class="volume-wave" d="M16.5 12a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor"/>
+          <path class="volume-mute-mark" d="m16 9 5 6m0-6-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <label class="sr-only" for="volume">Volume</label>
       <input type="range" id="volume" min="0" max="1" step="0.01" value="0.75">
-    </label>
+    </div>
   </footer>
   <button class="transport-rail" id="transportShow" aria-controls="transportBar" aria-expanded="false" title="Show the player">
     <span aria-hidden="true">↑</span>

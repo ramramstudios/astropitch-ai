@@ -154,6 +154,21 @@ const state = {
 const performer = new Performer(engine);
 let wheel;
 let starfield;
+let muted = false;
+
+function applyVolume() {
+  engine.setVolume(muted ? 0 : Number($('#volume').value));
+}
+
+function setMuted(next) {
+  muted = next;
+  const toggle = $('#volumeToggle');
+  toggle.classList.toggle('is-muted', muted);
+  toggle.setAttribute('aria-pressed', String(muted));
+  toggle.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
+  toggle.title = muted ? 'Unmute' : 'Mute';
+  applyVolume();
+}
 
 function boot() {
   wheel = new Wheel($('#wheelHolder'));
@@ -721,9 +736,12 @@ function wireSoundControls() {
     $('#tempoOut').textContent = String(v);
   });
 
-  $('#volume').addEventListener('input', (e) => {
-    engine.setVolume(Number(e.target.value));
+  $('#volume').addEventListener('input', () => {
+    // Moving the slider is an explicit choice to hear the selected level.
+    if (muted) setMuted(false);
+    else applyVolume();
   });
+  $('#volumeToggle').addEventListener('click', () => setMuted(!muted));
 }
 
 function wireTransport() {
@@ -732,14 +750,42 @@ function wireTransport() {
     '#sequenceBtn': () => performer.sequence(),
     '#droneBtn': () => performer.drone(),
   };
+  let requestedMode = null;
+
+  // Keep this in step with keyboard shortcuts and transport passes that end on
+  // their own, not just clicks in the play bar.
+  performer.onEvent((event) => {
+    if (event.type === 'start') requestedMode = event.mode;
+    else if (event.type === 'stop' || event.type === 'end') requestedMode = null;
+  });
+
   for (const [sel, fn] of Object.entries(modes)) {
+    const mode = sel.slice(1).replace('Btn', '');
     $(sel).addEventListener('click', async () => {
+      if (requestedMode === mode || performer.mode === mode) {
+        requestedMode = null;
+        performer.stop();
+        return;
+      }
+
+      // Highlight first: a mode only starts in response to its visible toggle,
+      // and a later click can cancel this request while Web Audio is waking.
+      requestedMode = mode;
+      setActiveTransportMode(mode);
       await engine.start();
-      engine.setVolume(Number($('#volume').value));
-      fn();
+      if (requestedMode !== mode) return;
+      applyVolume();
+      await fn();
     });
   }
-  $('#stopBtn').addEventListener('click', () => performer.stop());
+}
+
+function setActiveTransportMode(mode = null) {
+  for (const [sel, name] of [['#bloomBtn', 'bloom'], ['#sequenceBtn', 'sequence'], ['#droneBtn', 'drone']]) {
+    const active = name === mode;
+    $(sel).classList.toggle('is-active', active);
+    $(sel).setAttribute('aria-pressed', String(active));
+  }
 }
 
 function wireWheel() {
@@ -1577,13 +1623,9 @@ function onPerformerEvent(event) {
     const b = state.chart?.byKey?.[event.aspect.b];
     wheel.setScopeTone([a?.element, b?.element]);
   } else if (event.type === 'start') {
-    $('#stopBtn').disabled = false;
-    for (const [sel, mode] of [['#bloomBtn', 'bloom'], ['#sequenceBtn', 'sequence'], ['#droneBtn', 'drone']]) {
-      $(sel).classList.toggle('is-active', mode === event.mode);
-    }
+    setActiveTransportMode(event.mode);
   } else if (event.type === 'stop' || event.type === 'end') {
-    $('#stopBtn').disabled = true;
-    for (const sel of ['#bloomBtn', '#sequenceBtn', '#droneBtn']) $(sel).classList.remove('is-active');
+    setActiveTransportMode();
   }
 }
 

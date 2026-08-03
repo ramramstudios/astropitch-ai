@@ -58,6 +58,16 @@ export class Performer {
     this.timers.push(setTimeout(() => this._emit(event), delay));
   }
 
+  /** End a finite transport pass before telling the UI that it has ended. */
+  _endAt(mode, time) {
+    const delay = Math.max(0, (time - this.engine.now) * 1000);
+    this.timers.push(setTimeout(() => {
+      if (this.mode !== mode) return;
+      this.mode = null;
+      this._emit({ type: 'end' });
+    }, delay));
+  }
+
   setChart(chart) {
     this.chart = chart;
     this._choked.clear();
@@ -334,8 +344,7 @@ export class Performer {
 
     const hold = t + 3.4;
     for (const v of voices) v.release(hold);
-    this._emitAt({ type: 'end' }, hold + 2.4);
-    this.timers.push(setTimeout(() => { if (this.mode === 'bloom') this.mode = null; }, (hold + 2.4 - this.engine.now) * 1000));
+    this._endAt('bloom', hold + 2.4);
   }
 
   /**
@@ -367,8 +376,7 @@ export class Performer {
       this._voiceFor(asc, { time: t + 0.2, duration: 3.0, gainMul: 1.5, octaveShift: 1 });
       this._emitAt({ type: 'note', key: asc.key }, t + 0.2);
     }
-    this._emitAt({ type: 'end' }, t + 4.0);
-    this.timers.push(setTimeout(() => { if (this.mode === 'sequence') this.mode = null; }, (t + 4.0 - this.engine.now) * 1000));
+    this._endAt('sequence', t + 4.0);
   }
 
   /**
@@ -450,12 +458,14 @@ export class Performer {
 
   async _begin(mode) {
     await this.engine.start();
-    this.stop({ fade: 0.4 });
+    // Replacing one transport mode with another should leave the new button
+    // active throughout the handoff; the public stop action still notifies UI.
+    this.stop({ fade: 0.4, emit: false });
     this.mode = mode;
     this._emit({ type: 'start', mode });
   }
 
-  stop({ fade = 0.35 } = {}) {
+  stop({ fade = 0.35, emit = true } = {}) {
     this.mode = null;
     // A preview can still be awaiting AudioContext startup. Clearing this
     // token prevents it from creating a voice after a drop, Escape, or redraw.
@@ -473,6 +483,6 @@ export class Performer {
     }
     this.active.length = 0;
     this._choked.clear();
-    this._emit({ type: 'stop' });
+    if (emit) this._emit({ type: 'stop' });
   }
 }
