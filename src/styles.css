@@ -47,6 +47,10 @@
   --mono: "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, monospace;
   --symbol: "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", serif;
   --transport-h: 68px;
+  /* The transport bar's actual footprint once the home-indicator safe area
+     is added — everything that needs to clear it (the sheet, the wheel
+     panel) should measure against this, not the bare --transport-h. */
+  --transport-total-h: calc(var(--transport-h) + env(safe-area-inset-bottom));
   --rail-w: 46px;
   --column-gap: clamp(2rem, 5vw, 7rem);
 }
@@ -91,7 +95,12 @@ body {
   overflow-x: hidden;
 }
 
-body.is-transport-hidden .stage { padding-bottom: 1.5rem; }
+body.is-transport-hidden .stage { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+
+/* Where the mobile control sheet's fixed bottom edge sits — above the
+   transport bar normally, clear of the home indicator once it's hidden. */
+body { --sheet-bottom: var(--transport-total-h); }
+body.is-transport-hidden { --sheet-bottom: env(safe-area-inset-bottom); }
 
 button,
 input,
@@ -141,6 +150,11 @@ select:focus-visible,
   cursor: pointer;
 }
 
+/* At 11px tall this is well under a comfortable tap target; padding grows
+   the hit area around the same small link-styled text rather than enlarging
+   the text itself. */
+html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56rem; }
+
 /* The rail keeps its own column in both states, so the toggle never moves out
    from under the pointer when you use it. */
 .stage {
@@ -155,8 +169,13 @@ select:focus-visible,
   max-width: 1640px;
   margin: 0 auto;
   /* Just enough bottom room to scroll the readout clear of the fixed dock —
-     more than that is dead space you have to travel through. */
-  padding: clamp(1rem, 1.8vw, 1.75rem) clamp(1rem, 3.2vw, 3.5rem) calc(var(--transport-h) + 1.5rem);
+     more than that is dead space you have to travel through. The env()
+     terms are 0 on devices with no physical safe area, so this is the same
+     as before everywhere except a notch/home-indicator/rounded corner. */
+  padding-top: calc(clamp(1rem, 1.8vw, 1.75rem) + env(safe-area-inset-top));
+  padding-right: calc(clamp(1rem, 3.2vw, 3.5rem) + env(safe-area-inset-right));
+  padding-bottom: calc(var(--transport-total-h) + 1.5rem);
+  padding-left: calc(clamp(1rem, 3.2vw, 3.5rem) + env(safe-area-inset-left));
 }
 
 .stage.is-side-collapsed {
@@ -241,6 +260,11 @@ select:focus-visible,
   max-width: min(76vh, 800px);
   margin: clamp(1rem, 2vw, 2rem) auto;
   aspect-ratio: 1;
+  /* Contains the mobile pinch-zoomed .wheel-viewport, which can otherwise
+     paint (and be hit-tested) well outside this box and balloon the page's
+     scrollable area. The padded viewBox already keeps the ASC/MC/DSC/IC
+     labels inside this box at rest, so nothing is lost at the default scale. */
+  overflow: hidden;
 }
 
 /* Collapsing the panel is only worth doing if the wheel actually grows, so the
@@ -300,6 +324,17 @@ select:focus-visible,
     background: none;
   }
 }
+
+/* Wraps the svg and canvas so mobile pinch/pan can transform both as one
+   unit — see Wheel#_applyView in wheel.js. transform-origin is 0 0 to match
+   the translate/scale math there. */
+.wheel-viewport {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+.wheel-viewport.is-panning { cursor: grabbing; }
 
 .wheel-svg,
 .wheel-scope {
@@ -648,6 +683,8 @@ select:focus-visible,
   cursor: pointer;
 }
 
+html[data-mode="mobile"] .tab { padding-top: 1.1rem; padding-bottom: 1.1rem; }
+
 .tab:last-child { border-right: 0; }
 .tab:hover { background: var(--tab-hover); }
 
@@ -666,6 +703,67 @@ select:focus-visible,
 .tabpanel.is-active { display: block; }
 
 .tabpanel > *:not(.table-wrap) { margin-left: 1rem; margin-right: 1rem; }
+
+/* Drag handle for the mobile bottom sheet — hidden entirely on desktop,
+   where .side stays the sticky in-flow panel. */
+.sheet-handle {
+  display: none;
+  flex: none;
+  width: 100%;
+  /* Only visible on mobile (see the display:flex override below), so this
+     padding is sized for a thumb, not the 4px grip it visually shows —
+     ~44px total with the grip included. */
+  padding: 1.25rem 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.sheet-handle:active { cursor: grabbing; }
+
+.sheet-handle-grip {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto;
+  border-radius: 2px;
+  background: var(--wheel-rim-muted);
+}
+
+html[data-mode="mobile"] .stage {
+  /* Clears the transport bar plus the sheet's collapsed "peek" height, so
+     content at the bottom of the wheel panel is never hidden under either. */
+  padding-bottom: calc(var(--sheet-bottom) + 5.5rem);
+}
+
+/* The controls panel becomes a draggable bottom sheet — see wireSheet() in
+   app.js, which owns the live height (this rule's `height` is only the value
+   before JS measures and takes over). Higher specificity than the plain
+   `.side`/`.tabpanel` rules above (and the max-width:1040px stacking rules
+   below) so it wins regardless of source order. */
+html[data-mode="mobile"] .side {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: var(--sheet-bottom);
+  z-index: 5;
+  height: var(--sheet-peek-h, 76px);
+  max-height: none;
+  border: 0;
+  border-top: 1px solid var(--ink);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.18);
+  background: var(--panel-solid);
+  transition: height 220ms ease;
+}
+
+html[data-mode="mobile"] .side.is-sheet-dragging { transition: none; }
+
+html[data-mode="mobile"] .sheet-handle { display: flex; }
+
+html[data-mode="mobile"] .tabpanel { overflow-y: auto; }
 
 .panel-lede {
   margin-top: 0;
@@ -700,6 +798,8 @@ select:focus-visible,
 
 .seg-btn:last-child { border-right: 0; }
 .seg-btn.is-active { background: var(--ink); color: var(--on-ink); }
+
+html[data-mode="mobile"] .seg-btn { padding-top: 1.05rem; padding-bottom: 1.05rem; }
 
 
 .form {
@@ -737,6 +837,8 @@ select:focus-visible,
 .time-stepper button:first-child { margin-left: 0; }
 .time-stepper button:hover,
 .time-stepper button:focus-visible { background: var(--ink); color: var(--on-ink); outline: none; }
+
+html[data-mode="mobile"] .time-stepper button { width: 2.75rem; height: 2.75rem; }
 
 .field > span {
   color: var(--graphite);
@@ -852,6 +954,9 @@ button.primary {
 button.primary:hover { background: #333; }
 button.ghost { margin-left: -1px; }
 button.ghost:hover { background: var(--hover); }
+
+html[data-mode="mobile"] button.primary,
+html[data-mode="mobile"] button.ghost { min-height: 44px; padding-top: 0.75rem; padding-bottom: 0.75rem; }
 
 .sign-pickers {
   display: flex;
@@ -975,6 +1080,8 @@ table.data tbody tr { cursor: pointer; }
 table.data tbody tr:hover { background: var(--hover); }
 table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none); }
 
+html[data-mode="mobile"] table.data td { padding-top: 0.9rem; padding-bottom: 0.9rem; }
+
 @keyframes rowFlash {
   0% { background: var(--ink); color: var(--on-ink); }
   50% { background: var(--ink); color: var(--on-ink); }
@@ -1062,7 +1169,10 @@ table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none);
   left: 0;
   z-index: 10;
   display: flex;
-  height: var(--transport-h);
+  height: var(--transport-total-h);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   align-items: stretch;
   justify-content: center;
   border-top: 1px solid var(--transport-fg);
@@ -1208,6 +1318,11 @@ button.play.is-active {
   color: inherit;
   cursor: pointer;
 }
+
+/* 24px is under a comfortable tap size, but the transport's mobile .volume
+   row (below, under max-width:660px) is only 42px tall, so this goes as
+   large as that allows rather than the full 44px. */
+html[data-mode="mobile"] .volume-toggle { width: 2.5rem; height: 2.5rem; }
 
 .volume-toggle:hover { background: var(--transport-hover); }
 .volume-toggle:focus-visible { outline: 1px solid var(--transport-fg); outline-offset: 2px; }
@@ -1446,6 +1561,30 @@ kbd {
 
 .modal-card--settings { width: min(540px, 100%); }
 
+/* On mobile, About/Settings dock to the bottom edge like the controls sheet,
+   instead of floating as a centred desktop dialog — consistent with the rest
+   of the mobile layout, and it puts the close button in comfortable thumb
+   reach instead of up at a small target near the top corner. */
+html[data-mode="mobile"] .modal {
+  align-items: flex-end;
+  padding: 0;
+}
+
+html[data-mode="mobile"] .modal-card,
+html[data-mode="mobile"] .modal-card--settings {
+  width: 100%;
+  max-height: 86dvh;
+  padding: 1.5rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom));
+  border-width: 1px 0 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28);
+}
+
+html[data-mode="mobile"] .modal-close {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
 .settings-list { border-top: 1px solid var(--ink); }
 
 .settings-item {
@@ -1574,104 +1713,116 @@ kbd {
 }
 
 
-@media (max-width: 1040px) {
-  /* Stacked: the wheel already has the full width, so there is nothing to
-     collapse and the rail would only be in the way. */
-  .stage,
-  .stage.is-side-collapsed {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "wheel" "side";
-  }
+/* ---------------------------------------------------------------------------
+   Mobile mode — structural and chrome rules
+   ---------------------------------------------------------------------------
+   Everything below keys off data-mode, not viewport width, so the Settings
+   override ("preview the other layout") is authoritative: forcing mobile on
+   a wide desktop window gets the real mobile structure, and forcing desktop
+   on a phone gets the real desktop structure, rather than a hybrid of
+   whichever width-based rules happened to also match.
 
-  .side-rail { display: none; }
-  .stage.is-side-collapsed .side { display: flex; }
-  .wheel-panel { padding-left: 0; }
+   This used to be three separate width breakpoints (1040/660/430px) that
+   applied purely by viewport width, mode-agnostic. Two of those thresholds
+   (660, 430) sat entirely inside mode's own 760px auto-switch range, so
+   converting them changed nothing for auto-detected users — only for an
+   explicit override. The 1040px stacking breakpoint was wider than 760px
+   though, so it used to also give a genuine desktop-mode browser window a
+   graceful single-column fallback between 761–1040px. Folding it in here
+   too means that narrow-but-still-desktop-mode window now gets the full
+   (cramped) 3-column grid instead — a real tradeoff, but data-mode has no
+   way to tell "auto-detected desktop" apart from "explicitly forced
+   desktop" once set, and the override has to win in the latter case, or
+   forcing desktop on a phone doesn't actually show the desktop layout. */
 
-  .wheel-holder,
-  .stage.is-side-collapsed .wheel-holder { max-width: min(78vh, 720px); }
-  .side { position: static; max-height: none; }
-  .tabpanel { overflow-y: visible; }
+html[data-mode="mobile"] .stage,
+html[data-mode="mobile"] .stage.is-side-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "wheel" "side";
+  gap: 2.5rem;
+  padding-top: 1rem;
 }
 
-@media (max-width: 660px) {
-  :root { --transport-h: 100px; }
-
-  .stage { gap: 2.5rem; padding-top: 1rem; }
-  .wheel-kicker { font-size: 0.56rem; }
-  .wheel-holder { margin: 0.65rem auto 1.2rem; }
-  .angle-label { font-size: 18px; }
-  .sign-name { font-size: 12px; }
-  .sign-glyph { font-size: 24px; }
-  .planet-glyph { font-size: 31px; }
-  .house-number { font-size: 17px; }
-
-  .transport {
-    height: var(--transport-h);
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .transport-main {
-    display: grid;
-    width: 100%;
-    min-height: 46px;
-    /* Keep every transport action in the grid. The hide button used to be
-       absolutely positioned here, which made the final grid column empty and
-       allowed controls to collide at narrow widths. */
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .transport-brand {
-    position: static;
-    width: 100%;
-    height: 46px;
-    padding: 0.4rem;
-  }
-
-  button.play,
-  .transport-hide {
-    min-width: 0;
-    padding: 0.55rem 0.35rem;
-  }
-
-  .transport-hide {
-    width: auto;
-    height: auto;
-    padding: 0;
-  }
-
-  .transport-hide {
-    position: static;
-    display: grid;
-    place-items: center;
-  }
-
-  button.play {
-    min-height: 46px;
-    align-items: center;
-  }
-  .play-name { font-size: 0.88rem; }
-  .play-sub { display: none; }
-
-  .volume {
-    align-self: center;
-    width: min(280px, 86vw);
-    height: 42px;
-    padding: 0;
-  }
-
-  .field-row { gap: 0.55rem; }
-  .tabpanel > *:not(.table-wrap) { margin-left: 0.75rem; margin-right: 0.75rem; }
+html[data-mode="mobile"] .side-rail { display: none; }
+/* Same specificity fight as the width-based rule above: the collapsed-rail
+   desktop state (.stage.is-side-collapsed .side { display: none }, set
+   elsewhere) must not be able to hide the mobile sheet just because the
+   user happened to have collapsed the desktop sidebar in an earlier session. */
+html[data-mode="mobile"] .stage.is-side-collapsed .side { display: flex; }
+html[data-mode="mobile"] .wheel-panel { padding-left: 0; }
+html[data-mode="mobile"] .wheel-holder {
+  max-width: min(78vh, 720px);
+  margin: 0.65rem auto 1.2rem;
 }
 
-@media (max-width: 430px) {
-  .chart-help { font-size: 0.56rem; }
-  .tabs { overflow-x: auto; }
-  .tab { font-size: 0.55rem; }
-  .readout-title .rd-pitch { width: 100%; margin-left: 0; }
-  .field-row { flex-wrap: wrap; }
-  .field-row .field.narrow { flex: 1; }
+html[data-mode="mobile"] { --transport-h: 100px; }
+
+html[data-mode="mobile"] .wheel-kicker { font-size: 0.56rem; }
+html[data-mode="mobile"] .angle-label { font-size: 18px; }
+html[data-mode="mobile"] .sign-name { font-size: 12px; }
+html[data-mode="mobile"] .sign-glyph { font-size: 24px; }
+html[data-mode="mobile"] .planet-glyph { font-size: 31px; }
+html[data-mode="mobile"] .house-number { font-size: 17px; }
+
+html[data-mode="mobile"] .transport {
+  height: var(--transport-total-h);
+  flex-direction: column;
+  align-items: stretch;
 }
+
+html[data-mode="mobile"] .transport-main {
+  display: grid;
+  width: 100%;
+  min-height: 46px;
+  /* Keep every transport action in the grid. The hide button used to be
+     absolutely positioned here, which made the final grid column empty and
+     allowed controls to collide at narrow widths. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+html[data-mode="mobile"] .transport-brand {
+  position: static;
+  width: 100%;
+  height: 46px;
+  padding: 0.4rem;
+}
+
+html[data-mode="mobile"] button.play,
+html[data-mode="mobile"] .transport-hide {
+  min-width: 0;
+  padding: 0.55rem 0.35rem;
+}
+
+html[data-mode="mobile"] .transport-hide {
+  width: auto;
+  height: auto;
+  padding: 0;
+  position: static;
+  display: grid;
+  place-items: center;
+}
+
+html[data-mode="mobile"] button.play {
+  min-height: 46px;
+  align-items: center;
+}
+html[data-mode="mobile"] .play-name { font-size: 0.88rem; }
+html[data-mode="mobile"] .play-sub { display: none; }
+
+html[data-mode="mobile"] .volume {
+  align-self: center;
+  width: min(280px, 86vw);
+  height: 42px;
+  padding: 0;
+}
+
+html[data-mode="mobile"] .field-row { gap: 0.55rem; flex-wrap: wrap; }
+html[data-mode="mobile"] .field-row .field.narrow { flex: 1; }
+html[data-mode="mobile"] .tabpanel > *:not(.table-wrap) { margin-left: 0.75rem; margin-right: 0.75rem; }
+
+html[data-mode="mobile"] .tabs { overflow-x: auto; }
+html[data-mode="mobile"] .tab { font-size: 0.55rem; }
+html[data-mode="mobile"] .readout-title .rd-pitch { width: 100%; margin-left: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
@@ -1752,9 +1903,7 @@ tr.is-silent { opacity: 0.42; }
   letter-spacing: 0.04em;
 }
 
-@media (max-width: 430px) {
-  .verdict-title { font-size: 1.35rem; }
-}
+html[data-mode="mobile"] .verdict-title { font-size: 1.35rem; }
 
 
 /* ---------------------------------------------------------------------------
@@ -1785,8 +1934,11 @@ tr.is-silent { opacity: 0.42; }
    nearest CSS box — so the whole wheel has to give up single-finger panning
    while designing, or the first touch-move on a planet becomes a page scroll
    and cancels the drag. `pinch-zoom` rather than `none` keeps zooming, and the
-   page still scrolls from anywhere outside the wheel. */
-.wheel-svg.is-designing { touch-action: pinch-zoom; }
+   page still scrolls from anywhere outside the wheel. On mobile, `.is-zoomable`
+   takes over pinch/pan itself (see wheel.js), so it needs `none` regardless of
+   designer state, or the browser's native page zoom fights the JS-driven one. */
+.wheel-svg.is-designing:not(.is-zoomable) { touch-action: pinch-zoom; }
+.wheel-svg.is-zoomable { touch-action: none; }
 
 .planet.is-draggable { cursor: grab; }
 .planet.is-draggable:active,
@@ -1879,7 +2031,5 @@ tr.is-silent { opacity: 0.42; }
   .planet.is-held .planet-halo { transition: none; }
 }
 
-@media (max-width: 430px) {
-  .designer-row { font-size: 0.58rem; }
-  .designer-switch .nm { flex: 1; }
-}
+html[data-mode="mobile"] .designer-row { font-size: 0.58rem; }
+html[data-mode="mobile"] .designer-switch .nm { flex: 1; }

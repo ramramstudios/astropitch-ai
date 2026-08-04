@@ -66,6 +66,11 @@ const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
 const DESIGN_KEY = 'astropitch.design.v1';
 const DESIGN_VERSION = 1;
 const THEME_KEY = 'astropitch.theme';
+const MODE_KEY = 'astropitch.layoutMode';
+// Must match the inline bootstrap query in index.html, or the layout flashes
+// on load before this module takes over.
+const MODE_QUERY = '(max-width: 760px), (pointer: coarse)';
+const SHEET_KEY = 'astropitch.sheetState';
 const MICROTONES_KEY = 'astropitch.microtones';
 const PALETTE_KEY = 'astropitch.palette';
 const LOCK_BODIES_KEY = 'astropitch.designerLockBodies';
@@ -204,6 +209,7 @@ function boot() {
   buildLegends();
   buildAspectKey();
 
+  wireSheet();
   wireTabs();
   wireForms();
   wireDesigner();
@@ -214,7 +220,11 @@ function boot() {
   wireModal();
   wireSettings();
   wireSidebar();
+  // Transport visibility (is-transport-hidden) has to be settled before
+  // wireLayoutMode applies the initial mode, since the sheet's height
+  // calculations read that class.
   wireTransportVisibility();
+  wireLayoutMode();
   wireKeyboard();
   applySource(state.source);
 
@@ -581,6 +591,9 @@ function wireTabs() {
       panel.classList.toggle('is-active', panel.dataset.panel === tab.dataset.tab);
     }
     if (focus) tab.focus();
+    // A tab picked from the collapsed "peek" sheet would otherwise show
+    // nothing — its content is below the fold until the sheet opens further.
+    expandSheetIfPeeking();
   };
 
   for (const [i, tab] of tabs.entries()) {
@@ -1020,6 +1033,9 @@ function wireSettings() {
     toggle.setAttribute('aria-label', dark ? 'Use light mode' : 'Use dark mode');
     $('#themeLight').classList.toggle('is-active', !dark);
     $('#themeDark').classList.toggle('is-active', dark);
+    // Keeps an installed PWA's title-bar/status-bar tint matching the app's
+    // own theme toggle, not just the OS's light/dark preference.
+    $('#themeColorMeta').content = dark ? '#0b0b0b' : '#f4f4f2';
     if (persist) {
       try { localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light'); } catch { /* session-only preference */ }
     }
@@ -1103,6 +1119,170 @@ function usesMicrotones() {
 }
 
 // ---------------------------------------------------------------------------
+// Layout mode
+// ---------------------------------------------------------------------------
+
+/**
+ * Desktop and mobile get different layouts (see data-mode selectors in
+ * styles.css). The mode auto-follows the device via MODE_QUERY, set early by
+ * the inline bootstrap script in index.html to avoid a flash on load; the
+ * Settings switch lets it be overridden, e.g. to preview mobile on a desktop
+ * browser. Once a mode is chosen explicitly, auto-detection stops moving it.
+ */
+function wireLayoutMode() {
+  const toggle = $('#layoutMode');
+  const media = window.matchMedia(MODE_QUERY);
+
+  const applyMode = (mode) => {
+    document.documentElement.dataset.mode = mode;
+    const mobile = mode === 'mobile';
+    toggle.checked = mobile;
+    toggle.setAttribute('aria-label', mobile ? 'Use the desktop layout' : 'Use the mobile layout');
+    $('#layoutDesktop').classList.toggle('is-active', !mobile);
+    $('#layoutMobile').classList.toggle('is-active', mobile);
+    wheel.setInteractionMode(mode);
+    setSheetMode(mode);
+    syncSidebarMode(mode);
+    requestAnimationFrame(onResize);
+  };
+
+  applyMode(document.documentElement.dataset.mode === 'mobile' ? 'mobile' : 'desktop');
+
+  media.addEventListener('change', (e) => {
+    if (stored(MODE_KEY)) return;
+    applyMode(e.matches ? 'mobile' : 'desktop');
+  });
+
+  toggle.addEventListener('change', () => {
+    const mode = toggle.checked ? 'mobile' : 'desktop';
+    applyMode(mode);
+    stored(MODE_KEY, mode);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Bottom sheet (mobile)
+//
+// On mobile the tabbed controls panel (#sidePanel) becomes a draggable
+// bottom sheet with three snap heights instead of desktop's sticky in-flow
+// panel. The drag handle owns the gesture; a plain tap on it cycles states
+// as a discoverable alternative to dragging. Height is set directly (not via
+// a translateY trick) — simpler to reason about, and this DOM subtree is
+// light enough that the per-frame reflow during a drag is a non-issue.
+// ---------------------------------------------------------------------------
+
+const SHEET_STATES = ['peek', 'half', 'full'];
+
+/** A tap on the handle (no drag) cycles states as an alternative to dragging. */
+export function nextSheetState(current, states = SHEET_STATES) {
+  return states[(states.indexOf(current) + 1) % states.length];
+}
+
+/** After a drag, settle on whichever snap height the sheet ended up closest to. */
+export function nearestSheetState(heights, currentPx, states = SHEET_STATES) {
+  let nearest = states[0];
+  let best = Infinity;
+  for (const s of states) {
+    const d = Math.abs(heights[s] - currentPx);
+    if (d < best) { best = d; nearest = s; }
+  }
+  return nearest;
+}
+
+let setSheetMode = () => {};
+let expandSheetIfPeeking = () => {};
+
+function wireSheet() {
+  const sheet = $('#sidePanel');
+  const handle = $('#sheetHandle');
+  let mode = 'desktop';
+  let state = SHEET_STATES.includes(stored(SHEET_KEY)) ? stored(SHEET_KEY) : 'half';
+  let heights = { peek: 76, half: 0, full: 0 };
+  let drag = null;
+
+  const availableHeight = () => {
+    const hidden = document.body.classList.contains('is-transport-hidden');
+    const transportH = hidden ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--transport-h')) || 0;
+    return window.innerHeight - transportH;
+  };
+
+  const recomputeHeights = () => {
+    const avail = availableHeight();
+    const tabsH = sheet.querySelector('.tabs')?.getBoundingClientRect().height ?? 0;
+    const handleH = handle.getBoundingClientRect().height;
+    heights = {
+      peek: Math.round(Math.max(56, handleH + tabsH)),
+      half: Math.round(avail * 0.52),
+      full: Math.round(avail * 0.88),
+    };
+  };
+
+  const apply = (next, { persist = true } = {}) => {
+    state = next;
+    if (mode === 'mobile') sheet.style.height = `${heights[state]}px`;
+    handle.setAttribute('aria-label', `Resize the controls panel — currently ${state}`);
+    if (persist) stored(SHEET_KEY, state);
+  };
+
+  setSheetMode = (nextMode) => {
+    mode = nextMode;
+    if (mode === 'mobile') {
+      recomputeHeights();
+      apply(state, { persist: false });
+    } else {
+      sheet.style.height = '';
+      sheet.classList.remove('is-sheet-dragging');
+    }
+  };
+
+  expandSheetIfPeeking = () => {
+    if (mode === 'mobile' && state === 'peek') apply('half');
+  };
+
+  window.addEventListener('resize', () => {
+    if (mode !== 'mobile') return;
+    recomputeHeights();
+    apply(state, { persist: false });
+  });
+
+  handle.addEventListener('pointerdown', (e) => {
+    if (mode !== 'mobile') return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    drag = { pointerId: e.pointerId, startY: e.clientY, startHeight: sheet.getBoundingClientRect().height, moved: false };
+    handle.setPointerCapture(e.pointerId);
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const dy = e.clientY - drag.startY;
+    if (!drag.moved) {
+      if (Math.abs(dy) < 4) return;
+      drag.moved = true;
+      sheet.classList.add('is-sheet-dragging');
+    }
+    const next = Math.min(heights.full, Math.max(heights.peek, drag.startHeight - dy));
+    sheet.style.height = `${next}px`;
+  });
+
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const wasDrag = drag.moved;
+    drag = null;
+    sheet.classList.remove('is-sheet-dragging');
+    if (handle.hasPointerCapture?.(e.pointerId)) handle.releasePointerCapture(e.pointerId);
+
+    if (!wasDrag) {
+      apply(nextSheetState(state));
+      return;
+    }
+    apply(nearestSheetState(heights, sheet.getBoundingClientRect().height));
+  };
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+}
+
+// ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
 
@@ -1120,15 +1300,22 @@ function stored(key, value) {
 
 let collapseSide = () => {};
 let toggleTransport = () => {};
+let syncSidebarMode = () => {};
 
 function wireSidebar() {
   const stage = $('#stage');
   const toggle = $('#sideToggle');
   let collapsed = stored(SIDE_KEY) === '1';
+  let mode = 'desktop';
 
   const apply = (next) => {
     collapsed = next;
-    stage.classList.toggle('is-side-collapsed', collapsed);
+    // The collapse-rail toggle is a desktop-only control (hidden entirely in
+    // mobile mode's CSS), so the collapsed state it left behind from an
+    // earlier desktop session must not carry into mobile mode — otherwise a
+    // stored preference can end up hiding the mobile sheet outright via the
+    // desktop-only `.stage.is-side-collapsed .side { display: none }` rule.
+    stage.classList.toggle('is-side-collapsed', collapsed && mode !== 'mobile');
     toggle.setAttribute('aria-expanded', String(!collapsed));
     toggle.setAttribute('aria-label', collapsed ? 'Show the controls panel' : 'Hide the controls panel');
     toggle.title = collapsed ? 'Show the controls' : 'Hide the controls — wider wheel';
@@ -1140,6 +1327,11 @@ function wireSidebar() {
   collapseSide = () => {
     apply(!collapsed);
     stored(SIDE_KEY, collapsed ? '1' : '0');
+  };
+
+  syncSidebarMode = (nextMode) => {
+    mode = nextMode;
+    apply(collapsed);
   };
 
   toggle.addEventListener('click', collapseSide);
@@ -1781,4 +1973,8 @@ function loop(now = performance.now()) {
   requestAnimationFrame(loop);
 }
 
-boot();
+// Guarded so this module can be imported in Node (e.g. by tests, which
+// exercise a handful of exported pure functions) without trying to boot a
+// UI that has no document to attach to. No effect in a browser, where
+// document always exists.
+if (typeof document !== 'undefined') boot();

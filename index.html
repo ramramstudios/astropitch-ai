@@ -2,15 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>AstroPitch</title>
   <meta name="description" content="A natal chart synthesiser. Chromatic mode locks each sign to one note; Gliss mode lets exact degree set continuous pitch. House sets gesture and element sets timbre.">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" id="themeColorMeta" content="#f4f4f2">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AstroPitch">
   <script>
     try {
       if (localStorage.getItem('astropitch.theme') === 'dark') {
         document.documentElement.dataset.theme = 'dark';
+        document.getElementById('themeColorMeta').content = '#0b0b0b';
       }
-    } catch { /* The default light theme still works when storage is unavailable. */ }
+      // Keep this query string identical to MODE_QUERY in src/ui/app.js — a
+      // mismatch would flash the wrong layout before the module takes over.
+      var modeOverride = localStorage.getItem('astropitch.layoutMode');
+      var wantsMobile = modeOverride
+        ? modeOverride === 'mobile'
+        : window.matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+      document.documentElement.dataset.mode = wantsMobile ? 'mobile' : 'desktop';
+    } catch { /* The default desktop layout still works when storage is unavailable. */ }
   </script>
   <link rel="stylesheet" href="src/styles.css">
   <link rel="icon" type="image/png" href="favicon.png?v=8">
@@ -47,6 +61,9 @@
     </section>
 
     <aside class="side" id="sidePanel">
+      <button type="button" class="sheet-handle" id="sheetHandle" aria-label="Resize the controls panel">
+        <span class="sheet-handle-grip" aria-hidden="true"></span>
+      </button>
       <nav class="tabs" role="tablist" aria-label="Chart controls">
         <button type="button" role="tab" class="tab is-active" id="tab-chart" data-tab="chart" aria-selected="true" aria-controls="panel-chart">Chart</button>
         <button type="button" role="tab" class="tab" id="tab-placements" data-tab="placements" aria-selected="false" aria-controls="panel-placements" tabindex="-1">Placements</button>
@@ -485,6 +502,23 @@
         </div>
         <div class="settings-item">
           <div>
+            <h3>Layout</h3>
+            <p>Desktop and mobile use different layouts for the wheel and
+              controls. This follows your device automatically; use the
+              switch to preview the other one.</p>
+          </div>
+          <div class="setting-switch">
+            <span id="layoutDesktop" class="setting-switch__option is-active">Desktop</span>
+            <label class="theme-toggle">
+              <span class="sr-only">Use the mobile layout</span>
+              <input type="checkbox" id="layoutMode" role="switch" aria-label="Use the mobile layout">
+              <span aria-hidden="true"></span>
+            </label>
+            <span id="layoutMobile" class="setting-switch__option">Mobile</span>
+          </div>
+        </div>
+        <div class="settings-item">
+          <div>
             <h3>Pitch mode</h3>
             <p>Chromatic locks each sign to one note. Gliss lets pitch move
               continuously through each sign.</p>
@@ -533,5 +567,15 @@
   </div>
 
   <script type="module" src="src/ui/app.js"></script>
+  <script>
+    // Everything AstroPitch does is local computation, so the app shell
+    // works fully offline once cached — registered after load so it never
+    // competes with the page's own resources for bandwidth.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is a bonus, not a requirement */ });
+      });
+    }
+  </script>
 </body>
 </html>

@@ -1,0 +1,14 @@
+{
+  "name": "AstroPitch",
+  "short_name": "AstroPitch",
+  "description": "A natal chart synthesiser. Chromatic mode locks each sign to one note; Gliss mode lets exact degree set continuous pitch. House sets gesture and element sets timbre.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f4f4f2",
+  "theme_color": "#0b0b0b",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
