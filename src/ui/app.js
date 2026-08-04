@@ -70,6 +70,7 @@ const MODE_KEY = 'astropitch.layoutMode';
 // Must match the inline bootstrap query in index.html, or the layout flashes
 // on load before this module takes over.
 const MODE_QUERY = '(max-width: 760px), (pointer: coarse)';
+const SHEET_KEY = 'astropitch.sheetState';
 const MICROTONES_KEY = 'astropitch.microtones';
 const PALETTE_KEY = 'astropitch.palette';
 const LOCK_BODIES_KEY = 'astropitch.designerLockBodies';
@@ -208,6 +209,7 @@ function boot() {
   buildLegends();
   buildAspectKey();
 
+  wireSheet();
   wireTabs();
   wireForms();
   wireDesigner();
@@ -217,9 +219,12 @@ function boot() {
   wireWheel();
   wireModal();
   wireSettings();
-  wireLayoutMode();
   wireSidebar();
+  // Transport visibility (is-transport-hidden) has to be settled before
+  // wireLayoutMode applies the initial mode, since the sheet's height
+  // calculations read that class.
   wireTransportVisibility();
+  wireLayoutMode();
   wireKeyboard();
   applySource(state.source);
 
@@ -586,6 +591,9 @@ function wireTabs() {
       panel.classList.toggle('is-active', panel.dataset.panel === tab.dataset.tab);
     }
     if (focus) tab.focus();
+    // A tab picked from the collapsed "peek" sheet would otherwise show
+    // nothing — its content is below the fold until the sheet opens further.
+    expandSheetIfPeeking();
   };
 
   for (const [i, tab] of tabs.entries()) {
@@ -1130,6 +1138,7 @@ function wireLayoutMode() {
     $('#layoutDesktop').classList.toggle('is-active', !mobile);
     $('#layoutMobile').classList.toggle('is-active', mobile);
     wheel.setInteractionMode(mode);
+    setSheetMode(mode);
     requestAnimationFrame(onResize);
   };
 
@@ -1145,6 +1154,119 @@ function wireLayoutMode() {
     applyMode(mode);
     stored(MODE_KEY, mode);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Bottom sheet (mobile)
+//
+// On mobile the tabbed controls panel (#sidePanel) becomes a draggable
+// bottom sheet with three snap heights instead of desktop's sticky in-flow
+// panel. The drag handle owns the gesture; a plain tap on it cycles states
+// as a discoverable alternative to dragging. Height is set directly (not via
+// a translateY trick) — simpler to reason about, and this DOM subtree is
+// light enough that the per-frame reflow during a drag is a non-issue.
+// ---------------------------------------------------------------------------
+
+const SHEET_STATES = ['peek', 'half', 'full'];
+
+let setSheetMode = () => {};
+let expandSheetIfPeeking = () => {};
+
+function wireSheet() {
+  const sheet = $('#sidePanel');
+  const handle = $('#sheetHandle');
+  let mode = 'desktop';
+  let state = SHEET_STATES.includes(stored(SHEET_KEY)) ? stored(SHEET_KEY) : 'half';
+  let heights = { peek: 76, half: 0, full: 0 };
+  let drag = null;
+
+  const availableHeight = () => {
+    const hidden = document.body.classList.contains('is-transport-hidden');
+    const transportH = hidden ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--transport-h')) || 0;
+    return window.innerHeight - transportH;
+  };
+
+  const recomputeHeights = () => {
+    const avail = availableHeight();
+    const tabsH = sheet.querySelector('.tabs')?.getBoundingClientRect().height ?? 0;
+    const handleH = handle.getBoundingClientRect().height;
+    heights = {
+      peek: Math.round(Math.max(56, handleH + tabsH)),
+      half: Math.round(avail * 0.52),
+      full: Math.round(avail * 0.88),
+    };
+  };
+
+  const apply = (next, { persist = true } = {}) => {
+    state = next;
+    if (mode === 'mobile') sheet.style.height = `${heights[state]}px`;
+    handle.setAttribute('aria-label', `Resize the controls panel — currently ${state}`);
+    if (persist) stored(SHEET_KEY, state);
+  };
+
+  setSheetMode = (nextMode) => {
+    mode = nextMode;
+    if (mode === 'mobile') {
+      recomputeHeights();
+      apply(state, { persist: false });
+    } else {
+      sheet.style.height = '';
+      sheet.classList.remove('is-sheet-dragging');
+    }
+  };
+
+  expandSheetIfPeeking = () => {
+    if (mode === 'mobile' && state === 'peek') apply('half');
+  };
+
+  window.addEventListener('resize', () => {
+    if (mode !== 'mobile') return;
+    recomputeHeights();
+    apply(state, { persist: false });
+  });
+
+  handle.addEventListener('pointerdown', (e) => {
+    if (mode !== 'mobile') return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    drag = { pointerId: e.pointerId, startY: e.clientY, startHeight: sheet.getBoundingClientRect().height, moved: false };
+    handle.setPointerCapture(e.pointerId);
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const dy = e.clientY - drag.startY;
+    if (!drag.moved) {
+      if (Math.abs(dy) < 4) return;
+      drag.moved = true;
+      sheet.classList.add('is-sheet-dragging');
+    }
+    const next = Math.min(heights.full, Math.max(heights.peek, drag.startHeight - dy));
+    sheet.style.height = `${next}px`;
+  });
+
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const wasDrag = drag.moved;
+    drag = null;
+    sheet.classList.remove('is-sheet-dragging');
+    if (handle.hasPointerCapture?.(e.pointerId)) handle.releasePointerCapture(e.pointerId);
+
+    if (!wasDrag) {
+      apply(SHEET_STATES[(SHEET_STATES.indexOf(state) + 1) % SHEET_STATES.length]);
+      return;
+    }
+    const current = sheet.getBoundingClientRect().height;
+    let nearest = state;
+    let best = Infinity;
+    for (const s of SHEET_STATES) {
+      const d = Math.abs(heights[s] - current);
+      if (d < best) { best = d; nearest = s; }
+    }
+    apply(nearest);
+  };
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
 }
 
 // ---------------------------------------------------------------------------

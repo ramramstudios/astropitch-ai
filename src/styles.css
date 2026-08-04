@@ -93,6 +93,11 @@ body {
 
 body.is-transport-hidden .stage { padding-bottom: 1.5rem; }
 
+/* Where the mobile control sheet's fixed bottom edge sits — above the
+   transport bar normally, flush with the viewport bottom once it's hidden. */
+body { --sheet-bottom: var(--transport-h); }
+body.is-transport-hidden { --sheet-bottom: 0px; }
+
 button,
 input,
 select { color: inherit; }
@@ -682,6 +687,64 @@ select:focus-visible,
 .tabpanel.is-active { display: block; }
 
 .tabpanel > *:not(.table-wrap) { margin-left: 1rem; margin-right: 1rem; }
+
+/* Drag handle for the mobile bottom sheet — hidden entirely on desktop,
+   where .side stays the sticky in-flow panel. */
+.sheet-handle {
+  display: none;
+  flex: none;
+  width: 100%;
+  padding: 0.65rem 0 0.4rem;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.sheet-handle:active { cursor: grabbing; }
+
+.sheet-handle-grip {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto;
+  border-radius: 2px;
+  background: var(--wheel-rim-muted);
+}
+
+html[data-mode="mobile"] .stage {
+  /* Clears the transport bar plus the sheet's collapsed "peek" height, so
+     content at the bottom of the wheel panel is never hidden under either. */
+  padding-bottom: calc(var(--sheet-bottom) + 5.5rem);
+}
+
+/* The controls panel becomes a draggable bottom sheet — see wireSheet() in
+   app.js, which owns the live height (this rule's `height` is only the value
+   before JS measures and takes over). Higher specificity than the plain
+   `.side`/`.tabpanel` rules above (and the max-width:1040px stacking rules
+   below) so it wins regardless of source order. */
+html[data-mode="mobile"] .side {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: var(--sheet-bottom);
+  z-index: 5;
+  height: var(--sheet-peek-h, 76px);
+  max-height: none;
+  border: 0;
+  border-top: 1px solid var(--ink);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.18);
+  background: var(--panel-solid);
+  transition: height 220ms ease;
+}
+
+html[data-mode="mobile"] .side.is-sheet-dragging { transition: none; }
+
+html[data-mode="mobile"] .sheet-handle { display: flex; }
+
+html[data-mode="mobile"] .tabpanel { overflow-y: auto; }
 
 .panel-lede {
   margin-top: 0;
@@ -1461,6 +1524,30 @@ kbd {
 .modal-close:hover { background: var(--ink); color: var(--on-ink); }
 
 .modal-card--settings { width: min(540px, 100%); }
+
+/* On mobile, About/Settings dock to the bottom edge like the controls sheet,
+   instead of floating as a centred desktop dialog — consistent with the rest
+   of the mobile layout, and it puts the close button in comfortable thumb
+   reach instead of up at a small target near the top corner. */
+html[data-mode="mobile"] .modal {
+  align-items: flex-end;
+  padding: 0;
+}
+
+html[data-mode="mobile"] .modal-card,
+html[data-mode="mobile"] .modal-card--settings {
+  width: 100%;
+  max-height: 86dvh;
+  padding: 1.5rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom));
+  border-width: 1px 0 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28);
+}
+
+html[data-mode="mobile"] .modal-close {
+  width: 2.75rem;
+  height: 2.75rem;
+}
 
 .settings-list { border-top: 1px solid var(--ink); }
 
