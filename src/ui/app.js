@@ -1033,6 +1033,9 @@ function wireSettings() {
     toggle.setAttribute('aria-label', dark ? 'Use light mode' : 'Use dark mode');
     $('#themeLight').classList.toggle('is-active', !dark);
     $('#themeDark').classList.toggle('is-active', dark);
+    // Keeps an installed PWA's title-bar/status-bar tint matching the app's
+    // own theme toggle, not just the OS's light/dark preference.
+    $('#themeColorMeta').content = dark ? '#0b0b0b' : '#f4f4f2';
     if (persist) {
       try { localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light'); } catch { /* session-only preference */ }
     }

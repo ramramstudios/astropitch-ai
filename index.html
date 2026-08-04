@@ -5,10 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>AstroPitch</title>
   <meta name="description" content="A natal chart synthesiser. Chromatic mode locks each sign to one note; Gliss mode lets exact degree set continuous pitch. House sets gesture and element sets timbre.">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" id="themeColorMeta" content="#f4f4f2">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AstroPitch">
   <script>
     try {
       if (localStorage.getItem('astropitch.theme') === 'dark') {
         document.documentElement.dataset.theme = 'dark';
+        document.getElementById('themeColorMeta').content = '#0b0b0b';
       }
       // Keep this query string identical to MODE_QUERY in src/ui/app.js — a
       // mismatch would flash the wrong layout before the module takes over.
@@ -560,5 +567,15 @@
   </div>
 
   <script type="module" src="src/ui/app.js"></script>
+  <script>
+    // Everything AstroPitch does is local computation, so the app shell
+    // works fully offline once cached — registered after load so it never
+    // competes with the page's own resources for bandwidth.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is a bonus, not a requirement */ });
+      });
+    }
+  </script>
 </body>
 </html>
