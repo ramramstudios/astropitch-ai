@@ -64,6 +64,16 @@ export class Wheel {
     this.rotationLock = null;
     this.scopePalette = [this._scopeColor('air')];
 
+    // Mobile-only pinch/pan state. Kept separate from `this.drag` (designer
+    // dragging a body) so the two gestures never fight over the same pointer.
+    this.interactionMode = 'desktop';
+    this.view = { scale: 1, x: 0, y: 0 };
+    this._pointers = new Map();
+    this._pan = null;
+    this._pinch = null;
+    this._viewFrame = 0;
+    this._lastEmptyTapAt = 0;
+
     this.svg = el('svg', {
       viewBox: `${VIEW_MIN} ${VIEW_MIN} ${VIEW_SIZE} ${VIEW_SIZE}`,
       class: 'wheel-svg',
@@ -81,8 +91,15 @@ export class Wheel {
     this.canvas.className = 'wheel-scope';
     this.ctx2d = this.canvas.getContext('2d');
 
-    container.appendChild(this.svg);
-    container.appendChild(this.canvas);
+    // The svg and canvas pan/zoom together as one unit on mobile, via a CSS
+    // transform on this wrapper. getScreenCTM() on the svg composites that
+    // ancestor transform automatically, so every existing hit-test (signs,
+    // planets, designer dragging) keeps working with no coordinate changes.
+    this.viewport = document.createElement('div');
+    this.viewport.className = 'wheel-viewport';
+    this.viewport.appendChild(this.svg);
+    this.viewport.appendChild(this.canvas);
+    container.appendChild(this.viewport);
 
     // The pointer is captured by the SVG root rather than the marker, because
     // the marker is destroyed and rebuilt on every frame of the drag.
@@ -90,10 +107,23 @@ export class Wheel {
     this.svg.addEventListener('pointerup', (e) => this._onPointerUp(e));
     this.svg.addEventListener('pointercancel', () => this._cancelDrag());
     this.svg.addEventListener('lostpointercapture', () => this._cancelDrag());
+    this.svg.addEventListener('pointerdown', (e) => this._onViewPointerDown(e));
+    this.svg.addEventListener('pointermove', (e) => this._onViewPointerMove(e));
+    this.svg.addEventListener('pointerup', (e) => this._onViewPointerUp(e));
+    this.svg.addEventListener('pointercancel', (e) => this._onViewPointerUp(e));
     this.svg.addEventListener('click', (e) => {
       if (e.target === this.svg) {
         this.clearAspectFocus();
         this._emit('clearFocus');
+      }
+      // The hub ring is painted (var(--wheel-hub-fill)), so a tap there hits
+      // that circle, not the bare svg — it still reads as "empty" for the
+      // reset gesture even though it fails the stricter clearFocus check above.
+      if (this.interactionMode === 'mobile' && this.view.scale > 1.001
+        && (e.target === this.svg || e.target.closest('.layer-rings'))) {
+        const now = performance.now();
+        if (now - this._lastEmptyTapAt < 350) this._resetView();
+        this._lastEmptyTapAt = now;
       }
     });
     window.addEventListener('keydown', (e) => {
@@ -101,6 +131,142 @@ export class Wheel {
     });
 
     this._drawStaticRings();
+  }
+
+  /** Pinch-zoom and pan are mobile-only; desktop keeps its existing behaviour. */
+  setInteractionMode(mode) {
+    this.interactionMode = mode;
+    this.svg.classList.toggle('is-zoomable', mode === 'mobile');
+    if (mode !== 'mobile') this._resetView();
+  }
+
+  _resetView() {
+    this.view = { scale: 1, x: 0, y: 0 };
+    this._pointers.clear();
+    this._pan = null;
+    this._pinch = null;
+    this.viewport.classList.remove('is-zoomed', 'is-panning');
+    this._applyView();
+  }
+
+  _applyView() {
+    const { scale, x, y } = this.view;
+    this.viewport.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+  }
+
+  /** Content can be panned until its own edge reaches the container's edge, no further. */
+  _clampView() {
+    const size = this.container.getBoundingClientRect().width || 1;
+    const maxOffset = size * (this.view.scale - 1);
+    this.view.x = Math.min(0, Math.max(-maxOffset, this.view.x));
+    this.view.y = Math.min(0, Math.max(-maxOffset, this.view.y));
+  }
+
+  _setView(scale, x, y) {
+    const MIN_SCALE = 1;
+    const MAX_SCALE = 4;
+    this.view.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+    this.view.x = x;
+    this.view.y = y;
+    this._clampView();
+    this.viewport.classList.toggle('is-zoomed', this.view.scale > 1.001);
+    if (this._viewFrame) return;
+    this._viewFrame = requestAnimationFrame(() => {
+      this._viewFrame = 0;
+      this._applyView();
+    });
+  }
+
+  _onViewPointerDown(e) {
+    if (this.interactionMode !== 'mobile') return;
+    // A designer drag on a body or angle owns its pointer exclusively.
+    if (this.drag) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (this._pointers.size === 2) {
+      this._pan = null;
+      const [a, b] = this._pointers.values();
+      this._pinch = {
+        dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+        midX: (a.x + b.x) / 2,
+        midY: (a.y + b.y) / 2,
+      };
+    } else if (this._pointers.size === 1) {
+      // Could still be a tap on a sign, planet, or aspect — no pointer
+      // capture yet, so native click keeps working until this crosses the
+      // movement threshold in _onViewPointerMove below.
+      this._pan = {
+        pointerId: e.pointerId,
+        startX: e.clientX, startY: e.clientY,
+        lastX: e.clientX, lastY: e.clientY,
+        moved: false,
+      };
+    }
+  }
+
+  _onViewPointerMove(e) {
+    if (this.drag || !this._pointers.has(e.pointerId)) return;
+    this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (this._pinch && this._pointers.size >= 2) {
+      const [a, b] = this._pointers.values();
+      const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      // Keep the content point under the pinch's midpoint stationary as the
+      // scale changes, the same way a native pinch-to-zoom feels.
+      const localX = (this._pinch.midX - this.view.x) / this.view.scale;
+      const localY = (this._pinch.midY - this.view.y) / this.view.scale;
+      const scale = this.view.scale * (dist / this._pinch.dist);
+      this._setView(scale, midX - localX * scale, midY - localY * scale);
+      this._pinch = { dist, midX, midY };
+      return;
+    }
+
+    const pan = this._pan;
+    if (!pan || e.pointerId !== pan.pointerId) return;
+    if (!pan.moved) {
+      const travelled = Math.hypot(e.clientX - pan.startX, e.clientY - pan.startY);
+      if (travelled < 6) return;
+      pan.moved = true;
+      this.svg.setPointerCapture(e.pointerId);
+      this.viewport.classList.add('is-panning');
+    }
+    const dx = e.clientX - pan.lastX;
+    const dy = e.clientY - pan.lastY;
+    pan.lastX = e.clientX;
+    pan.lastY = e.clientY;
+    this._setView(this.view.scale, this.view.x + dx, this.view.y + dy);
+  }
+
+  _onViewPointerUp(e) {
+    if (!this._pointers.has(e.pointerId)) return;
+    const wasPinching = this._pointers.size >= 2;
+    this._pointers.delete(e.pointerId);
+
+    if (wasPinching && this._pointers.size === 1) {
+      // One finger of a pinch lifted — keep panning with the finger still down.
+      this._pinch = null;
+      const [[remainingId, remainingPos]] = this._pointers;
+      this._pan = {
+        pointerId: remainingId,
+        startX: remainingPos.x, startY: remainingPos.y,
+        lastX: remainingPos.x, lastY: remainingPos.y,
+        moved: true,
+      };
+      this.svg.setPointerCapture(remainingId);
+      return;
+    }
+
+    if (this._pointers.size === 0) {
+      this._pinch = null;
+      if (this._pan?.moved) {
+        if (this.svg.hasPointerCapture?.(this._pan.pointerId)) this.svg.releasePointerCapture(this._pan.pointerId);
+        this.viewport.classList.remove('is-panning');
+      }
+      this._pan = null;
+    }
   }
 
   on(event, fn) {

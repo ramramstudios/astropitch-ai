@@ -1129,6 +1129,7 @@ function wireLayoutMode() {
     toggle.setAttribute('aria-label', mobile ? 'Use the desktop layout' : 'Use the mobile layout');
     $('#layoutDesktop').classList.toggle('is-active', !mobile);
     $('#layoutMobile').classList.toggle('is-active', mobile);
+    wheel.setInteractionMode(mode);
     requestAnimationFrame(onResize);
   };
 

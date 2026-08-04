@@ -241,6 +241,11 @@ select:focus-visible,
   max-width: min(76vh, 800px);
   margin: clamp(1rem, 2vw, 2rem) auto;
   aspect-ratio: 1;
+  /* Contains the mobile pinch-zoomed .wheel-viewport, which can otherwise
+     paint (and be hit-tested) well outside this box and balloon the page's
+     scrollable area. The padded viewBox already keeps the ASC/MC/DSC/IC
+     labels inside this box at rest, so nothing is lost at the default scale. */
+  overflow: hidden;
 }
 
 /* Collapsing the panel is only worth doing if the wheel actually grows, so the
@@ -300,6 +305,17 @@ select:focus-visible,
     background: none;
   }
 }
+
+/* Wraps the svg and canvas so mobile pinch/pan can transform both as one
+   unit — see Wheel#_applyView in wheel.js. transform-origin is 0 0 to match
+   the translate/scale math there. */
+.wheel-viewport {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+.wheel-viewport.is-panning { cursor: grabbing; }
 
 .wheel-svg,
 .wheel-scope {
@@ -1785,8 +1801,11 @@ tr.is-silent { opacity: 0.42; }
    nearest CSS box — so the whole wheel has to give up single-finger panning
    while designing, or the first touch-move on a planet becomes a page scroll
    and cancels the drag. `pinch-zoom` rather than `none` keeps zooming, and the
-   page still scrolls from anywhere outside the wheel. */
-.wheel-svg.is-designing { touch-action: pinch-zoom; }
+   page still scrolls from anywhere outside the wheel. On mobile, `.is-zoomable`
+   takes over pinch/pan itself (see wheel.js), so it needs `none` regardless of
+   designer state, or the browser's native page zoom fights the JS-driven one. */
+.wheel-svg.is-designing:not(.is-zoomable) { touch-action: pinch-zoom; }
+.wheel-svg.is-zoomable { touch-action: none; }
 
 .planet.is-draggable { cursor: grab; }
 .planet.is-draggable:active,
