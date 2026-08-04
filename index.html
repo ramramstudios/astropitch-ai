@@ -10,7 +10,14 @@
       if (localStorage.getItem('astropitch.theme') === 'dark') {
         document.documentElement.dataset.theme = 'dark';
       }
-    } catch { /* The default light theme still works when storage is unavailable. */ }
+      // Keep this query string identical to MODE_QUERY in src/ui/app.js — a
+      // mismatch would flash the wrong layout before the module takes over.
+      var modeOverride = localStorage.getItem('astropitch.layoutMode');
+      var wantsMobile = modeOverride
+        ? modeOverride === 'mobile'
+        : window.matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+      document.documentElement.dataset.mode = wantsMobile ? 'mobile' : 'desktop';
+    } catch { /* The default desktop layout still works when storage is unavailable. */ }
   </script>
   <link rel="stylesheet" href="src/styles.css">
   <link rel="icon" type="image/png" href="favicon.png?v=8">
@@ -481,6 +488,23 @@
               <span aria-hidden="true"></span>
             </label>
             <span id="themeDark" class="setting-switch__option">Dark</span>
+          </div>
+        </div>
+        <div class="settings-item">
+          <div>
+            <h3>Layout</h3>
+            <p>Desktop and mobile use different layouts for the wheel and
+              controls. This follows your device automatically; use the
+              switch to preview the other one.</p>
+          </div>
+          <div class="setting-switch">
+            <span id="layoutDesktop" class="setting-switch__option is-active">Desktop</span>
+            <label class="theme-toggle">
+              <span class="sr-only">Use the mobile layout</span>
+              <input type="checkbox" id="layoutMode" role="switch" aria-label="Use the mobile layout">
+              <span aria-hidden="true"></span>
+            </label>
+            <span id="layoutMobile" class="setting-switch__option">Mobile</span>
           </div>
         </div>
         <div class="settings-item">

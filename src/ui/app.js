@@ -66,6 +66,10 @@ const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
 const DESIGN_KEY = 'astropitch.design.v1';
 const DESIGN_VERSION = 1;
 const THEME_KEY = 'astropitch.theme';
+const MODE_KEY = 'astropitch.layoutMode';
+// Must match the inline bootstrap query in index.html, or the layout flashes
+// on load before this module takes over.
+const MODE_QUERY = '(max-width: 760px), (pointer: coarse)';
 const MICROTONES_KEY = 'astropitch.microtones';
 const PALETTE_KEY = 'astropitch.palette';
 const LOCK_BODIES_KEY = 'astropitch.designerLockBodies';
@@ -213,6 +217,7 @@ function boot() {
   wireWheel();
   wireModal();
   wireSettings();
+  wireLayoutMode();
   wireSidebar();
   wireTransportVisibility();
   wireKeyboard();
@@ -1100,6 +1105,45 @@ function wireSettings() {
 
 function usesMicrotones() {
   return state.tuning.temperament === 'equal' && state.tuning.microtones;
+}
+
+// ---------------------------------------------------------------------------
+// Layout mode
+// ---------------------------------------------------------------------------
+
+/**
+ * Desktop and mobile get different layouts (see data-mode selectors in
+ * styles.css). The mode auto-follows the device via MODE_QUERY, set early by
+ * the inline bootstrap script in index.html to avoid a flash on load; the
+ * Settings switch lets it be overridden, e.g. to preview mobile on a desktop
+ * browser. Once a mode is chosen explicitly, auto-detection stops moving it.
+ */
+function wireLayoutMode() {
+  const toggle = $('#layoutMode');
+  const media = window.matchMedia(MODE_QUERY);
+
+  const applyMode = (mode) => {
+    document.documentElement.dataset.mode = mode;
+    const mobile = mode === 'mobile';
+    toggle.checked = mobile;
+    toggle.setAttribute('aria-label', mobile ? 'Use the desktop layout' : 'Use the mobile layout');
+    $('#layoutDesktop').classList.toggle('is-active', !mobile);
+    $('#layoutMobile').classList.toggle('is-active', mobile);
+    requestAnimationFrame(onResize);
+  };
+
+  applyMode(document.documentElement.dataset.mode === 'mobile' ? 'mobile' : 'desktop');
+
+  media.addEventListener('change', (e) => {
+    if (stored(MODE_KEY)) return;
+    applyMode(e.matches ? 'mobile' : 'desktop');
+  });
+
+  toggle.addEventListener('change', () => {
+    const mode = toggle.checked ? 'mobile' : 'desktop';
+    applyMode(mode);
+    stored(MODE_KEY, mode);
+  });
 }
 
 // ---------------------------------------------------------------------------
