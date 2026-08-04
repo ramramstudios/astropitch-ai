@@ -47,6 +47,10 @@
   --mono: "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, monospace;
   --symbol: "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", serif;
   --transport-h: 68px;
+  /* The transport bar's actual footprint once the home-indicator safe area
+     is added — everything that needs to clear it (the sheet, the wheel
+     panel) should measure against this, not the bare --transport-h. */
+  --transport-total-h: calc(var(--transport-h) + env(safe-area-inset-bottom));
   --rail-w: 46px;
   --column-gap: clamp(2rem, 5vw, 7rem);
 }
@@ -91,12 +95,12 @@ body {
   overflow-x: hidden;
 }
 
-body.is-transport-hidden .stage { padding-bottom: 1.5rem; }
+body.is-transport-hidden .stage { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
 
 /* Where the mobile control sheet's fixed bottom edge sits — above the
-   transport bar normally, flush with the viewport bottom once it's hidden. */
-body { --sheet-bottom: var(--transport-h); }
-body.is-transport-hidden { --sheet-bottom: 0px; }
+   transport bar normally, clear of the home indicator once it's hidden. */
+body { --sheet-bottom: var(--transport-total-h); }
+body.is-transport-hidden { --sheet-bottom: env(safe-area-inset-bottom); }
 
 button,
 input,
@@ -146,6 +150,11 @@ select:focus-visible,
   cursor: pointer;
 }
 
+/* At 11px tall this is well under a comfortable tap target; padding grows
+   the hit area around the same small link-styled text rather than enlarging
+   the text itself. */
+html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; }
+
 /* The rail keeps its own column in both states, so the toggle never moves out
    from under the pointer when you use it. */
 .stage {
@@ -160,8 +169,13 @@ select:focus-visible,
   max-width: 1640px;
   margin: 0 auto;
   /* Just enough bottom room to scroll the readout clear of the fixed dock —
-     more than that is dead space you have to travel through. */
-  padding: clamp(1rem, 1.8vw, 1.75rem) clamp(1rem, 3.2vw, 3.5rem) calc(var(--transport-h) + 1.5rem);
+     more than that is dead space you have to travel through. The env()
+     terms are 0 on devices with no physical safe area, so this is the same
+     as before everywhere except a notch/home-indicator/rounded corner. */
+  padding-top: calc(clamp(1rem, 1.8vw, 1.75rem) + env(safe-area-inset-top));
+  padding-right: calc(clamp(1rem, 3.2vw, 3.5rem) + env(safe-area-inset-right));
+  padding-bottom: calc(var(--transport-total-h) + 1.5rem);
+  padding-left: calc(clamp(1rem, 3.2vw, 3.5rem) + env(safe-area-inset-left));
 }
 
 .stage.is-side-collapsed {
@@ -669,6 +683,8 @@ select:focus-visible,
   cursor: pointer;
 }
 
+html[data-mode="mobile"] .tab { padding-top: 1.1rem; padding-bottom: 1.1rem; }
+
 .tab:last-child { border-right: 0; }
 .tab:hover { background: var(--tab-hover); }
 
@@ -694,7 +710,10 @@ select:focus-visible,
   display: none;
   flex: none;
   width: 100%;
-  padding: 0.65rem 0 0.4rem;
+  /* Only visible on mobile (see the display:flex override below), so this
+     padding is sized for a thumb, not the 4px grip it visually shows —
+     ~44px total with the grip included. */
+  padding: 1.25rem 0;
   border: 0;
   background: transparent;
   cursor: grab;
@@ -780,6 +799,8 @@ html[data-mode="mobile"] .tabpanel { overflow-y: auto; }
 .seg-btn:last-child { border-right: 0; }
 .seg-btn.is-active { background: var(--ink); color: var(--on-ink); }
 
+html[data-mode="mobile"] .seg-btn { padding-top: 1.05rem; padding-bottom: 1.05rem; }
+
 
 .form {
   display: flex;
@@ -816,6 +837,8 @@ html[data-mode="mobile"] .tabpanel { overflow-y: auto; }
 .time-stepper button:first-child { margin-left: 0; }
 .time-stepper button:hover,
 .time-stepper button:focus-visible { background: var(--ink); color: var(--on-ink); outline: none; }
+
+html[data-mode="mobile"] .time-stepper button { width: 2.75rem; height: 2.75rem; }
 
 .field > span {
   color: var(--graphite);
@@ -931,6 +954,9 @@ button.primary {
 button.primary:hover { background: #333; }
 button.ghost { margin-left: -1px; }
 button.ghost:hover { background: var(--hover); }
+
+html[data-mode="mobile"] button.primary,
+html[data-mode="mobile"] button.ghost { min-height: 44px; padding-top: 0.75rem; padding-bottom: 0.75rem; }
 
 .sign-pickers {
   display: flex;
@@ -1054,6 +1080,8 @@ table.data tbody tr { cursor: pointer; }
 table.data tbody tr:hover { background: var(--hover); }
 table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none); }
 
+html[data-mode="mobile"] table.data td { padding-top: 0.9rem; padding-bottom: 0.9rem; }
+
 @keyframes rowFlash {
   0% { background: var(--ink); color: var(--on-ink); }
   50% { background: var(--ink); color: var(--on-ink); }
@@ -1141,7 +1169,10 @@ table.data tbody tr.is-sounding { animation: rowFlash 800ms steps(2, jump-none);
   left: 0;
   z-index: 10;
   display: flex;
-  height: var(--transport-h);
+  height: var(--transport-total-h);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   align-items: stretch;
   justify-content: center;
   border-top: 1px solid var(--transport-fg);
@@ -1287,6 +1318,11 @@ button.play.is-active {
   color: inherit;
   cursor: pointer;
 }
+
+/* 24px is under a comfortable tap size, but the transport's mobile .volume
+   row (below, under max-width:660px) is only 42px tall, so this goes as
+   large as that allows rather than the full 44px. */
+html[data-mode="mobile"] .volume-toggle { width: 2.5rem; height: 2.5rem; }
 
 .volume-toggle:hover { background: var(--transport-hover); }
 .volume-toggle:focus-visible { outline: 1px solid var(--transport-fg); outline-offset: 2px; }
