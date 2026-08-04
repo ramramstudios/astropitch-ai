@@ -1,7 +1,8 @@
 /**
  * Arrangement.
  *
- * A natal chart is up to eleven bodies scattered across a chromatic octave. Play
+ * A natal chart has ten planetary bodies scattered across a chromatic octave.
+ * ASC and MC can be added as optional voices. Play
  * them all at one pitch level and you get a tone cluster, which is honest but
  * unlistenable. Four things keep it musical:
  *
@@ -9,10 +10,13 @@
  *      Mercury one up),
  *      so a chromatic cluster in longitude is spread across four octave registers.
  *   2. Entry. Voices arrive in an order that means something, not all at once.
- *   3. Balance. The Sun, Moon and Ascendant are loud; the outer planets are
+ *   3. Balance. The Sun and Moon are loud; the outer planets are
  *      atmosphere. Low voices get trimmed because bass carries more energy.
  *   4. Space. Pan follows position on the wheel, so the chart's geometry is
  *      audible as a stereo image.
+ *
+ * TODO: Turn ASC/MC into an optional non-pitch effect (for example, a wah-like
+ *       filter or phase motion) instead of direct tonal voices.
  */
 
 import { buildVoiceSpec, Voice } from './voices.js';
@@ -177,13 +181,21 @@ export class Performer {
 
   _sounding() {
     if (!this.chart) return [];
-    return this.chart.placements.filter((p) => p.key !== 'mc' && !p.silent);
+    return this.chart.placements.filter((p) => !p.silent);
+  }
+
+  _placement(key) {
+    return this.chart?.byKey?.[key] ?? this.chart?.anglePoints?.[key] ?? null;
+  }
+
+  _direction(key) {
+    return this.chart?.anglePoints?.[key] ?? this._placement(key);
   }
 
   async playPlacement(key, { duration = 2.4 } = {}) {
     await this.engine.start();
-    const p = this.chart?.byKey?.[key];
-    if (!p) return;
+    const p = this._placement(key);
+    if (!p || p.silent) return;
     const t = this.engine.now + 0.02;
     const voice = this._voiceFor(p, { time: t, duration, gainMul: 1.5 });
     this._retrigger(`p:${key}`, voice);
@@ -201,7 +213,7 @@ export class Performer {
 
   /** Start a held, single-body audition for Designer dragging. */
   async beginDesignerPreview(key, longitude = null) {
-    const placement = this.chart?.byKey?.[key];
+    const placement = this._direction(key);
     if (!placement || placement.silent) return;
 
     // A moving body is its own audition. Stop an existing transport pass so
@@ -219,7 +231,7 @@ export class Performer {
     // The user may have released or switched modes while AudioContext resumed.
     if (this.designerPreview !== preview) return;
 
-    const current = this.chart?.byKey?.[key];
+    const current = this._direction(key);
     if (!current || current.silent) {
       this.designerPreview = null;
       return;
@@ -244,7 +256,7 @@ export class Performer {
   /** Retune the held Designer audition, changing its voice at a sign boundary. */
   updateDesignerPreview(key, next) {
     const preview = this.designerPreview;
-    const placement = typeof next === 'object' ? next : this.chart?.byKey?.[key];
+    const placement = typeof next === 'object' ? next : this._placement(key);
     const longitude = typeof next === 'object' ? next.longitude : next;
     if (!preview || preview.key !== key || !Number.isFinite(longitude)) return;
     preview.longitude = longitude;
@@ -306,8 +318,8 @@ export class Performer {
 
   async playAspect(aspect, { duration = 3.2 } = {}) {
     await this.engine.start();
-    const a = this.chart?.byKey?.[aspect.a];
-    const b = this.chart?.byKey?.[aspect.b];
+    const a = this._direction(aspect.a);
+    const b = this._direction(aspect.b);
     if (!a || !b) return;
     const t = this.engine.now + 0.02;
     // Same octave for both, otherwise the interval is not what you hear.
@@ -315,6 +327,38 @@ export class Performer {
     const voiceB = this._voiceFor(b, { time: t + 0.06, duration, gainMul: 1.3, octaveShift: -b.octave });
     this._retrigger(`a:${aspect.a}:${aspect.b}`, [voiceA, voiceB]);
     this._emit({ type: 'aspect', aspect, time: t });
+  }
+
+  /**
+   * Audition every contact attached to one directional handle. The selected
+   * transport shapes their arrival, while each contact still keeps its own
+   * interval rather than becoming a generic chord.
+   */
+  async playDirectionalAspects(aspects, { mode = 'bloom' } = {}) {
+    if (!aspects.length) return;
+    await this._begin(mode);
+    const ordered = aspects.slice().sort(mode === 'sequence'
+      ? (a, b) => this._direction(a.b).longitude - this._direction(b.b).longitude
+      : (a, b) => b.exactness - a.exactness);
+    const start = this.engine.now + 0.08;
+    const step = mode === 'sequence' ? 1.05 : mode === 'drone' ? 0.18 : 0.58;
+    const duration = mode === 'drone' ? 7.5 : mode === 'sequence' ? 1.25 : 3.4;
+    let t = start;
+    const voices = [];
+    for (const aspect of ordered) {
+      const a = this._direction(aspect.a);
+      const b = this._direction(aspect.b);
+      if (!a || !b) continue;
+      voices.push(
+        this._voiceFor(a, { time: t, duration, gainMul: 0.72, octaveShift: -a.octave }),
+        this._voiceFor(b, { time: t + 0.06, duration, gainMul: 0.72, octaveShift: -b.octave })
+      );
+      this._emitAt({ type: 'aspect', aspect }, t);
+      t += step;
+    }
+    const release = t + duration;
+    for (const voice of voices) voice.release(release);
+    this._endAt(mode, release + 0.4);
   }
 
   /**
@@ -328,13 +372,13 @@ export class Performer {
    */
   async bloom() {
     await this._begin('bloom');
-    const ORDER = ['sun', 'mercury', 'venus', 'moon', 'asc', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
+    const ORDER = ['sun', 'mercury', 'venus', 'moon', 'asc', 'mc', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
     const placements = this._sounding();
     const detunes = this._detuneMap(placements);
 
     // The Sun arrives at once; the inner planets move quickly, then the
     // personal threshold and slower bodies have room to settle underneath.
-    const gaps = { sun: 0, mercury: 0.75, venus: 0.55, moon: 0.95, asc: 0.7, mars: 0.55, jupiter: 0.6, saturn: 0.7, uranus: 0.55, neptune: 0.7, pluto: 0.8 };
+    const gaps = { sun: 0, mercury: 0.75, venus: 0.55, moon: 0.95, asc: 0.7, mc: 0.35, mars: 0.55, jupiter: 0.6, saturn: 0.7, uranus: 0.55, neptune: 0.7, pluto: 0.8 };
 
     const baseOf = (p) => p.baseKey ?? p.key;
     const ordered = placements
@@ -387,7 +431,7 @@ export class Performer {
 
     // Land on the Ascendant an octave up, to close the circle.
     const asc = this.chart.byKey.asc ?? this.chart.byKey['a:asc'];
-    if (asc) {
+    if (asc && !asc.silent) {
       this._voiceFor(asc, { time: t + 0.2, duration: 3.0, gainMul: 1.5, octaveShift: 1 });
       this._emitAt({ type: 'note', key: asc.key }, t + 0.2);
     }

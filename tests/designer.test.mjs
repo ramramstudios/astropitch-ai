@@ -94,7 +94,8 @@ console.log('--- the source chart is never touched ---');
   const before = JSON.stringify(base.placements.map((p) => p.longitude));
   designChart(base, { sun: { longitude: 12 }, moon: { enabled: false } });
   ok('longitudes unchanged', JSON.stringify(base.placements.map((p) => p.longitude)) === before);
-  ok('nothing silenced', base.placements.every((p) => !p.silent));
+  ok('only chart angles are silent by default',
+    base.placements.every((p) => p.silent === (p.key === 'asc' || p.key === 'mc')));
 }
 
 console.log('--- aspects track the moved body, including across the seam ---');
@@ -159,15 +160,34 @@ console.log('--- a silent body is not scheduled ---');
     performer.stop();
     ok(`${mode} omits the bodies that are off`,
       !log.includes('jupiter') && !log.includes('uranus'), log.join(', '));
-    ok(`${mode} still plays the other nine`,
-      new Set(log).size === SOUNDING_BODIES.length - 2, `${new Set(log).size} distinct`);
+    ok(`${mode} still plays every enabled body`,
+      new Set(log).size === designed.placements.filter((p) => !p.silent).length, `${new Set(log).size} distinct`);
   }
+}
+
+console.log('--- chart angles are opt-in voices ---');
+{
+  const defaults = chartAt({ ...spread(0), mc: 30 });
+  const optedIn = designChart(defaults, { asc: { enabled: true }, mc: { enabled: true } });
+  ok('ASC and MC are silent by default', defaults.byKey.asc.silent && defaults.byKey.mc.silent);
+  ok('ASC and MC can be enabled together', !optedIn.byKey.asc.silent && !optedIn.byKey.mc.silent);
+  ok('enabled angles participate in aspects',
+    optedIn.aspects.some((a) => a.a === 'mc' || a.b === 'mc'));
+  ok('all four directions are available as separate interaction points',
+    ['asc', 'mc', 'dsc', 'ic'].every((key) => defaults.anglePoints[key]));
+  const directional = chartAt({ ...spread(0), mc: 30, sun: 180 });
+  ok('directional aspects do not depend on angle voices being enabled',
+    directional.angleAspects.some((a) => a.a === 'dsc' && a.b === 'sun'));
+  const complementary = makeChart({ asc: 0, mc: 0, mercury: 126 });
+  ok('IC keeps the complementary MC trine as a sextile',
+    complementary.angleAspects.some((a) => a.a === 'mc' && a.b === 'mercury' && a.name === 'Trine')
+    && complementary.angleAspects.some((a) => a.a === 'ic' && a.b === 'mercury' && a.name === 'Sextile'));
 }
 
 console.log('--- moving the Ascendant turns the house ring with it ---');
 {
-  // Ascendant from 0° Aries to 5° Taurus. Whole sign puts the first cusp at the
-  // start of the new rising sign, and every body is rehoused from there.
+  // Ascendant from 0° Aries to 5° Taurus. Whole Sign starts the first house at
+  // the new rising sign, while Equal preserves the exact angle.
   const designed = designChart(base, { asc: { longitude: 35 } });
   ok('first cusp is the new rising sign', designed.cusps[0] === 30, String(designed.cusps[0]));
   ok('ascSignIndex follows', designed.ascSignIndex === 1);

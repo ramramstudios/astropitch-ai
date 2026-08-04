@@ -15,7 +15,7 @@
  */
 
 import { Performer } from '../src/audio/performer.js';
-import { makeChart, makeSynastry } from '../src/chart.js';
+import { makeChart, makeSynastry, designChart } from '../src/chart.js';
 import { SOUNDING_BODIES } from '../src/ontology.js';
 import { frequencyFor } from '../src/audio/tuning.js';
 
@@ -201,11 +201,37 @@ console.log('\n--- click-burst dedup: retrigger releases even if already schedul
 console.log('--- bloom: one chart unfolds from the solar centre ---');
 {
   const out = await run(A, 'bloom');
-  const expectedOrder = ['sun', 'mercury', 'venus', 'moon', 'asc', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
-  ok('sounds every body', out.length === A.placements.filter((x) => x.key !== 'mc').length, `${out.length}`);
+  const expectedOrder = ['sun', 'mercury', 'venus', 'moon', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
+  ok('sounds every enabled body', out.length === A.placements.filter((x) => !x.silent).length, `${out.length}`);
   ok('reveals bodies from Sun outward', out.map((v) => v.key).join(',') === expectedOrder.join(','),
     out.map((v) => v.key).join(', '));
   ok('times strictly increase', out.every((v, i) => i === 0 || v.time > out[i - 1].time));
+}
+
+console.log('\n--- opt-in chart angles are scheduled as voices ---');
+{
+  const angles = designChart(chartAt({ ...spread(0), mc: 350 }), {
+    asc: { enabled: true },
+    mc: { enabled: true },
+  });
+  const out = await run(angles, 'bloom');
+  ok('ASC and MC both join the bloom', out.some((v) => v.key === 'asc') && out.some((v) => v.key === 'mc'));
+}
+
+console.log('\n--- a directional handle plays its connected aspect network ---');
+{
+  const contacts = A.angleAspects.filter((a) => a.a === 'asc');
+  const out = await run(A, 'bloom');
+  const p = new Performer(engine);
+  p.setChart(A);
+  log.length = 0;
+  await p.playDirectionalAspects(contacts, { mode: 'sequence' });
+  p.stop();
+  ok('every directional contact schedules both sides', log.length === contacts.length * 2,
+    `${log.length} voices for ${contacts.length} contacts`);
+  // Keep the pre-existing bloom output live in the fixture so this test does
+  // not accidentally make the expected arrangement depend on angle contacts.
+  ok('regular bloom remains planetary by default', !out.some((v) => v.key === 'asc'));
 }
 
 console.log('\n--- bloom: two charts pair like bodies back to back ---');
@@ -240,14 +266,15 @@ console.log('\n--- detune stays inside its own chart ---');
   const nudged = (map, keys) => new Set(keys.filter((k) => map[k] !== 0));
 
   // Identical charts: every body sits exactly on its opposite number. If the
-  // nudge leaked across sides, all eleven would be pushed apart and the
+  // nudge leaked across sides, every active voice would be pushed apart and the
   // conjunctions would beat at a rate that means nothing.
   const same = makeSynastry(chartAt(spread(0)), chartAt(spread(0)));
-  const merged = p._detuneMap(same.placements);
-  const alone = p._detuneMap(A.placements.filter((x) => x.key !== 'mc'));
+  const active = same.placements.filter((p) => !p.silent);
+  const merged = p._detuneMap(active);
+  const alone = p._detuneMap(A.placements.filter((x) => !x.silent));
 
   for (const side of ['a', 'b']) {
-    const keys = same.placements.filter((x) => x.side === side).map((x) => x.key);
+    const keys = active.filter((x) => x.side === side).map((x) => x.key);
     const got = new Set([...nudged(merged, keys)].map((k) => same.byKey[k].baseKey));
     const want = nudged(alone, Object.keys(alone));
     ok(`side ${side}: nudged set matches the chart alone`,
@@ -264,25 +291,25 @@ console.log('\n--- drone: anchors resolve under prefixed keys ---');
   const out = await run(syn, 'drone');
   ok('a bed starts', out.length > 0, `${out.length} voices`);
   const bases = new Set(out.map((v) => baseOf(syn, v.key)));
-  ok('two charts anchor on the lights and the angle only',
-    [...bases].every((b) => ['asc', 'sun', 'moon'].includes(b)), [...bases].join(','));
+  ok('two charts anchor on the lights only by default',
+    [...bases].every((b) => ['sun', 'moon'].includes(b)), [...bases].join(','));
   ok('no silent body in the bed', out.every((v) => !syn.byKey[v.key].silent));
 
   const single = await run(A, 'drone');
   const singleBases = new Set(single.map((v) => baseOf(A, v.key)));
-  ok('one chart keeps its four anchors',
-    singleBases.size === 4 && [...singleBases].every((b) => ['asc', 'sun', 'moon', 'saturn'].includes(b)),
+  ok('one chart keeps its three body anchors',
+    singleBases.size === 3 && [...singleBases].every((b) => ['sun', 'moon', 'saturn'].includes(b)),
     [...singleBases].join(','));
 }
 
-console.log('\n--- sequence: closes on the subject ascendant ---');
+console.log('\n--- sequence: does not close on a silent ascendant ---');
 {
   const out = await run(syn, 'sequence');
   ok('sounds only bodies in contact', out.every((v) => !syn.byKey[v.key].silent));
-  ok('final voice is the subject ascendant', out.at(-1).key === 'a:asc', out.at(-1).key);
+  ok('silent subject ascendant is not scheduled', !out.some((v) => v.key === 'a:asc'));
 
   const single = await run(A, 'sequence');
-  ok('one chart still closes on its ascendant', single.at(-1).key === 'asc');
+  ok('one chart does not close on its silent ascendant', !single.some((v) => v.key === 'asc'));
 }
 
 console.log(`\n${fails === 0 ? 'All arrangement checks passed.' : `${fails} FAILURE(S).`}`);

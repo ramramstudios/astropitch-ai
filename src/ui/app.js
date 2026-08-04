@@ -68,6 +68,7 @@ const DESIGN_VERSION = 1;
 const THEME_KEY = 'astropitch.theme';
 const MICROTONES_KEY = 'astropitch.microtones';
 const PALETTE_KEY = 'astropitch.palette';
+const LOCK_BODIES_KEY = 'astropitch.designerLockBodies';
 
 const SOURCES = ['birth', 'signs', 'designer'];
 
@@ -147,6 +148,8 @@ const state = {
     : savedSource,
   design: readSavedDesign(),
   overlaySource: 'sky',
+  lockBodies: false,
+  angleFocusKey: null,
   tuning: { refA: 432, temperament: 'equal', microtones: false },
   // The sign-only fallback is a pure A-major voicing: A (Aries), C♯ (Leo),
   // and E (Scorpio). Bodies still keep their own octaves and roles, so the
@@ -164,6 +167,7 @@ let wheel;
 let starfield;
 let muted = false;
 let lastTransportMode = 'bloom';
+let angleDrag = null;
 
 function applyVolume() {
   engine.setVolume(muted ? 0 : Number($('#volume').value));
@@ -419,7 +423,55 @@ function commitDesign(key, longitude) {
   showBody(key);
 }
 
+const signedAngleDelta = (next, previous) => ((next - previous + 540) % 360) - 180;
+
+function designForAngleDrag(longitude) {
+  if (!angleDrag) return null;
+  const delta = signedAngleDelta(longitude, angleDrag.startLongitude);
+  const design = Object.fromEntries(
+    Object.entries(angleDrag.design).map(([key, entry]) => [key, { ...entry }])
+  );
+  const asc = angleDrag.chart.anglePoints?.asc;
+  if (!asc) return design;
+  design.asc = { ...design.asc, longitude: norm360(asc.longitude + delta) };
+  if (state.lockBodies) {
+    for (const p of angleDrag.chart.placements) {
+      if (p.isAngle) continue;
+      design[p.key] = { ...design[p.key], longitude: norm360(p.longitude + delta) };
+    }
+  }
+  return design;
+}
+
+function previewAngleDrag(key, longitude) {
+  const design = designForAngleDrag(longitude);
+  if (!design || !state.subject) return;
+  state.chart = designChart(state.subject, design);
+  wheel.renderLive(state.chart);
+  syncDesignerList(state.chart);
+  performer.updateDesignerPreview(key, state.chart.anglePoints?.[key]);
+  showBody(key);
+}
+
+function commitAngleDrag(key, longitude) {
+  const design = designForAngleDrag(longitude);
+  performer.endDesignerPreview(key);
+  if (!design) return;
+  state.design = design;
+  angleDrag = null;
+  saveDesign();
+  render();
+  showBody(key);
+}
+
 function wireDesigner() {
+  const lockBodies = $('#lockBodies');
+  try { state.lockBodies = localStorage.getItem(LOCK_BODIES_KEY) === '1'; } catch { /* off by default */ }
+  lockBodies.checked = state.lockBodies;
+  lockBodies.addEventListener('change', () => {
+    state.lockBodies = lockBodies.checked;
+    try { localStorage.setItem(LOCK_BODIES_KEY, state.lockBodies ? '1' : '0'); } catch { /* session-only preference */ }
+  });
   $('#designerResetBtn').addEventListener('click', () => {
     state.design = {};
     saveDesign();
@@ -844,6 +896,8 @@ function wireWheel() {
 
   wheel.on('body', (key) => {
     wheel.toggleAspectFocus(key);
+    state.angleFocusKey = null;
+    renderAspects();
     performer.playPlacement(key);
     showBody(key);
   });
@@ -873,6 +927,39 @@ function wireWheel() {
   wheel.on('designerCancel', (key) => {
     performer.endDesignerPreview(key);
     render();
+  });
+  wheel.on('angle', (key) => {
+    const focused = wheel.toggleAngleFocus(key);
+    state.angleFocusKey = focused;
+    renderAspects();
+    if (!focused) { clearReadout(); return; }
+    const contacts = state.chart?.angleAspects.filter((a) => a.a === key) ?? [];
+    const first = contacts[0];
+    void performer.playDirectionalAspects(contacts, { mode: performer.mode ?? lastTransportMode });
+    if (first) showAspect(first);
+    else showBody(key);
+  });
+  wheel.on('designerAnglePress', () => { void performer.prepareDesignerPreview(); });
+  wheel.on('designerAngleDragStart', (key, longitude, startLongitude) => {
+    angleDrag = {
+      key,
+      startLongitude,
+      chart: state.chart,
+      design: state.design,
+    };
+    void performer.beginDesignerPreview(key, longitude);
+    showBody(key);
+  });
+  wheel.on('designerAngleMove', previewAngleDrag);
+  wheel.on('designerAngleCommit', commitAngleDrag);
+  wheel.on('designerAngleCancel', (key) => {
+    performer.endDesignerPreview(key);
+    angleDrag = null;
+    render();
+  });
+  wheel.on('clearFocus', () => {
+    state.angleFocusKey = null;
+    renderAspects();
   });
 }
 
@@ -1329,9 +1416,9 @@ function glyphWithSide(p) {
 
 /** One row of the aspect tables. Shared by the natal list and the contacts. */
 function aspectRow(a) {
-  const { byKey } = state.chart;
-  const A = byKey[a.a];
-  const B = byKey[a.b];
+  const { byKey, anglePoints } = state.chart;
+  const A = byKey[a.a] ?? anglePoints?.[a.a];
+  const B = byKey[a.b] ?? anglePoints?.[a.b];
 
   const tr = document.createElement('tr');
   const pair = document.createElement('td');
@@ -1382,10 +1469,16 @@ function fillAspectTable(tbody, list, emptyText) {
 
 function renderAspects() {
   if (!state.chart) return;
+  const direction = state.angleFocusKey;
+  const list = direction
+    ? state.chart.angleAspects.filter((a) => a.a === direction)
+    : state.chart.aspects;
   fillAspectTable(
     $('#aspectsTable tbody'),
-    state.chart.aspects,
-    state.chart.meta?.synastry
+    list,
+    direction
+      ? `No planetary aspects within orb of ${state.chart.anglePoints?.[direction]?.name ?? direction.toUpperCase()}.`
+      : state.chart.meta?.synastry
       ? 'Nothing within orb between these two charts. They barely touch.'
       : 'No aspects within orb. A very quiet chart.'
   );
@@ -1566,7 +1659,7 @@ function showSign(index, house) {
 }
 
 function showBody(key) {
-  const p = state.chart?.byKey?.[key];
+  const p = state.chart?.byKey?.[key] ?? state.chart?.anglePoints?.[key];
   if (!p) return;
   const element = ELEMENTS[p.element];
   const modality = MODALITIES[p.modality];
@@ -1595,8 +1688,8 @@ function showBody(key) {
 function showAspect(a) {
   const chart = state.chart;
   if (!chart) return;
-  const A = chart.byKey[a.a];
-  const B = chart.byKey[a.b];
+  const A = chart.byKey[a.a] ?? chart.anglePoints?.[a.a];
+  const B = chart.byKey[a.b] ?? chart.anglePoints?.[a.b];
 
   const side = (p) => (p.side ? ` (${p.side.toUpperCase()})` : '');
   const body = [
@@ -1664,8 +1757,8 @@ function onPerformerEvent(event) {
     wheel.setScopeTone(SIGNS[event.signIndex]?.element);
     wheel.pulseSign(event.signIndex);
   } else if (event.type === 'aspect') {
-    const a = state.chart?.byKey?.[event.aspect.a];
-    const b = state.chart?.byKey?.[event.aspect.b];
+    const a = state.chart?.byKey?.[event.aspect.a] ?? state.chart?.anglePoints?.[event.aspect.a];
+    const b = state.chart?.byKey?.[event.aspect.b] ?? state.chart?.anglePoints?.[event.aspect.b];
     wheel.setScopeTone([a?.element, b?.element]);
   } else if (event.type === 'start') {
     lastTransportMode = event.mode;

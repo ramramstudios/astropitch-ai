@@ -1764,6 +1764,22 @@ tr.is-silent { opacity: 0.42; }
 /* A generous target for a fingertip. Transparent rather than absent, because
    `visiblePainted` hit-testing needs a paint to hit. */
 .planet-grab { fill: transparent; }
+.angle-control { cursor: pointer; }
+.angle-control.is-draggable { cursor: grab; }
+.angle-control.is-draggable:active { cursor: grabbing; }
+.angle-grab { fill: rgba(0, 0, 0, 0.001); pointer-events: all; }
+.angle-control.is-aspect-focus .angle-label { fill: var(--accent, var(--ink)); font-weight: 700; }
+
+.designer-lock {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+.designer-lock small { color: var(--muted); font-size: 0.56rem; }
 
 /* Browsers do not honour `touch-action` on SVG children — it is read off the
    nearest CSS box — so the whole wheel has to give up single-finger panning

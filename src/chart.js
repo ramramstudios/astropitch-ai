@@ -1,10 +1,33 @@
 import {
-  SIGNS, HOUSES, BODIES, BODY_BY_KEY, SOUNDING_BODIES, ASPECTS,
+  SIGNS, HOUSES, BODIES, BODY_BY_KEY, ANGLE_BODIES, ASPECTS,
   norm360, signIndexOf, degreeInSign, houseFromCusps, wholeSignHouse,
   separation, formatLongitude, aspectBetween,
 } from './ontology.js';
 import { computeSky, centuriesSinceJ2000, julianDayFromBirth, deltaT, isRetrograde } from './ephemeris.js';
 import { frequencyFor, pitchLabel, centsOffset } from './audio/tuning.js';
+
+/**
+ * Opposite directions turn a trine into a sextile (and vice versa). Keep their
+ * tolerance symmetric so a valid MC–Mercury trine does not disappear merely
+ * because IC expresses the same geometry as a sextile with a narrower orb.
+ */
+function directionalAspectBetween(lonA, lonB) {
+  const sep = separation(lonA, lonB);
+  for (const aspect of ASPECTS) {
+    const orb = aspect.angle === 60 || aspect.angle === 120 ? 7 : aspect.orb;
+    const orbDelta = Math.abs(sep - aspect.angle);
+    if (orbDelta <= orb) {
+      return {
+        ...aspect,
+        orb,
+        orbDelta,
+        separation: sep,
+        exactness: 1 - orbDelta / orb,
+      };
+    }
+  }
+  return null;
+}
 
 /**
  * @param {object} positions   longitudes by body key
@@ -38,7 +61,9 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
       element: sign.element,
       modality: sign.modality,
       retrograde: !!retrogrades[body.key],
-      silent: !!silent[body.key],
+      // ASC and MC stay visible reference points, but default to silent: they
+      // describe the observer's sky rather than independent sounding bodies.
+      silent: silent[body.key] ?? ANGLE_BODIES.includes(body.key),
       voice: body.voice ?? null,
       label: formatLongitude(longitude),
       pitch: pitchLabel(longitude),
@@ -49,7 +74,7 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
   const byKey = Object.fromEntries(placements.map((p) => [p.key, p]));
 
   const aspects = [];
-  const keys = SOUNDING_BODIES.filter((k) => byKey[k] && !byKey[k].silent);
+  const keys = BODIES.map((b) => b.key).filter((k) => byKey[k] && !byKey[k].silent);
   for (let i = 0; i < keys.length; i++) {
     for (let j = i + 1; j < keys.length; j++) {
       const a = byKey[keys[i]];
@@ -77,13 +102,57 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
   const balance = { fire: 0, earth: 0, air: 0, water: 0 };
   const modal = { cardinal: 0, fixed: 0, mutable: 0 };
   for (const p of placements) {
-    if (p.key === 'mc' || p.silent) continue;
+    if (p.silent) continue;
     const weight = p.key === 'sun' || p.key === 'moon' || p.key === 'asc' ? 2 : 1;
     balance[p.element] += weight;
     modal[p.modality] += weight;
   }
 
-  return { placements, byKey, aspects, cusps, system, balance, modal, meta, ascSignIndex };
+  // The four directions are controls on the observer's sky, not regular
+  // placements. Keep them separately so the wheel can expose their aspect
+  // networks without adding four more voices to the default chord.
+  const angleLongitudes = {
+    asc: cusps?.[0] ?? positions.asc,
+    mc: cusps?.[9] ?? positions.mc,
+  };
+  if (angleLongitudes.asc != null) angleLongitudes.dsc = norm360(angleLongitudes.asc + 180);
+  if (angleLongitudes.mc != null) angleLongitudes.ic = norm360(angleLongitudes.mc + 180);
+
+  const angleNames = {
+    asc: ['Ascendant', 'Asc', 'The rising horizon'],
+    mc: ['Midheaven', 'MC', 'The upper meridian'],
+    dsc: ['Descendant', 'Dsc', 'The setting horizon'],
+    ic: ['Imum Coeli', 'IC', 'The lower meridian'],
+  };
+  const anglePoints = {};
+  for (const [key, longitude] of Object.entries(angleLongitudes)) {
+    if (!Number.isFinite(longitude)) continue;
+    const signIndex = signIndexOf(longitude);
+    const sign = SIGNS[signIndex];
+    const [name, glyph, role] = angleNames[key];
+    anglePoints[key] = {
+      key, name, glyph, role, isAngle: true, longitude: norm360(longitude),
+      octave: 0, gain: key === 'asc' || key === 'dsc' ? 0.9 : 0.65,
+      signIndex, sign, degree: degreeInSign(longitude),
+      house: cusps ? houseFromCusps(longitude, cusps) : wholeSignHouse(longitude, ascSignIndex),
+      houseInfo: HOUSES[(cusps ? houseFromCusps(longitude, cusps) : wholeSignHouse(longitude, ascSignIndex)) - 1],
+      element: sign.element, modality: sign.modality, retrograde: false,
+      // Directional aspect auditions are intentional one-off interactions.
+      silent: false, voice: null, label: formatLongitude(longitude),
+      pitch: pitchLabel(longitude), cents: centsOffset(longitude),
+    };
+  }
+
+  const angleAspects = [];
+  for (const angle of Object.values(anglePoints)) {
+    for (const p of placements) {
+      if (p.isAngle || p.silent) continue;
+      const found = directionalAspectBetween(angle.longitude, p.longitude);
+      if (found) angleAspects.push({ ...found, a: angle.key, b: p.key, cents: (found.separation / 30) * 100 });
+    }
+  }
+
+  return { placements, byKey, aspects, anglePoints, angleAspects, cusps, system, balance, modal, meta, ascSignIndex };
 }
 
 export function chartFromBirth(birth, place, houseSystem = 'placidus') {
@@ -129,9 +198,8 @@ export function chartFromSigns(signMap, houseSystem = 'whole') {
 // wheel, the tables and the performer read it without knowing it was invented.
 // ---------------------------------------------------------------------------
 
-/** The eleven sounding bodies. The Midheaven follows the Ascendant, so it is
- *  derived rather than placed. */
-export const DESIGNABLE_BODIES = SOUNDING_BODIES;
+/** The designer can move the Ascendant, but the Midheaven follows it. */
+export const DESIGNABLE_BODIES = BODIES.filter((b) => b.key !== 'mc').map((b) => b.key);
 
 /**
  * Rebuild `base` with hand-placed bodies.
@@ -147,16 +215,20 @@ export function designChart(base, design = {}) {
     retrogrades[p.key] = p.retrograde;
   }
 
-  const silent = {};
-  for (const key of DESIGNABLE_BODIES) {
+  // Start from the source chart's mute state. This preserves the opt-in
+  // ASC/MC setting as well as sign-only and designer mutes.
+  const silent = Object.fromEntries(base.placements.filter((p) => p.silent).map((p) => [p.key, true]));
+  for (const key of BODIES.map((b) => b.key)) {
     const override = design[key];
     if (!override) continue;
     if (Number.isFinite(override.longitude)) positions[key] = norm360(override.longitude);
     if (override.enabled === false) silent[key] = true;
+    if (override.enabled === true) silent[key] = false;
   }
 
   // The Ascendant *is* the first cusp, so moving it turns the house ring with
-  // it. Whole sign and equal houses are redrawn from the new angle; the
+  // it. Whole-sign houses stay tied to sign boundaries, while equal houses
+  // redraw from the exact angle; the
   // quadrant systems have no closed form without the birth data behind them,
   // so their cusps rotate rigidly and keep their unequal spacing.
   const ascDelta = base.byKey.asc ? norm360(positions.asc - base.byKey.asc.longitude) : 0;
@@ -200,12 +272,12 @@ export function chartForNow(place, houseSystem = 'placidus') {
 
 export function crossAspects(chartA, chartB) {
   const out = [];
-  for (const ka of SOUNDING_BODIES) {
+  for (const ka of BODIES.map((b) => b.key)) {
     const a = chartA.byKey[ka];
-    if (!a) continue;
-    for (const kb of SOUNDING_BODIES) {
+    if (!a || a.silent) continue;
+    for (const kb of BODIES.map((b) => b.key)) {
       const b = chartB.byKey[kb];
-      if (!b) continue;
+      if (!b || b.silent) continue;
       const found = aspectBetween(a.longitude, b.longitude);
       if (!found) continue;
       // Weight by how loud the two bodies are to begin with, so a tight
@@ -250,7 +322,6 @@ export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
 
   const sideOf = (chart, tag, trim) =>
     chart.placements
-      .filter((p) => p.key !== 'mc')
       .map((p) => {
         const key = `${tag}:${p.key}`;
         const touch = held[key];
@@ -259,7 +330,7 @@ export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
           key,
           baseKey: p.key,
           side: tag,
-          silent: touch == null,
+          silent: p.silent || touch == null,
           contact: touch ?? 0,
           gain: p.gain * trim * (0.45 + 0.55 * (touch ?? 0)),
         };
@@ -274,6 +345,19 @@ export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
   for (const k of Object.keys(balance)) balance[k] = chartA.balance[k] + chartB.balance[k];
   for (const k of Object.keys(modal)) modal[k] = chartA.modal[k] + chartB.modal[k];
 
+  // Directional overlays belong to the subject's local horizon. They are
+  // deliberately separate from the ranked cross-chart contacts so selecting a
+  // direction never changes synastry density.
+  const anglePoints = chartA.anglePoints ?? {};
+  const angleAspects = [];
+  for (const angle of Object.values(anglePoints)) {
+    for (const p of placements) {
+      if (p.silent) continue;
+      const found = directionalAspectBetween(angle.longitude, p.longitude);
+      if (found) angleAspects.push({ ...found, a: angle.key, b: p.key, cents: (found.separation / 30) * 100 });
+    }
+  }
+
   return {
     placements,
     byKey,
@@ -281,6 +365,8 @@ export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
     cusps: chartA.cusps,
     system: chartA.system,
     ascSignIndex: chartA.ascSignIndex,
+    anglePoints,
+    angleAspects,
     balance,
     modal,
     meta: {

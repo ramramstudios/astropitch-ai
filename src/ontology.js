@@ -139,6 +139,10 @@ export const BODIES = [
 
 export const BODY_BY_KEY = Object.fromEntries(BODIES.map((b) => [b.key, b]));
 
+/** Focal points in the local sky rather than celestial bodies. They remain on
+ *  the chart, but are opt-in as musical voices. */
+export const ANGLE_BODIES = BODIES.filter((b) => b.angle).map((b) => b.key);
+
 export const SOUNDING_BODIES = BODIES.filter((b) => b.key !== 'mc').map((b) => b.key);
 
 // ---------------------------------------------------------------------------

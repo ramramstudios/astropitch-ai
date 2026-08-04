@@ -136,9 +136,14 @@
 
         <form id="designerForm" class="form is-hidden">
           <p class="note">
-            Drag bodies to shape the chord. Switch one off to mute it. Moving
-            the Ascendant turns the houses.
+            Drag bodies to shape the chord. Drag any direction label to turn
+            the sky; click it to reveal its aspects.
           </p>
+          <label class="designer-lock">
+            <input type="checkbox" id="lockBodies">
+            <span>Lock bodies</span>
+            <small>Rotate planets with the sky</small>
+          </label>
           <div id="designerList" class="designer-list"></div>
           <div class="form-actions">
             <button type="button" class="primary" id="designerResetBtn">Reset to chart</button>

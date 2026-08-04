@@ -131,8 +131,8 @@ time-based behavior.
 The body identifies the part in the ensemble. A Moon, Sun, or Mercury in the
 same sign and house starts with the same Element → Timbre, House → Gesture, and
 Modality → Articulation mapping; the body shifts its octave, changes its mix
-weight, and gives it a role. The Sun, Moon, and Ascendant are the loudest
-anchors, while outer planets are more atmospheric. Low bodies are also trimmed
+weight, and gives it a role. The Sun and Moon are the loudest anchors, while
+outer planets are more atmospheric. Low bodies are also trimmed
 for headroom.
 
 | Body | Register relative to the sign pitch | Role |
@@ -144,8 +144,10 @@ for headroom.
 | Saturn | two octaves down | structural bass |
 | Pluto | one octave up | distant icy glint: quiet, wide, and reflected |
 
-The Midheaven is displayed as an angle and target pitch, but does not sound as a
-standalone voice.
+ASC and MC are directional references, not standalone sounding bodies, so they
+default to off. DSC and IC are the same kind of reference — the opposite point
+from MC and ASC respectively — but are not independently listed or switched;
+they always mirror whichever of ASC/MC they are opposite.
 
 ### Example: Moon in Virgo, 3rd house vs. 4th house
 
@@ -205,20 +207,31 @@ Historical daylight saving cannot be derived from coordinates, and guessing it
 silently would be worse than asking.
 
 Use **Designer** to build a chart by hand on top of whichever of those two you
-cast. Drag any of the eleven sounding bodies around the wheel. Only the angular
-position changes; a body stays on its ring however far the pointer wanders. Sign,
+cast. Drag any of the ten planets around the wheel; only the angular position
+changes, and a body stays on its ring however far the pointer wanders. Sign,
 exact degree, house, pitch, element, modality and aspects are all recomputed as
 it moves, so the chord you are looking at is the chord you will hear.
 
-Each body also has a switch. A body switched off keeps its place on the wheel and
-in the placement list, but drops out of the aspects, out of the elemental balance
-and out of all three playback modes — the fastest way to find out what a chart
-sounds like without its Saturn.
+The four direction labels (ASC, MC, DSC, IC) work differently. Click one to
+filter the wheel down to just its aspect network and hear it — this works in
+any chart, not only in Designer. In Designer, press and drag one instead to
+turn the whole sky: crossing the drag threshold hands off from that aspect
+audition to the direction's own pitch preview, the same one a dragged planet
+gets. Only the Ascendant is actually stored; MC, DSC and IC follow it. *Lock
+bodies* decides whether the planets turn with the sky or hold their zodiac
+position while the house ring turns under them.
+
+Each body also has a switch, including ASC and MC (off by default — see
+above). A body switched off keeps its place on the wheel and in the placement
+list, but drops out of the aspects, out of the elemental balance and out of
+all three playback modes — the fastest way to find out what a chart sounds
+like without its Saturn.
 
 Moving the Ascendant turns the house ring with it, because the Ascendant *is* the
-first cusp. Whole sign and equal houses are redrawn from the new angle; Placidus
-and Porphyry have no closed form without the birth data behind them, so their
-cusps rotate rigidly and keep their unequal spacing.
+first cusp. Whole sign houses snap to the new rising sign; equal houses redraw
+from the exact angle; Placidus and Porphyry have no closed form without the
+birth data behind them, so their cusps rotate rigidly and keep their unequal
+spacing.
 
 The design is stored separately from the cast chart, so *Reset to chart* always
 has something to go back to, and nothing you drag ever edits the chart underneath.

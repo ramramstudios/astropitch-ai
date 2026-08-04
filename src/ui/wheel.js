@@ -53,9 +53,11 @@ export class Wheel {
     this.rotation = 0;
     this.handlers = {};
     this.aspectFocusKey = null;
+    this.angleFocusKey = null;
     this.selectedAspectKey = null;
     this.designer = false;
     this.drag = null;
+    this.ignoreAngleClickUntil = 0;
     // While a body is being dragged the wheel stops turning under it. The
     // Ascendant sets the rotation, so without this the one marker you are
     // holding is the one that cannot follow the pointer.
@@ -89,7 +91,10 @@ export class Wheel {
     this.svg.addEventListener('pointercancel', () => this._cancelDrag());
     this.svg.addEventListener('lostpointercapture', () => this._cancelDrag());
     this.svg.addEventListener('click', (e) => {
-      if (e.target === this.svg) this.clearAspectFocus();
+      if (e.target === this.svg) {
+        this.clearAspectFocus();
+        this._emit('clearFocus');
+      }
     });
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this._cancelDrag();
@@ -189,6 +194,7 @@ export class Wheel {
 
   /** Focus the aspect network of one placement; repeating the key clears it. */
   toggleAspectFocus(key) {
+    this.angleFocusKey = null;
     this.aspectFocusKey = this.aspectFocusKey === key ? null : key;
     this._drawAspects();
     this._drawPlanets();
@@ -197,12 +203,26 @@ export class Wheel {
 
   clearAspectFocus() {
     const hadFocus = !!this.aspectFocusKey;
+    const hadAngleFocus = !!this.angleFocusKey;
     const hadSelection = !!this.selectedAspectKey;
     this.aspectFocusKey = null;
+    this.angleFocusKey = null;
     this.selectedAspectKey = null;
-    if (!hadFocus && !hadSelection) return;
+    if (!hadFocus && !hadAngleFocus && !hadSelection) return;
+    if (hadAngleFocus) this._drawHouses();
     this._drawAspects();
-    if (hadFocus) this._drawPlanets();
+    if (hadFocus || hadAngleFocus) this._drawPlanets();
+  }
+
+  /** Only one cardinal direction is expanded at a time to keep the wheel legible. */
+  toggleAngleFocus(key) {
+    this.aspectFocusKey = null;
+    this.angleFocusKey = this.angleFocusKey === key ? null : key;
+    this.selectedAspectKey = null;
+    this._drawHouses();
+    this._drawAspects();
+    this._drawPlanets();
+    return this.angleFocusKey;
   }
 
   _aspectKey(asp) {
@@ -311,17 +331,49 @@ export class Wheel {
       );
     }
 
-    const angleLabels = [[cusps[0], 'ASC'], [cusps[9], 'MC'], [cusps[6], 'DSC'], [cusps[3], 'IC']];
-    for (const [lon, name] of angleLabels) {
+    const angleLabels = [[cusps[0], 'asc', 'ASC'], [cusps[9], 'mc', 'MC'], [cusps[6], 'dsc', 'DSC'], [cusps[3], 'ic', 'IC']];
+    for (const [lon, key, name] of angleLabels) {
       const [x, y] = this._point(lon, R.rim + 16);
-      nodes.push(
+      const interactive = el('g', {
+        class: `angle-control${this.designer ? ' is-draggable' : ''}${this.angleFocusKey === key ? ' is-aspect-focus' : ''}`,
+        tabindex: 0,
+        role: 'button',
+        'aria-label': `${name}. Click to hear its aspects${this.designer ? '; drag to rotate the sky' : ''}.`,
+      });
+      interactive.addEventListener('click', () => {
+        if (performance.now() < this.ignoreAngleClickUntil) return;
+        this._emit('angle', key);
+      });
+      interactive.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this._emit('angle', key);
+        }
+      });
+      if (this.designer) {
+        // Pointer capture moves pointer-up to the SVG root, so this ordinary
+        // click is the reliable path for a tap on a direction label.
+        interactive.addEventListener('pointerdown', (e) => {
+          if (e.button != null && e.button !== 0) return;
+          this._startDrag(e, { key, longitude: lon, kind: 'angle' });
+          // Designer captures the pointer on the SVG, which can swallow the
+          // subsequent click. Select the directional network here; once the
+          // gesture crosses the drag threshold its pitched preview takes over.
+          this.ignoreAngleClickUntil = performance.now() + 500;
+          this._emit('angle', key);
+        });
+      }
+      interactive.append(
+        el('circle', { cx: x, cy: y, r: 23, class: 'angle-grab' }),
         el('text', {
           x, y,
           class: 'angle-label',
           'text-anchor': 'middle',
           'dominant-baseline': 'central',
+          'pointer-events': 'none',
         }, name)
       );
+      nodes.push(interactive);
     }
     g.replaceChildren(...nodes);
   }
@@ -349,16 +401,25 @@ export class Wheel {
   _drawAspects() {
     const g = this.layers.aspects;
     const nodes = [];
-    for (const asp of this.chart.aspects) {
-      const a = this.chart.byKey[asp.a];
-      const b = this.chart.byKey[asp.b];
+    // A selected direction owns the aspect layer. Showing its contacts over
+    // the complete natal web made the click look like it had done nothing,
+    // especially when several lines crossed at the same hub points.
+    const aspects = this.angleFocusKey
+      ? this.chart.angleAspects.filter((asp) => asp.a === this.angleFocusKey)
+      : this.chart.aspects;
+    for (const asp of aspects) {
+      const a = this.chart.byKey[asp.a] ?? this.chart.anglePoints?.[asp.a];
+      const b = this.chart.byKey[asp.b] ?? this.chart.anglePoints?.[asp.b];
       if (!a || !b) continue;
+      // Directional contacts terminate at the focused point inside the wheel;
+      // outer ASC/MC/DSC/IC labels are controls, not aspect endpoints.
       const [x1, y1] = this._point(a.longitude, R.hub);
       const [x2, y2] = this._point(b.longitude, R.hub);
 
-      const related = !this.aspectFocusKey
+      const related = asp.a === this.angleFocusKey
+        || (!this.aspectFocusKey
         || asp.a === this.aspectFocusKey
-        || asp.b === this.aspectFocusKey;
+        || asp.b === this.aspectFocusKey);
       const selected = this.selectedAspectKey === this._aspectKey(asp);
       const gradientId = 'selected-aspect-gradient';
 
@@ -377,6 +438,7 @@ export class Wheel {
       const line = el('line', {
         x1, y1, x2, y2,
         class: `aspect-line aspect-${asp.name.toLowerCase()}`
+          + (asp.a === this.angleFocusKey ? ' is-directional' : '')
           + (related ? ' is-related' : ' is-dimmed')
           + (selected ? ' is-selected' : ''),
         stroke: asp.color,
@@ -429,6 +491,12 @@ export class Wheel {
       }
       if (!moved) break;
     }
+    // ASC and MC are the chart's fixed directional references. Planets may
+    // spread to remain legible, but these markers must stay on the same radial
+    // line as their outer labels and focused aspect points.
+    for (const item of items) {
+      if (item.p.isAngle) item.shown = item.lon;
+    }
     // Anything still crowded gets pushed to an inner ring.
     for (let i = 1; i < items.length; i++) {
       if (norm360(items[i].shown - items[i - 1].shown) < MIN * 0.85) {
@@ -462,6 +530,7 @@ export class Wheel {
     this.rotationLock = this.rotation;
     this.drag = {
       key: placement.key,
+      kind: placement.kind ?? 'body',
       pointerId: event.pointerId,
       startLon: placement.longitude,
       lon: placement.longitude,
@@ -470,7 +539,7 @@ export class Wheel {
       moved: false,
       frame: 0,
     };
-    this._emit('designerPress', placement.key);
+    this._emit(placement.kind === 'angle' ? 'designerAnglePress' : 'designerPress', placement.key, placement.longitude);
   }
 
   _onPointerMove(event) {
@@ -487,7 +556,7 @@ export class Wheel {
       drag.moved = true;
       drag.lon = lon;
       this.svg.classList.add('is-dragging');
-      this._emit('designerDragStart', drag.key, lon);
+      this._emit(drag.kind === 'angle' ? 'designerAngleDragStart' : 'designerDragStart', drag.key, lon, drag.startLon);
     } else {
       const lon = this._longitudeAt(event);
       if (lon == null) return;
@@ -497,7 +566,7 @@ export class Wheel {
     drag.frame = requestAnimationFrame(() => {
       if (!this.drag) return;
       this.drag.frame = 0;
-      this._emit('designerMove', this.drag.key, this.drag.lon);
+      this._emit(this.drag.kind === 'angle' ? 'designerAngleMove' : 'designerMove', this.drag.key, this.drag.lon);
     });
   }
 
@@ -505,15 +574,19 @@ export class Wheel {
     const drag = this.drag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     this._endDrag();
-    if (drag.moved) this._emit('designerCommit', drag.key, drag.lon);
-    else this._emit('body', drag.key);
+    if (drag.moved) {
+      if (drag.kind === 'angle') this.ignoreAngleClickUntil = performance.now() + 250;
+      this._emit(drag.kind === 'angle' ? 'designerAngleCommit' : 'designerCommit', drag.key, drag.lon);
+    } else if (drag.kind !== 'angle') {
+      this._emit('body', drag.key);
+    }
   }
 
   _cancelDrag() {
     const drag = this.drag;
     if (!drag) return;
     this._endDrag();
-    if (drag.moved) this._emit('designerCancel', drag.key, drag.startLon);
+    if (drag.moved) this._emit(drag.kind === 'angle' ? 'designerAngleCancel' : 'designerCancel', drag.key, drag.startLon);
   }
 
   _endDrag() {
@@ -531,7 +604,9 @@ export class Wheel {
     const nodes = [];
     this.markers = {};
 
-    const placements = this.chart.placements;
+    // ASC and MC are already represented by the four directional axes. Keeping
+    // them in the planet layer duplicated their labels inside the wheel.
+    const placements = this.chart.placements.filter((p) => !p.isAngle);
     for (const item of this._layout(placements)) {
       const { p, shown, ring } = item;
       const radius = R.planet - ring * 44;
