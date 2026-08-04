@@ -34,6 +34,36 @@ const R = {
   scope: 196,
 };
 
+export const VIEW_MIN_SCALE = 1;
+export const VIEW_MAX_SCALE = 4;
+
+/**
+ * Pure pinch-zoom math, kept free of the DOM so it can be unit-tested without
+ * a browser (see tests/mobile.test.mjs). Both `oldMid`/`newMid` must already
+ * be container-relative — i.e. page coordinates with the wheel container's
+ * own getBoundingClientRect().left/top already subtracted, matching the
+ * space `view.x`/`view.y` live in (see Wheel#_localPoint). Passing raw page
+ * coordinates here reproduces the focal-point drift bug this contract exists
+ * to prevent: the zoom would then pivot around the wrong point by however far
+ * the container sits from the page origin.
+ */
+export function nextPinchView(view, { oldMid, newMid, oldDist, newDist }) {
+  const localX = (oldMid.x - view.x) / view.scale;
+  const localY = (oldMid.y - view.y) / view.scale;
+  const scale = Math.min(VIEW_MAX_SCALE, Math.max(VIEW_MIN_SCALE, view.scale * (newDist / oldDist)));
+  return { scale, x: newMid.x - localX * scale, y: newMid.y - localY * scale };
+}
+
+/** Content can be panned until its own edge reaches the container's edge, no further. */
+export function clampPanView(view, containerSize) {
+  const maxOffset = containerSize * (view.scale - 1);
+  return {
+    scale: view.scale,
+    x: Math.min(0, Math.max(-maxOffset, view.x)),
+    y: Math.min(0, Math.max(-maxOffset, view.y)),
+  };
+}
+
 function el(tag, attrs = {}, children = []) {
   const node = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -154,21 +184,12 @@ export class Wheel {
     this.viewport.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
   }
 
-  /** Content can be panned until its own edge reaches the container's edge, no further. */
-  _clampView() {
-    const size = this.container.getBoundingClientRect().width || 1;
-    const maxOffset = size * (this.view.scale - 1);
-    this.view.x = Math.min(0, Math.max(-maxOffset, this.view.x));
-    this.view.y = Math.min(0, Math.max(-maxOffset, this.view.y));
-  }
-
   _setView(scale, x, y) {
-    const MIN_SCALE = 1;
-    const MAX_SCALE = 4;
-    this.view.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
-    this.view.x = x;
-    this.view.y = y;
-    this._clampView();
+    const size = this.container.getBoundingClientRect().width || 1;
+    this.view = clampPanView({
+      scale: Math.min(VIEW_MAX_SCALE, Math.max(VIEW_MIN_SCALE, scale)),
+      x, y,
+    }, size);
     this.viewport.classList.toggle('is-zoomed', this.view.scale > 1.001);
     if (this._viewFrame) return;
     this._viewFrame = requestAnimationFrame(() => {
@@ -177,12 +198,26 @@ export class Wheel {
     });
   }
 
+  /**
+   * this.view.x/y are translate() offsets from the viewport's own natural
+   * position — i.e. container-relative, with (0,0) at the container's own
+   * top-left corner. Pointer events report page-relative clientX/Y, so
+   * anything compared against or combined with this.view.x/y (the pinch
+   * focal-point math below) has to be converted first, or the pivot point
+   * drifts by however far the container sits from the page's own origin.
+   */
+  _localPoint(e) {
+    const rect = this.container.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
   _onViewPointerDown(e) {
     if (this.interactionMode !== 'mobile') return;
     // A designer drag on a body or angle owns its pointer exclusively.
     if (this.drag) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const p = this._localPoint(e);
+    this._pointers.set(e.pointerId, p);
 
     if (this._pointers.size === 2) {
       this._pan = null;
@@ -198,8 +233,8 @@ export class Wheel {
       // movement threshold in _onViewPointerMove below.
       this._pan = {
         pointerId: e.pointerId,
-        startX: e.clientX, startY: e.clientY,
-        lastX: e.clientX, lastY: e.clientY,
+        startX: p.x, startY: p.y,
+        lastX: p.x, lastY: p.y,
         moved: false,
       };
     }
@@ -207,7 +242,8 @@ export class Wheel {
 
   _onViewPointerMove(e) {
     if (this.drag || !this._pointers.has(e.pointerId)) return;
-    this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const p = this._localPoint(e);
+    this._pointers.set(e.pointerId, p);
 
     if (this._pinch && this._pointers.size >= 2) {
       const [a, b] = this._pointers.values();
@@ -216,10 +252,13 @@ export class Wheel {
       const midY = (a.y + b.y) / 2;
       // Keep the content point under the pinch's midpoint stationary as the
       // scale changes, the same way a native pinch-to-zoom feels.
-      const localX = (this._pinch.midX - this.view.x) / this.view.scale;
-      const localY = (this._pinch.midY - this.view.y) / this.view.scale;
-      const scale = this.view.scale * (dist / this._pinch.dist);
-      this._setView(scale, midX - localX * scale, midY - localY * scale);
+      const next = nextPinchView(this.view, {
+        oldMid: { x: this._pinch.midX, y: this._pinch.midY },
+        newMid: { x: midX, y: midY },
+        oldDist: this._pinch.dist,
+        newDist: dist,
+      });
+      this._setView(next.scale, next.x, next.y);
       this._pinch = { dist, midX, midY };
       return;
     }
@@ -227,16 +266,16 @@ export class Wheel {
     const pan = this._pan;
     if (!pan || e.pointerId !== pan.pointerId) return;
     if (!pan.moved) {
-      const travelled = Math.hypot(e.clientX - pan.startX, e.clientY - pan.startY);
+      const travelled = Math.hypot(p.x - pan.startX, p.y - pan.startY);
       if (travelled < 6) return;
       pan.moved = true;
       this.svg.setPointerCapture(e.pointerId);
       this.viewport.classList.add('is-panning');
     }
-    const dx = e.clientX - pan.lastX;
-    const dy = e.clientY - pan.lastY;
-    pan.lastX = e.clientX;
-    pan.lastY = e.clientY;
+    const dx = p.x - pan.lastX;
+    const dy = p.y - pan.lastY;
+    pan.lastX = p.x;
+    pan.lastY = p.y;
     this._setView(this.view.scale, this.view.x + dx, this.view.y + dy);
   }
 

@@ -153,7 +153,7 @@ select:focus-visible,
 /* At 11px tall this is well under a comfortable tap target; padding grows
    the hit area around the same small link-styled text rather than enlarging
    the text itself. */
-html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; }
+html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56rem; }
 
 /* The rail keeps its own column in both states, so the toggle never moves out
    from under the pointer when you use it. */
@@ -1713,104 +1713,116 @@ html[data-mode="mobile"] .modal-close {
 }
 
 
-@media (max-width: 1040px) {
-  /* Stacked: the wheel already has the full width, so there is nothing to
-     collapse and the rail would only be in the way. */
-  .stage,
-  .stage.is-side-collapsed {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "wheel" "side";
-  }
+/* ---------------------------------------------------------------------------
+   Mobile mode — structural and chrome rules
+   ---------------------------------------------------------------------------
+   Everything below keys off data-mode, not viewport width, so the Settings
+   override ("preview the other layout") is authoritative: forcing mobile on
+   a wide desktop window gets the real mobile structure, and forcing desktop
+   on a phone gets the real desktop structure, rather than a hybrid of
+   whichever width-based rules happened to also match.
 
-  .side-rail { display: none; }
-  .stage.is-side-collapsed .side { display: flex; }
-  .wheel-panel { padding-left: 0; }
+   This used to be three separate width breakpoints (1040/660/430px) that
+   applied purely by viewport width, mode-agnostic. Two of those thresholds
+   (660, 430) sat entirely inside mode's own 760px auto-switch range, so
+   converting them changed nothing for auto-detected users — only for an
+   explicit override. The 1040px stacking breakpoint was wider than 760px
+   though, so it used to also give a genuine desktop-mode browser window a
+   graceful single-column fallback between 761–1040px. Folding it in here
+   too means that narrow-but-still-desktop-mode window now gets the full
+   (cramped) 3-column grid instead — a real tradeoff, but data-mode has no
+   way to tell "auto-detected desktop" apart from "explicitly forced
+   desktop" once set, and the override has to win in the latter case, or
+   forcing desktop on a phone doesn't actually show the desktop layout. */
 
-  .wheel-holder,
-  .stage.is-side-collapsed .wheel-holder { max-width: min(78vh, 720px); }
-  .side { position: static; max-height: none; }
-  .tabpanel { overflow-y: visible; }
+html[data-mode="mobile"] .stage,
+html[data-mode="mobile"] .stage.is-side-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "wheel" "side";
+  gap: 2.5rem;
+  padding-top: 1rem;
 }
 
-@media (max-width: 660px) {
-  :root { --transport-h: 100px; }
-
-  .stage { gap: 2.5rem; padding-top: 1rem; }
-  .wheel-kicker { font-size: 0.56rem; }
-  .wheel-holder { margin: 0.65rem auto 1.2rem; }
-  .angle-label { font-size: 18px; }
-  .sign-name { font-size: 12px; }
-  .sign-glyph { font-size: 24px; }
-  .planet-glyph { font-size: 31px; }
-  .house-number { font-size: 17px; }
-
-  .transport {
-    height: var(--transport-h);
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .transport-main {
-    display: grid;
-    width: 100%;
-    min-height: 46px;
-    /* Keep every transport action in the grid. The hide button used to be
-       absolutely positioned here, which made the final grid column empty and
-       allowed controls to collide at narrow widths. */
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .transport-brand {
-    position: static;
-    width: 100%;
-    height: 46px;
-    padding: 0.4rem;
-  }
-
-  button.play,
-  .transport-hide {
-    min-width: 0;
-    padding: 0.55rem 0.35rem;
-  }
-
-  .transport-hide {
-    width: auto;
-    height: auto;
-    padding: 0;
-  }
-
-  .transport-hide {
-    position: static;
-    display: grid;
-    place-items: center;
-  }
-
-  button.play {
-    min-height: 46px;
-    align-items: center;
-  }
-  .play-name { font-size: 0.88rem; }
-  .play-sub { display: none; }
-
-  .volume {
-    align-self: center;
-    width: min(280px, 86vw);
-    height: 42px;
-    padding: 0;
-  }
-
-  .field-row { gap: 0.55rem; }
-  .tabpanel > *:not(.table-wrap) { margin-left: 0.75rem; margin-right: 0.75rem; }
+html[data-mode="mobile"] .side-rail { display: none; }
+/* Same specificity fight as the width-based rule above: the collapsed-rail
+   desktop state (.stage.is-side-collapsed .side { display: none }, set
+   elsewhere) must not be able to hide the mobile sheet just because the
+   user happened to have collapsed the desktop sidebar in an earlier session. */
+html[data-mode="mobile"] .stage.is-side-collapsed .side { display: flex; }
+html[data-mode="mobile"] .wheel-panel { padding-left: 0; }
+html[data-mode="mobile"] .wheel-holder {
+  max-width: min(78vh, 720px);
+  margin: 0.65rem auto 1.2rem;
 }
 
-@media (max-width: 430px) {
-  .chart-help { font-size: 0.56rem; }
-  .tabs { overflow-x: auto; }
-  .tab { font-size: 0.55rem; }
-  .readout-title .rd-pitch { width: 100%; margin-left: 0; }
-  .field-row { flex-wrap: wrap; }
-  .field-row .field.narrow { flex: 1; }
+html[data-mode="mobile"] { --transport-h: 100px; }
+
+html[data-mode="mobile"] .wheel-kicker { font-size: 0.56rem; }
+html[data-mode="mobile"] .angle-label { font-size: 18px; }
+html[data-mode="mobile"] .sign-name { font-size: 12px; }
+html[data-mode="mobile"] .sign-glyph { font-size: 24px; }
+html[data-mode="mobile"] .planet-glyph { font-size: 31px; }
+html[data-mode="mobile"] .house-number { font-size: 17px; }
+
+html[data-mode="mobile"] .transport {
+  height: var(--transport-total-h);
+  flex-direction: column;
+  align-items: stretch;
 }
+
+html[data-mode="mobile"] .transport-main {
+  display: grid;
+  width: 100%;
+  min-height: 46px;
+  /* Keep every transport action in the grid. The hide button used to be
+     absolutely positioned here, which made the final grid column empty and
+     allowed controls to collide at narrow widths. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+html[data-mode="mobile"] .transport-brand {
+  position: static;
+  width: 100%;
+  height: 46px;
+  padding: 0.4rem;
+}
+
+html[data-mode="mobile"] button.play,
+html[data-mode="mobile"] .transport-hide {
+  min-width: 0;
+  padding: 0.55rem 0.35rem;
+}
+
+html[data-mode="mobile"] .transport-hide {
+  width: auto;
+  height: auto;
+  padding: 0;
+  position: static;
+  display: grid;
+  place-items: center;
+}
+
+html[data-mode="mobile"] button.play {
+  min-height: 46px;
+  align-items: center;
+}
+html[data-mode="mobile"] .play-name { font-size: 0.88rem; }
+html[data-mode="mobile"] .play-sub { display: none; }
+
+html[data-mode="mobile"] .volume {
+  align-self: center;
+  width: min(280px, 86vw);
+  height: 42px;
+  padding: 0;
+}
+
+html[data-mode="mobile"] .field-row { gap: 0.55rem; flex-wrap: wrap; }
+html[data-mode="mobile"] .field-row .field.narrow { flex: 1; }
+html[data-mode="mobile"] .tabpanel > *:not(.table-wrap) { margin-left: 0.75rem; margin-right: 0.75rem; }
+
+html[data-mode="mobile"] .tabs { overflow-x: auto; }
+html[data-mode="mobile"] .tab { font-size: 0.55rem; }
+html[data-mode="mobile"] .readout-title .rd-pitch { width: 100%; margin-left: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
@@ -1891,9 +1903,7 @@ tr.is-silent { opacity: 0.42; }
   letter-spacing: 0.04em;
 }
 
-@media (max-width: 430px) {
-  .verdict-title { font-size: 1.35rem; }
-}
+html[data-mode="mobile"] .verdict-title { font-size: 1.35rem; }
 
 
 /* ---------------------------------------------------------------------------
@@ -2021,7 +2031,5 @@ tr.is-silent { opacity: 0.42; }
   .planet.is-held .planet-halo { transition: none; }
 }
 
-@media (max-width: 430px) {
-  .designer-row { font-size: 0.58rem; }
-  .designer-switch .nm { flex: 1; }
-}
+html[data-mode="mobile"] .designer-row { font-size: 0.58rem; }
+html[data-mode="mobile"] .designer-switch .nm { flex: 1; }

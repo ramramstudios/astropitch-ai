@@ -1142,6 +1142,7 @@ function wireLayoutMode() {
     $('#layoutMobile').classList.toggle('is-active', mobile);
     wheel.setInteractionMode(mode);
     setSheetMode(mode);
+    syncSidebarMode(mode);
     requestAnimationFrame(onResize);
   };
 
@@ -1171,6 +1172,22 @@ function wireLayoutMode() {
 // ---------------------------------------------------------------------------
 
 const SHEET_STATES = ['peek', 'half', 'full'];
+
+/** A tap on the handle (no drag) cycles states as an alternative to dragging. */
+export function nextSheetState(current, states = SHEET_STATES) {
+  return states[(states.indexOf(current) + 1) % states.length];
+}
+
+/** After a drag, settle on whichever snap height the sheet ended up closest to. */
+export function nearestSheetState(heights, currentPx, states = SHEET_STATES) {
+  let nearest = states[0];
+  let best = Infinity;
+  for (const s of states) {
+    const d = Math.abs(heights[s] - currentPx);
+    if (d < best) { best = d; nearest = s; }
+  }
+  return nearest;
+}
 
 let setSheetMode = () => {};
 let expandSheetIfPeeking = () => {};
@@ -1256,17 +1273,10 @@ function wireSheet() {
     if (handle.hasPointerCapture?.(e.pointerId)) handle.releasePointerCapture(e.pointerId);
 
     if (!wasDrag) {
-      apply(SHEET_STATES[(SHEET_STATES.indexOf(state) + 1) % SHEET_STATES.length]);
+      apply(nextSheetState(state));
       return;
     }
-    const current = sheet.getBoundingClientRect().height;
-    let nearest = state;
-    let best = Infinity;
-    for (const s of SHEET_STATES) {
-      const d = Math.abs(heights[s] - current);
-      if (d < best) { best = d; nearest = s; }
-    }
-    apply(nearest);
+    apply(nearestSheetState(heights, sheet.getBoundingClientRect().height));
   };
   handle.addEventListener('pointerup', endDrag);
   handle.addEventListener('pointercancel', endDrag);
@@ -1290,15 +1300,22 @@ function stored(key, value) {
 
 let collapseSide = () => {};
 let toggleTransport = () => {};
+let syncSidebarMode = () => {};
 
 function wireSidebar() {
   const stage = $('#stage');
   const toggle = $('#sideToggle');
   let collapsed = stored(SIDE_KEY) === '1';
+  let mode = 'desktop';
 
   const apply = (next) => {
     collapsed = next;
-    stage.classList.toggle('is-side-collapsed', collapsed);
+    // The collapse-rail toggle is a desktop-only control (hidden entirely in
+    // mobile mode's CSS), so the collapsed state it left behind from an
+    // earlier desktop session must not carry into mobile mode — otherwise a
+    // stored preference can end up hiding the mobile sheet outright via the
+    // desktop-only `.stage.is-side-collapsed .side { display: none }` rule.
+    stage.classList.toggle('is-side-collapsed', collapsed && mode !== 'mobile');
     toggle.setAttribute('aria-expanded', String(!collapsed));
     toggle.setAttribute('aria-label', collapsed ? 'Show the controls panel' : 'Hide the controls panel');
     toggle.title = collapsed ? 'Show the controls' : 'Hide the controls — wider wheel';
@@ -1310,6 +1327,11 @@ function wireSidebar() {
   collapseSide = () => {
     apply(!collapsed);
     stored(SIDE_KEY, collapsed ? '1' : '0');
+  };
+
+  syncSidebarMode = (nextMode) => {
+    mode = nextMode;
+    apply(collapsed);
   };
 
   toggle.addEventListener('click', collapseSide);
@@ -1951,4 +1973,8 @@ function loop(now = performance.now()) {
   requestAnimationFrame(loop);
 }
 
-boot();
+// Guarded so this module can be imported in Node (e.g. by tests, which
+// exercise a handful of exported pure functions) without trying to boot a
+// UI that has no document to attach to. No effect in a browser, where
+// document always exists.
+if (typeof document !== 'undefined') boot();

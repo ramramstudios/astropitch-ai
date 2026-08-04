@@ -61,7 +61,10 @@ self.addEventListener('fetch', (event) => {
     fetch(request)
       .then((response) => {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        // Tied to the fetch event's own lifetime — without this the browser
+        // can terminate the worker right after respondWith() resolves,
+        // before an unawaited cache write actually finishes.
+        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)));
         return response;
       })
       .catch(() => caches.match(request).then((cached) => cached ?? caches.match('index.html')))
