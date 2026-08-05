@@ -1575,7 +1575,10 @@ function renderPlacements() {
   if (!state.chart) return;
 
   tbody.replaceChildren(
-    ...state.chart.placements.map((p) => {
+    // ASC/MC are directional references, not sounding bodies — they get their
+    // own switch in the Designer list and their aspects via a click on the
+    // wheel, not a row in this table.
+    ...state.chart.placements.filter((p) => !p.isAngle).map((p) => {
       const tr = document.createElement('tr');
       tr.dataset.body = p.key;
       // A body that touches nothing in the other chart is listed but not sounded.
