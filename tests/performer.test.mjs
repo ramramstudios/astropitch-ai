@@ -212,8 +212,8 @@ console.log('\n--- ASC/MC never sound as chord tones, enabled or not ---');
 {
   // Explicitly switching ASC/MC "on" (the Designer/Basic per-body switch)
   // still only controls their weight in the aspects and elemental balance.
-  // They stay directional references, never bloom/sequence/drone voices, and
-  // never a bare tone from the placements table either.
+  // They stay directional references, never bloom/scalar/drone/melodic
+  // voices, and never a bare tone from the placements table either.
   const angles = designChart(chartAt({ ...spread(0), mc: 350 }), {
     asc: { enabled: true },
     mc: { enabled: true },
@@ -226,9 +226,9 @@ console.log('\n--- ASC/MC never sound as chord tones, enabled or not ---');
   ok('an enabled ASC/MC still do not join the drone',
     !droneOut.some((v) => v.key === 'asc' || v.key === 'mc'));
 
-  const sequenceOut = await run(angles, 'sequence');
-  ok('an enabled ASC/MC still do not join the sequence',
-    !sequenceOut.some((v) => v.key === 'asc' || v.key === 'mc'));
+  const scalarOut = await run(angles, 'scalar');
+  ok('an enabled ASC/MC still do not join the scalar walk',
+    !scalarOut.some((v) => v.key === 'asc' || v.key === 'mc'));
 
   const melodicOut = await run(angles, 'melodic');
   ok('an enabled ASC/MC still do not join the melody',
@@ -248,7 +248,7 @@ console.log('\n--- a directional handle plays its connected aspect network ---')
   const p = new Performer(engine);
   p.setChart(A);
   log.length = 0;
-  await p.playDirectionalAspects(contacts, { mode: 'sequence' });
+  await p.playDirectionalAspects(contacts, { mode: 'scalar' });
   p.stop();
   ok('every directional contact schedules both sides', log.length === contacts.length * 2,
     `${log.length} voices for ${contacts.length} contacts`);
@@ -335,17 +335,17 @@ console.log('\n--- drone: anchors resolve under prefixed keys ---');
     [...singleBases].join(','));
 }
 
-console.log('\n--- sequence: does not close on a silent ascendant ---');
+console.log('\n--- scalar: does not close on a silent ascendant ---');
 {
-  const out = await run(syn, 'sequence');
+  const out = await run(syn, 'scalar');
   ok('sounds only bodies in contact', out.every((v) => !syn.byKey[v.key].silent));
   ok('silent subject ascendant is not scheduled', !out.some((v) => v.key === 'a:asc'));
 
-  const single = await run(A, 'sequence');
+  const single = await run(A, 'scalar');
   ok('one chart does not close on its silent ascendant', !single.some((v) => v.key === 'asc'));
 }
 
-console.log('\n--- sequence: the walk starts at the exact Ascendant, not its sign boundary ---');
+console.log('\n--- scalar: the walk starts at the exact Ascendant, not its sign boundary ---');
 {
   // Equal houses put the 1st cusp at the Ascendant's precise degree, ahead of
   // where its sign began. A body sitting between the two has technically not
@@ -356,7 +356,7 @@ console.log('\n--- sequence: the walk starts at the exact Ascendant, not its sig
   const cusps = Array.from({ length: 12 }, (_, i) => (asc + i * 30) % 360);
   const chart = makeChart({ asc, sun: justBeforeAsc, moon: justAfterAsc }, { cusps, system: 'equal' });
 
-  const out = await run(chart, 'sequence');
+  const out = await run(chart, 'scalar');
   const order = out.map((v) => v.key);
   ok('the body just past the Ascendant sounds first',
     order[0] === 'moon', order.join(', '));

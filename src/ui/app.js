@@ -201,7 +201,7 @@ function setMuted(next) {
 function playLastTransportMode() {
   ({
     bloom: () => performer.bloom(),
-    sequence: () => performer.sequence(),
+    scalar: () => performer.scalar(),
     drone: () => performer.drone(),
     melodic: () => performer.melodic(),
   }[lastTransportMode] ?? (() => performer.bloom()))();
@@ -895,7 +895,7 @@ function wireSoundControls() {
 function wireTransport() {
   const modes = {
     '#bloomBtn': () => performer.bloom(),
-    '#sequenceBtn': () => performer.sequence(),
+    '#scalarBtn': () => performer.scalar(),
     '#droneBtn': () => performer.drone(),
     '#melodicBtn': () => performer.melodic(),
   };
@@ -930,7 +930,7 @@ function wireTransport() {
 }
 
 function setActiveTransportMode(mode = null) {
-  for (const [sel, name] of [['#bloomBtn', 'bloom'], ['#sequenceBtn', 'sequence'], ['#droneBtn', 'drone'], ['#melodicBtn', 'melodic']]) {
+  for (const [sel, name] of [['#bloomBtn', 'bloom'], ['#scalarBtn', 'scalar'], ['#droneBtn', 'drone'], ['#melodicBtn', 'melodic']]) {
     const active = name === mode;
     $(sel).classList.toggle('is-active', active);
     $(sel).setAttribute('aria-pressed', String(active));
@@ -1430,7 +1430,7 @@ function wireKeyboard() {
       return;
     }
     if (e.key.toLowerCase() === 'b') performer.bloom();
-    else if (e.key.toLowerCase() === 's') performer.sequence();
+    else if (e.key.toLowerCase() === 's') performer.scalar();
     else if (e.key.toLowerCase() === 'd') performer.drone();
     else if (e.key.toLowerCase() === 'm') performer.melodic();
   });

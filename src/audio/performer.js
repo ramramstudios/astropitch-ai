@@ -3,7 +3,7 @@
  *
  * A natal chart has ten planetary bodies scattered across a chromatic octave.
  * ASC, MC, DSC and IC are directional reference points, not voices — they are
- * never scheduled by bloom, sequence, drone, or melodic (see `_sounding`).
+ * never scheduled by bloom, scalar, drone, or melodic (see `_sounding`).
  * They are only heard on demand, via a click on the wheel that auditions the aspect
  * network attached to that direction (`playDirectionalAspects`). Playing all
  * ten planets at one pitch level gets a tone cluster, which is honest but
@@ -356,7 +356,7 @@ export class Performer {
    * The ten planetary voices only. ASC/MC are directional reference points —
    * heard only via a click on the wheel and its connected aspects
    * (playDirectionalAspects, off `chart.anglePoints`), never as chord tones
-   * in bloom, sequence, or drone.
+   * in bloom, scalar, drone, or melodic.
    */
   _sounding() {
     if (!this.chart) return [];
@@ -519,12 +519,12 @@ export class Performer {
   async playDirectionalAspects(aspects, { mode = 'bloom' } = {}) {
     if (!aspects.length) return;
     await this._begin(mode);
-    const ordered = aspects.slice().sort(mode === 'sequence'
+    const ordered = aspects.slice().sort(mode === 'scalar'
       ? (a, b) => this._direction(a.b).longitude - this._direction(b.b).longitude
       : (a, b) => b.exactness - a.exactness);
     const start = this.engine.now + 0.08;
-    const step = mode === 'sequence' ? 1.05 : mode === 'drone' ? 0.18 : 0.58;
-    const duration = mode === 'drone' ? 7.5 : mode === 'sequence' ? 1.25 : 3.4;
+    const step = mode === 'scalar' ? 1.05 : mode === 'drone' ? 0.18 : 0.58;
+    const duration = mode === 'drone' ? 7.5 : mode === 'scalar' ? 1.25 : 3.4;
     let t = start;
     const voices = [];
     for (const aspect of ordered) {
@@ -593,8 +593,8 @@ export class Performer {
    * Note length comes from modality: cardinal strikes, fixed holds, mutable
    * sits in between and wavers.
    */
-  async sequence() {
-    await this._begin('sequence');
+  async scalar() {
+    await this._begin('scalar');
     // The walk's start line is the house-1 cusp, not the rising sign's
     // boundary: those match for whole sign, but equal and the quadrant
     // systems put the Ascendant's exact degree ahead of it, and a body
@@ -615,7 +615,7 @@ export class Performer {
     }
 
     // Buffer past the last note's nominal end for the slowest (fixed) release.
-    this._endAt('sequence', t + 3.6);
+    this._endAt('scalar', t + 3.6);
   }
 
   /**

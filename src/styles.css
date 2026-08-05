@@ -1284,7 +1284,7 @@ button.play.is-active {
 }
 
 #bloomBtn .play-name::before { content: "☉"; }
-#sequenceBtn .play-name::before { content: "☊"; }
+#scalarBtn .play-name::before { content: "☊"; }
 #droneBtn .play-name::before { content: "♆"; }
 #melodicBtn .play-name::before { content: "♪"; }
 

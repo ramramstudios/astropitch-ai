@@ -154,7 +154,7 @@ console.log('--- a silent body is not scheduled ---');
   });
   performer.setChart(designed);
 
-  for (const mode of ['bloom', 'sequence']) {
+  for (const mode of ['bloom', 'scalar']) {
     log.length = 0;
     await performer[mode]();
     performer.stop();

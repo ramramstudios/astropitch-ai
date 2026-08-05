@@ -149,8 +149,8 @@ more atmospheric. Low bodies are also trimmed for headroom.
 
 ASC and MC are directional references, not standalone sounding bodies: they
 default to off, and switching either on only affects the aspects and the
-elemental balance — neither ever joins Bloom, Sequence, or Drone as a chord
-tone. The only way to hear one is to click its direction label and audition
+elemental balance — neither ever joins Bloom, Scalar, Drone, or Melodic as a
+chord tone. The only way to hear one is to click its direction label and audition
 the aspects attached to it (see below). DSC and IC are the same kind of
 reference — the opposite point from MC and ASC respectively — but are not
 independently listed or switched; they always mirror whichever of ASC/MC they
@@ -230,10 +230,10 @@ position while the house ring turns under them.
 
 Each body also has a switch, including ASC and MC (off by default — see
 above, though switching either on only ever affects the aspects and the
-elemental balance, never Bloom, Sequence, or Drone). A body switched off keeps
-its place on the wheel and in the placement list, but drops out of the
+elemental balance, never Bloom, Scalar, Drone, or Melodic). A body switched off
+keeps its place on the wheel and in the placement list, but drops out of the
 aspects and the elemental balance — for the ten planets it also drops out of
-all three playback modes, the fastest way to find out what a chart sounds
+all four playback modes, the fastest way to find out what a chart sounds
 like without its Saturn.
 
 Moving the Ascendant turns the house ring with it, because the Ascendant *is* the
@@ -334,10 +334,12 @@ voices ─┬──────────────────────�
   it finishes. Polyphony is capped, counting sounding voices rather than
   registered ones, and the oldest is stolen when the cap is reached.
 
-Three ways to play a chart: **Bloom** assembles it into one chord, rising sign
-first; **Sequence** walks the zodiac from the Ascendant with note length set by
+Four ways to play a chart: **Bloom** assembles it into one chord, rising sign
+first; **Scalar** walks the zodiac from the Ascendant with note length set by
 modality; **Drone** sustains the anchors and surfaces the other bodies at a rate
-driven by how tightly they aspect each other.
+driven by how tightly they aspect each other; **Melodic** builds a tune from only
+the chart's own notes, in whichever major or minor key they best fit, and loops
+it.
 
 Temperament is switchable. Equal supports both pitch presentations: Chromatic
 locks each sign to its place in the twelve-tone chromatic system, while Gliss
@@ -395,7 +397,7 @@ remembered between visits.
 | Key | |
 | --- | --- |
 | `Space` | play the chart, or stop it |
-| `B` `S` `D` | bloom, sequence, drone |
+| `B` `S` `D` `M` | bloom, scalar, drone, melodic |
 | `[` | fold or unfold the controls |
 | `]` | hide or show the player |
 | `Esc` | cancel a designer drag, or close *How it works* |
@@ -464,7 +466,7 @@ src/
     voices.js        timbre x gesture x articulation -> one voice
     palettes.js      the timbre and gesture tables the renderer reads
     tuning.js        longitude -> frequency, temperaments
-    performer.js     bloom, sequence, drone
+    performer.js     bloom, scalar, drone, melodic
   ui/
     wheel.js         SVG chart wheel + circular oscilloscope
     app.js           wiring
