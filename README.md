@@ -8,17 +8,14 @@ This is the technical reference. It assumes familiarity with astrology, basic
 music theory, and Web Audio concepts. The in-app **How it works** guide is the
 shorter, astrology-first introduction.
 
-No build step, dependencies, server, or API: static files and the Web Audio API.
+No build step, dependencies, or API: static files and the Web Audio API.
 
 ## The idea
 
-Each sign occupies a pitch region. Pitch presentation has two modes:
-**Chromatic**, which locks a sign to one pitch, and **Gliss**, which moves
-continuously through it. Temperament is a separate choice. In Equal
-temperament, Chromatic maps Aries to A, Taurus to A♯, Gemini to B, and so on up
-to Pisces at G♯; Gliss sets the center of Aries to the reference A (default =
-432 hz). That is a chromatic scale wrapped around a circle: twelve signs of
-30° against twelve semitones.
+Each sign occupies a pitch region. **Chromatic** locks a sign to one pitch;
+**Gliss** moves continuously through it. Temperament is a separate choice. In
+Equal temperament, Chromatic maps Aries to A, Taurus to A♯, ... Pisces to G♯;
+Gliss sets the center of Aries to the reference A (default 432 hz):
 
 ```
 30° of ecliptic longitude  ==  1 semitone
@@ -27,12 +24,10 @@ one trip around the zodiac ==  1 octave
 Gliss frequency = A × 2^((longitude - 15) / 360)
 ```
 
-So the conversion is arithmetic, not a lookup table, and it is *continuous*.
-The reference A sits dead-center in Aries; a planet at 14°22′ Aries is just
-below that pitch center, and you can hear the difference.
-
-The useful consequence is that **every aspect is an interval**, with no extra
-assumptions:
+The conversion is arithmetic and continuous, not a lookup table. The useful
+consequence: **every aspect is an interval**, using the shortest undirected
+distance between two placements (so it tops out at 180° / the tritone —
+angles beyond that are inversions of intervals already listed):
 
 | Aspect      | Angle | Semitones | Interval       |
 |-------------|-------|-----------|----------------|
@@ -43,274 +38,113 @@ assumptions:
 | Quincunx    | 150°  | 5         | perfect fourth |
 | Opposition  | 180°  | 6         | tritone        |
 
-The table uses the shortest, undirected distance between two placements, so it
-ends at 180° / the tritone. The intervals beyond that point are inversions of
-the ones already listed: for example, 210° is a perfect fifth, but it is the
-same contact as a 150° quincunx heard in the opposite direction—a perfect
-fourth. Listing both would duplicate the same aspect.
-
-The clean interval landings are arithmetic, not accidental. The happy
-coincidence is expressive: the opposition maps to a dissonant tritone and the
-trine to a consonant major third, broadly echoing their traditional hard and
-easy readings.
-
 ## What makes a placement sound the way it does
 
-A placement is a stack of independent musical decisions. The sign supplies the
-pitch region; its element supplies timbre, its modality supplies articulation,
-and its house supplies the performance gesture. The planetary body places the
-result in the ensemble. Aspects describe relationships between placements; they
-do not replace either placement's instrument.
+A placement is a stack of independent musical decisions: the **sign** supplies
+pitch region, element (timbre), and modality (articulation); the **house**
+supplies a performance gesture; the **planetary body** places the result in
+the ensemble (register, gain, role); **aspects** describe relationships
+between placements without replacing either one's instrument.
 
 | Layer | Comes from | What it changes in sound |
 |---|---|---|
-| **Pitch** | Chromatic: sign; Gliss: sign + exact degree | Fundamental pitch. Chromatic locks each sign to one note in the twelve-tone chromatic system. In Gliss mode, each degree raises pitch by 3⅓ cents; pitch-tracking filters and resonant body move with it. |
-| **Timbre** | Element | Oscillator stack, harmonic density, noise, sub, resonance, spectral tilt, drift, and default space. |
-| **Gesture** | House | Attack and filter contours, plus behavior such as gating, glide, doubling, or FM. |
-| **Articulation** | Modality | Base ADSR contour and vibrato depth, multiplied by the house gesture. |
-| **Register / role** | Planetary body | Octave, gain, arrangement priority, and occasional body-level spatial treatment—not a separate timbre recipe. |
-| **Relationship** | Aspects | The interval two placements form, and the importance or activity of that pairing. |
+| **Pitch** | Sign (+ exact degree in Gliss) | Fundamental pitch |
+| **Timbre** | Element | Oscillator stack, harmonic density, noise, sub, resonance, spectral tilt, drift, default space |
+| **Gesture** | House | Attack/filter contours; gating, glide, doubling, or FM |
+| **Articulation** | Modality | Base ADSR contour and vibrato depth, multiplied by the house gesture |
+| **Register / role** | Planetary body | Octave, gain, arrangement priority |
+| **Relationship** | Aspects | The interval two placements form, and its importance/activity |
 
-In brief: **the sign gives pitch, timbre, and articulation; the house gives
-them a performance gesture; the body says where the voice sits in the texture;
-aspects say how it sounds with the other voices.**
+| Element → Timbre | Heard as |
+|---|---|
+| **Fire** | bright, dense, urgent (beating saws/square, sharp noise attack, soft clipping) |
+| **Earth** | weighty, wooden, contained (triangles/sines over a strong sub, box resonance) |
+| **Air** | hollow, breathy, wide (odd-rich pulse, octave shadow, wide stereo) |
+| **Water** | smooth, unstable, submerged (detuned sine/triangle, slow filter drift, low-index FM, long reverb) |
 
-### Sign: pitch, timbre, and articulation
+| Modality → Articulation | Heard as |
+|---|---|
+| **Cardinal** | initiating — near-instant onset, lower sustain, shorter decay |
+| **Fixed** | held — slower onset, high sustain, long release |
+| **Mutable** | changing — moderate onset/sustain, most base vibrato |
 
-The sign is not a single preset. It supplies a pitch region, an element, and a
-modality. Pitch presentation and temperament are separate controls:
+Houses shape the element's timbre rather than replacing it (envelope/filter
+changes, noise/sub weight, image width, time-based behaviors) — full table of
+all twelve in `palettes.js`. This yields 12 sign recipes × 12 house gestures =
+144 combinations before body register and aspects are applied; all 144 are
+synthesized, not sampled, and covered by `palettes.test.mjs`.
 
-- **Chromatic** locks a placement to its sign's pitch class.
-- **Gliss** makes Equal temperament continuous: moving through a 30° sign
-  raises the fundamental by a semitone.
-- **Just** and **Pythagorean** are temperaments, not additional pitch modes.
-  Both intentionally quantise to the sign pitch class, so degree no longer
-  changes the tuned fundamental.
+Body register follows physical size: the Sun anchors the bottom (doubled in
+unison three octaves apart); each smaller body sits a register higher, up to
+Pluto at the top. Sun and Moon stay loud regardless of register; outer
+planets are more atmospheric.
 
-| Element → Timbre | Heard as | Timbre recipe |
-|---|---|---|
-| **Fire** | bright, dense, urgent | Beating saws and square wave, sharp high-passed attack noise, soft clipping, bright tilt |
-| **Earth** | weighty, wooden, contained | Triangles and sines over a strong sub, rolled-off upper partials, box resonance |
-| **Air** | hollow, breathy, wide | Odd-rich pulse spectrum, octave shadow, pitch-tracking band-passed breath, broad stereo image |
-| **Water** | smooth, unstable, submerged | Detuned sine/triangle core, slow filter drift, low-index FM, long reverb tail |
+ASC and MC are directional references, not standalone sounding bodies — off
+by default, and switching either on only affects aspects and elemental
+balance; neither ever joins Bloom, Scalar, Drone, or Melodic as a chord tone.
+Click a direction label to filter the wheel to its aspect network. DSC/IC
+always mirror MC/ASC and aren't independently listed.
 
-| Modality → Articulation | Heard as | Base articulation |
-|---|---|---|
-| **Cardinal** | initiating | Near-instant onset, lower sustain, shorter decay |
-| **Fixed** | held | Slower onset, high sustain, long release |
-| **Mutable** | changing | Moderate onset and sustain, with the most base vibrato |
-
-**Articulation changes expression, not the instrument:** modality multiplies
-the house's amplitude envelope (attack, decay, sustain, and release) and sets
-base vibrato depth. It does not change the oscillator spectrum, filters, noise,
-FM, or spatial treatment.
-
-### House: the performance gesture
-
-Houses shape the element's timbre; they do not replace it. A house can alter
-an envelope or filter, change noise or sub weight, widen the image, or add a
-time-based behavior.
-
-| House | Instruction | Audible result |
-|---|---|---|
-| 1st | Dry, immediate, narrow | Naked and forward |
-| 2nd | Strike; more noise and sub; rapid decay | Physical, percussive mass |
-| 3rd | Hard transient and brief 11 Hz flutter | Quick, articulate, speech-like attack |
-| 4th | Slow, muffled onset; less noise, more sub | Warm, interior, heard through a wall |
-| 5th | Pitch scoop and delayed vibrato | Sung, expressive, showy |
-| 6th | Strict 8 Hz amplitude gate | Measured, clocked pulse |
-| 7th | Delayed, panned 9-cent double | A paired voice, slightly apart |
-| 8th | Extra sub and drive; slow filter opening | Growling and transforming over time |
-| 9th | Slow contour, wide image, strong reverb/delay | Distant, expansive horizon |
-| 10th | Filter overshoot and added drive | Brass-like, declarative projection |
-| 11th | Inharmonic FM | Metallic, synthetic bell |
-| 12th | Very long swell, glide, mostly reflected sound | Dissolved, pre-echoing arrival |
-
-### Planetary body: register and orchestration
-
-The body identifies the part in the ensemble. A Moon, Sun, or Mercury in the
-same sign and house starts with the same Element → Timbre, House → Gesture, and
-Modality → Articulation mapping; the body shifts its octave, changes its mix
-weight, and gives it a role. Register follows physical size — the Sun, biggest
-by far, anchors the bottom and doubles itself in unison three octaves apart;
-each smaller body sits a register higher, up to Pluto at the top. The Sun and
-Moon are the loudest anchors regardless of register, while outer planets are
-more atmospheric. Low bodies are also trimmed for headroom.
-
-| Body | Register relative to the sign pitch | Role |
-|---|---:|---|
-| Ascendant / MC | unshifted | outward voice / aimed-at pitch |
-| Sun | two octaves down, doubled in unison three octaves apart | the fundamental |
-| Jupiter / Saturn | one octave down | room it expands into / structural bass |
-| Uranus / Neptune | unshifted | interruption / wash |
-| Venus / Mars | one octave up | consonance / transient |
-| Mercury / Moon | two octaves up | fast upper partial / near, pale overtone |
-| Pluto | two octaves up | distant icy glint: quiet, wide, and reflected |
-
-ASC and MC are directional references, not standalone sounding bodies: they
-default to off, and switching either on only affects the aspects and the
-elemental balance — neither ever joins Bloom, Scalar, Drone, or Melodic as a
-chord tone. The only way to hear one is to click its direction label and audition
-the aspects attached to it (see below). DSC and IC are the same kind of
-reference — the opposite point from MC and ASC respectively — but are not
-independently listed or switched; they always mirror whichever of ASC/MC they
-are opposite.
-
-### Example: Moon in Virgo, 3rd house vs. 4th house
-
-Assume the same exact Virgo degree. Virgo is mutable Earth, so both placements
-begin with the same D-region pitch, triangle/sine timbre, box resonance, strong
-low end, and mutable articulation. As the Moon, both are voiced two octaves up
-but keep anchor-level loudness.
-
-| Same Moon in Virgo | House changes | Result |
-|---|---|---|
-| **3rd house** | Fast bright filter attack, doubled attack noise, short envelope, brief 11 Hz flutter, and extra delay | A high, wooden voice that speaks: tactile consonant, quick flutter, short decay |
-| **4th house** | Slow attack, low filter starting point, less noise, reinforced sub, narrower stereo, little delay | A high, wooden voice heard inside a room: muffled, weighty, close, and warm |
-
-Virgo remains Earth and the Moon remains high and prominent. The house changes
-**articulation, spectral envelope, density, and space**—the same instrument is
-made to speak or to settle into the room.
-
-### Aspects: interval and interaction
-
-An aspect does not overwrite either placement's timbre. It becomes audible when
-the two placements are heard together: angular distance becomes an interval.
-During the aspect audition, both bodies are temporarily brought to the same
-octave, so the interval is literal rather than hidden by normal orchestration.
-
-| Aspect | Angle | Interval | Playback meaning |
-|---|---:|---|---|
-| Conjunction | 0° | unison | Near pitches beat at a rate set by their orb; exact is fused |
-| Sextile | 60° | major second | Close, stepwise two-note relation |
-| Square | 90° | minor third | Compact, darker third |
-| Trine | 120° | major third | Bright, stable third |
-| Quincunx | 150° | perfect fourth | Open fourth |
-| Opposition | 180° | tritone | The most unstable interval in this mapping |
-
-Exactness affects importance rather than any individual oscillator setting:
-exact contacts are ordered first, and in Drone mode bodies with tighter aspects
-surface more often. In an overlay, the strongest eight cross-chart contacts
-determine which bodies sound, so aspects also shape the texture's density.
-
-This yields 12 distinct sign recipes × 12 house gestures = 144 combinations,
-before body register and relationships are applied. Each sign recipe already
-includes its element's timbre and its modality's articulation; modality is not
-an additional independent factor. These are synthesized combinations, not
-samples.
+During an aspect audition, both bodies are temporarily brought to the same
+octave so the interval is literal. Exactness affects importance, not any
+oscillator setting: exact contacts are ordered first, and in Drone mode
+tighter-aspected bodies surface more often.
 
 ## Chart inputs
 
-Use **Input** to calculate a chart from a date, time, location, UTC offset,
-and house system. Calculations run in the browser using the included
-ephemeris — there is no external astrology API.
+**Input** calculates a chart from date, time, location, UTC offset, and house
+system, using the included in-browser ephemeris (no external API). You must
+supply the UTC offset actually in force at the birth moment — historical DST
+can't be derived from coordinates.
 
-Use **Basic** when precise birth details are unavailable. Select each
-body's sign manually; the app places it at 15° of that sign, which is the honest
-position when the sign is all you know.
+**Basic** places a body at 15° of a manually chosen sign, for when only the
+sign is known.
 
-You must supply the UTC offset that was actually in force at the birth moment.
-Historical daylight saving cannot be derived from coordinates, and guessing it
-silently would be worse than asking.
+**Designer** builds a chart by hand on top of either of those: drag any of
+the ten planets around the wheel (sign, house, pitch, and aspects recompute
+live), or press-and-drag a direction label (ASC/MC/DSC/IC) to turn the whole
+sky — only the Ascendant is actually stored, the rest follow it. The design
+is stored separately from the cast chart, so *Revert chart* always has
+somewhere to go back to. Entering the designer clears any overlay.
 
-Use **Designer** to build a chart by hand on top of whichever of those two you
-cast. Drag any of the ten planets around the wheel; only the angular position
-changes, and a body stays on its ring however far the pointer wanders. Sign,
-exact degree, house, pitch, element, modality and aspects are all recomputed as
-it moves, so the chord you are looking at is the chord you will hear.
-
-The four direction labels (ASC, MC, DSC, IC) work differently. Click one to
-filter the wheel down to just its aspect network and hear it — this works in
-any chart, not only in Designer. In Designer, press and drag one instead to
-turn the whole sky: crossing the drag threshold hands off from that aspect
-audition to the direction's own pitch preview, the same one a dragged planet
-gets. Only the Ascendant is actually stored; MC, DSC and IC follow it. *Lock
-bodies* decides whether the planets turn with the sky or hold their zodiac
-position while the house ring turns under them.
-
-Each body also has a switch, including ASC and MC (off by default — see
-above, though switching either on only ever affects the aspects and the
-elemental balance, never Bloom, Scalar, Drone, or Melodic). A body switched off
-keeps its place on the wheel and in the placement list, but drops out of the
-aspects and the elemental balance — for the ten planets it also drops out of
-all four playback modes, the fastest way to find out what a chart sounds
-like without its Saturn.
-
-Moving the Ascendant turns the house ring with it, because the Ascendant *is* the
-first cusp. Whole sign houses snap to the new rising sign; equal houses redraw
-from the exact angle; Placidus and Porphyry have no closed form without the
-birth data behind them, so their cusps rotate rigidly and keep their unequal
-spacing.
-
-The design is stored separately from the cast chart, so *Revert chart* always
-has something to go back to, and nothing you drag ever edits the chart underneath.
-Designing is one chart at a time: entering the designer clears any overlay, since
-synastry puts two of everything on the wheel and cuts the sound density by contact.
-
-The label above the wheel records the chart that is actually sounding rather than
-the form currently being edited. Input, sky-now, random, basic, and designer
-charts each identify themselves with their cast details. An overlay shortens this
-to a one-line `chart × chart` or `chart × sky` label; the complete details remain
-available as the label's tooltip.
+Each body has a switch (including ASC/MC, off by default). Switching a
+planet off drops it from aspects, elemental balance, and all four playback
+modes — the fastest way to hear a chart without its Saturn.
 
 ## Two charts at once
 
-The **Overlay** tab plays a chart against the sky right now, or against another
-person's chart.
+The **Overlay** tab plays a chart against the sky right now, or against
+another person's chart. Neither chart is transposed — both are tuned by the
+same rule, so a cross-chart trine really is a major third, and a cross-chart
+conjunction's orb is audible directly as a beat rate (e.g. 3° orb ≈ 2.5 Hz
+tremble at A 432, converging to one fused tone at 0°).
 
-Neither chart is transposed. Both are tuned by the same rule, so they land in the
-same chromatic octave and a contact between them is the interval it claims to be
-— a cross-chart trine really is a major third. Shifting one chart aside to
-"separate" the two would make every contact a lie.
-
-That shared pitch space pays for itself. A cross-chart conjunction is a unison
-held slightly apart, so its orb is directly audible as the rate at which the two
-tones beat:
-
-| orb | beat at A 432 | what you hear |
-| --- | --- | --- |
-| 8° | 6.8 Hz | roughness |
-| 3° | 2.5 Hz | a tremble |
-| 1° | 0.85 Hz | a slow swell |
-| 0° | — | one fused tone |
-
-What is controlled instead is density. Twenty-two bodies sounding at once is a
-wall, but a relationship is not twenty-two bodies — it is the handful of places
-where the two charts actually touch. Two charts throw around forty aspects
-between them, so the strongest eight are kept and only the bodies involved in
-those sound. In practice that is twelve or thirteen voices rather than
-twenty-two. Bodies that touch nothing in the other chart are still drawn on the
-wheel, dimmed, and listed as silent.
-
-The cut is therefore made by the astrology rather than by a rule that says "only
-ever play the Sun, Moon and Ascendant". A closely interlocked pair comes out
-dense and busy; two strangers come out sparse and open. The texture is the
-reading.
-
-The **Bloom** arrangement pairs like bodies back to back — your Sun, then theirs
-two tenths of a second later — so each contact arrives as an interval rather than
-as two unrelated events. One number summarises the whole thing: the consonance of
-the kept contacts, weighted by how tight each one is.
+Density is controlled by the astrology, not a fixed rule: of the ~40 aspects
+two charts throw between them, the strongest eight are kept, and only the
+bodies involved in those sound (typically 12-13 voices instead of 22).
+Bodies touching nothing in the other chart are drawn dimmed and listed as
+silent. `synastry.test.mjs` pins these guarantees (shape, no transposition,
+orb→beat-rate).
 
 ## The astronomy
 
 - **Sun** — Meeus ch. 25. Matches the ch. 25 worked example to 0.001°.
-- **Moon** — Meeus ch. 47, full 60-term longitude series with the eccentricity
-  correction and the Venus/Jupiter additive terms. Matches example 47.a to five
+- **Moon** — Meeus ch. 47, full 60-term longitude series with eccentricity
+  correction and Venus/Jupiter additive terms. Matches example 47.a to five
   decimal places.
 - **Planets** — JPL's approximate Keplerian elements with per-century rates,
   Kepler solved by Newton iteration, precessed to the equinox of date. Within
   0.32° of JPL Horizons across all eight.
-- **Houses** — whole sign, equal, or Placidus by semi-arc division (iterating on
-  each cusp's own ascensional difference), falling back to Porphyry inside the
-  polar circles where Placidus has no solution.
+- **Houses** — whole sign, equal, or Placidus by semi-arc division (iterating
+  each cusp's own ascensional difference), falling back to Porphyry inside
+  the polar circles where Placidus has no solution.
 
 Accurate enough for astrology, not for navigation.
 
 ## The audio engine
 
-Raw Web Audio, no library. One signal graph is built once and reused for the life
-of the page:
+Raw Web Audio, no library. One signal graph is built once and reused for the
+life of the page:
 
 ```
 voices ─┬─────────────────────────────────────────────┐
@@ -320,79 +154,58 @@ voices ─┬──────────────────────�
         glue compressor → saturator → tilt → limiter → ceiling → out
 ```
 
-- The reverb impulse response is generated at runtime: sparse early reflections,
-  then a noise tail whose brightness falls as it decays, with the two channels
-  generated independently so the tail is genuinely wide.
-- The delay's feedback loop is low-passed, so repeats get darker rather than
-  shriller.
-- The final ceiling is a `WaveShaper`, not a compressor. A limiter has a finite
-  attack and lets fast transients through — measured at 1.012 with a full chart
-  sustaining. A `WaveShaper` clamps its input before the curve lookup, so its
-  output cannot exceed the curve's endpoint: overshoot is arithmetically
-  impossible rather than merely unlikely.
-- A note allocates only its own oscillators and gains, and tears them down when
-  it finishes. Polyphony is capped, counting sounding voices rather than
-  registered ones, and the oldest is stolen when the cap is reached.
+- The reverb impulse response is generated at runtime (sparse early
+  reflections, then a decaying noise tail); the delay's feedback loop is
+  low-passed so repeats darken rather than get shriller.
+- The final ceiling is a `WaveShaper`, not a compressor: it clamps its input
+  before the curve lookup, so output cannot exceed the curve's endpoint —
+  overshoot is arithmetically impossible, not merely unlikely.
+- A note allocates only its own oscillators/gains and tears them down when it
+  finishes. Polyphony is capped by counting sounding (not merely registered)
+  voices; the oldest is stolen when the cap is reached.
 
 Four ways to play a chart: **Bloom** assembles it into one chord, rising sign
 first; **Scalar** walks the zodiac from the Ascendant with note length set by
-modality; **Drone** sustains the anchors and surfaces the other bodies at a rate
-driven by how tightly they aspect each other; **Melodic** builds a tune from only
-the chart's own notes, in whichever major or minor key they best fit, and loops
-it.
+modality; **Drone** sustains the anchors and surfaces other bodies at a rate
+driven by aspect tightness; **Melodic** builds a tune from only the chart's
+own notes, in whichever major/minor key they best fit, and loops it.
 
-Temperament is switchable. Equal supports both pitch presentations: Chromatic
-locks each sign to its place in the twelve-tone chromatic system, while Gliss
-keeps the mapping continuous around the sign's pitch center. Just and
-Pythagorean instead quantise to the sign in either presentation, which is a
-different and audible claim about what a sign is.
+Temperament is switchable. Equal supports both pitch presentations
+(Chromatic / Gliss); Just and Pythagorean instead quantise to the sign in
+either presentation.
 
 ### Tone palettes
 
-The synthesis is data. `palettes.js` holds one timbre table per element and one
-gesture table per house; `voices.js` is the renderer that turns either into a
-graph. A palette changes the voices' timbre and nothing else — not the chart,
-the scheduler, the sign/house/modality mapping, or the master chain. Modalities
-stay in `ontology.js`, because cardinal/fixed/mutable is a claim about
-articulation that holds whatever the timbre is.
+The synthesis is data. `palettes.js` holds one timbre table per element and
+one gesture table per house; `voices.js` is the renderer that turns either
+into a graph. A palette changes only the voices' timbre — not the chart, the
+scheduler, the sign/house/modality mapping, or the master chain. Modalities
+stay in `ontology.js`, since cardinal/fixed/mutable is a claim about
+articulation independent of timbre.
 
-Two palettes ship. **Warm** is the default and sits on the left of the Settings
-switch; **Bright** is the right-hand alternative. The internal ids remain
-`harmonic` and `astropitch` respectively.
+Two palettes ship: **Warm** (`harmonic`, default) uses explicit overtone
+series via `createPeriodicWave`, lower noise/drive, gentler movement, longer
+releases. **Bright** (`astropitch`) uses built-in saw/square/triangle/sine
+with denser spectra, more attack noise, more drive.
 
-- **Warm** (`harmonic`) uses explicit overtone series via `createPeriodicWave`,
-  lower noise and drive, gentler filter/gate movement, and longer releases. It
-  is intended to keep dense charts clear and blended.
-- **Bright** (`astropitch`) uses built-in saw, square, triangle, and sine sources
-  with denser spectra, more attack noise, more drive, and stronger gestures.
+Two constraints are measured and tested:
 
-Two palette constraints are measured and tested:
+- **Body ratios stay off the harmonic grid** (e.g. 2.7, 1.6, 4.2) — a body is
+  a fixed physical resonance, so an integer ratio would land the peaking
+  filter on a partial already there and boost it by its full gain.
+- **Sends are set against the master chain**, not corrected by turning a
+  palette down: measured, a 30% cut in voice gain moved master RMS ~4%,
+  while a 30% cut in send level moved it 8% and brought time above the
+  soft-clip ceiling from +39% to +2%. `palettes.test.mjs` bounds the mean
+  send so this can't drift again.
 
-- **Body ratios belong off the harmonic grid.** A body is a formant, a fixed
-  physical resonance, so there is nothing for it to be consonant with. Set it to
-  an integer ratio and the peaking filter lands on a partial that is already
-  there and boosts it by its full gain. The original palette's 2.7, 1.6 and 4.2
-  are deliberately between partials.
-- **Sends have to be set against the master chain.** Smooth spectra are louder
-  than rough ones at equal peak, and a reverb send returns sustained low-crest
-  energy that raises RMS without raising peak. Because the chain normalises, a
-  palette cannot be corrected by turning it down: measured, a 30% cut in voice
-  gain moved master RMS about 4%, while a 30% cut in send level moved it 8% and
-  brought time above the soft-clip ceiling from +39% to +2% against the original
-  palette. `palettes.test.mjs` bounds the mean send so this cannot drift again.
-
-Adding a third is adding a table. It is not adding a dependency: a wavetable, a
-resonant body and an FM operator are all already in the renderer, and anything
-they can't reach (a plucked string, say) is a small addition to the renderer
-rather than a reason to take on an audio framework.
+Adding a third palette is adding a table, not a dependency — wavetable,
+resonant body, and FM operator are already in the renderer.
 
 ## Using it
 
-The controls panel folds away against the left rail, which is worth doing once
-you have cast the chart: the wheel takes the height it was already asking for,
-and the readout moves into the space the panel left behind, so what you are
-hovering and what it says about it are on screen together. The state is
-remembered between visits.
+The controls panel folds away against the left rail; state is remembered
+between visits.
 
 | Key | |
 | --- | --- |
@@ -404,17 +217,14 @@ remembered between visits.
 
 ## Run locally
 
-This is a static HTML/CSS/JavaScript project, but ES modules need a real origin,
-so `file://` will not work. Serve it with Python's built-in web server:
+ES modules need a real origin, so `file://` will not work:
 
 ```sh
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-Then open [http://localhost:8000](http://localhost:8000) in a browser. Best with
-headphones.
-
-Stop the server with `Ctrl+C` in the terminal where it is running.
+Then open [http://localhost:8000](http://localhost:8000). Best with
+headphones. `Ctrl+C` to stop.
 
 ## Tests
 
@@ -426,31 +236,11 @@ node tests/designer.test.mjs     # hand-placed bodies, switches, moved angles
 node tests/palettes.test.mjs     # every palette builds every combination
 ```
 
-`synastry.test.mjs` pins the claims the overlay depends on: that a merged
-synastry object is shaped exactly like a chart, that neither chart is
-transposed, and that orb converts to beat rate as advertised.
-`performer.test.mjs` stubs voice construction so the arrangement logic can run
-without an `AudioContext`; its sharpest check is that the detune nudge never
-crosses between charts, since there the beating is the signal rather than
-something to be smoothed away.
-`designer.test.mjs` holds the designer to the same bargain as the overlay: a
-designed chart has to be shaped exactly like a cast one, a moved body has to
-carry every derived field with it, and a body switched off has to disappear from
-the aspects, the balance and the schedule rather than merely being turned down.
-
-`palettes.test.mjs` guards the thing a new palette is most likely to get wrong:
-that its tables cover all four elements and twelve houses. It also exercises
-the renderer with all three fixed modalities, so every one of the 144 element ×
-modality × house combinations (equivalently, 12 sign recipes × 12 houses)
-builds a graph without sending a NaN — or a zero into an exponential ramp — to
-an `AudioParam`. It stubs Web Audio, so it runs in Node alongside the rest.
-
-For the audio, open `tests/audio.test.html` with the server running. It renders
-the graph through an `OfflineAudioContext` and measures the result: all 144
-sign × house combinations, for every palette, for NaN, clipping, hard cuts and
-silence; envelope
-endpoints; a full eleven-voice bloom for headroom and DC offset; voice teardown
-and polyphony capping; reverb and delay stability; and the tuning maths.
+All stub Web Audio / `AudioContext` and run in plain Node. For the audio
+itself, open `tests/audio.test.html` with the server running — it renders
+every sign × house × palette combination through an `OfflineAudioContext` and
+checks for NaN, clipping, hard cuts, silence, envelope endpoints, headroom,
+DC offset, voice teardown/polyphony capping, and reverb/delay stability.
 
 ## Layout
 
