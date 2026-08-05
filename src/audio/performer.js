@@ -39,6 +39,14 @@ function loudnessTrim(freq) {
 // chart. See `melodic()` for the composition itself; these are its pure
 // scale-degree helpers, kept free of the engine so they stay easy to reason
 // about (and to test) in isolation.
+//
+// TODO: this hand-rolled fitScale/pickMotif/buildDegreeWalk/buildMelody
+// pipeline is one fixed algorithm. Consider feeding the chart's placements
+// (pitch class, register, house, element/modality, aspects) to an AI model
+// prompted with real western-music-theory conventions (voice leading,
+// tension/resolution, phrase structure) to compose a more context-aware
+// melody — and potentially do the same for bloom/scalar/drone's voicing and
+// timing choices, not just melodic.
 // ---------------------------------------------------------------------------
 
 const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
