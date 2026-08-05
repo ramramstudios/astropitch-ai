@@ -68,6 +68,7 @@ const PLACES = [
   { name: 'West Palm Beach, FL', lat: 26.715, lon: -80.053, utc: -5 },
   { name: 'Camilla, GA', lat: 31.235, lon: -84.204, utc: -5 },
   { name: 'Springfield, IL', lat: 39.782, lon: -89.650, utc: -6 },
+  { name: 'Gainesville, FL', lat: 29.652, lon: -82.325, utc: -5 },
 ];
 
 const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
