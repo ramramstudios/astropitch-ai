@@ -1286,6 +1286,7 @@ button.play.is-active {
 #bloomBtn .play-name::before { content: "☉"; }
 #sequenceBtn .play-name::before { content: "☊"; }
 #droneBtn .play-name::before { content: "♆"; }
+#melodicBtn .play-name::before { content: "♪"; }
 
 .play-sub {
   font-family: var(--mono);
@@ -1777,7 +1778,7 @@ html[data-mode="mobile"] .transport-main {
   /* Keep every transport action in the grid. The hide button used to be
      absolutely positioned here, which made the final grid column empty and
      allowed controls to collide at narrow widths. */
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 html[data-mode="mobile"] .transport-brand {

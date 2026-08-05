@@ -230,6 +230,10 @@ console.log('\n--- ASC/MC never sound as chord tones, enabled or not ---');
   ok('an enabled ASC/MC still do not join the sequence',
     !sequenceOut.some((v) => v.key === 'asc' || v.key === 'mc'));
 
+  const melodicOut = await run(angles, 'melodic');
+  ok('an enabled ASC/MC still do not join the melody',
+    !melodicOut.some((v) => v.key === 'asc' || v.key === 'mc'));
+
   const p = new Performer(engine);
   p.setChart(angles);
   log.length = 0;
@@ -358,6 +362,45 @@ console.log('\n--- sequence: the walk starts at the exact Ascendant, not its sig
     order[0] === 'moon', order.join(', '));
   ok('the body just short of the Ascendant sounds last, having not risen yet',
     order[order.length - 1] === 'sun', order.join(', '));
+}
+
+console.log('\n--- melodic: constrained to the chart\'s own notes, and covers every body ---');
+{
+  const out = await run(A, 'melodic');
+  const sounding = A.placements.filter((p) => !p.silent && !p.isAngle);
+  const soundingPcs = new Set(sounding.map((p) => p.signIndex));
+
+  ok('never invents a pitch class the chart does not have',
+    out.every((v) => soundingPcs.has(A.byKey[v.key].signIndex)));
+
+  const usedKeys = new Set(out.map((v) => v.key));
+  ok('every sounding body is heard at least once', sounding.every((p) => usedKeys.has(p.key)),
+    `missing: ${sounding.filter((p) => !usedKeys.has(p.key)).map((p) => p.key).join(',') || 'none'}`);
+
+  ok('times strictly increase within the phrase', out.every((v, i) => i === 0 || v.time > out[i - 1].time));
+}
+
+console.log('\n--- melodic: repeats its phrase on an open-ended loop, like drone ---');
+{
+  const p = new Performer(engine);
+  p.setChart(A);
+  await p.melodic();
+  ok('schedules a repeat rather than ending after one pass', p.loopHandle != null);
+  p.stop();
+  ok('stop() clears the loop', p.loopHandle == null);
+}
+
+console.log('\n--- melodic: a chart with nothing sounding stays silent, without spinning a timer ---');
+{
+  const silent = designChart(A, Object.fromEntries(SOUNDING_BODIES.map((k) => [k, { enabled: false }])));
+  const out = await run(silent, 'melodic');
+  ok('schedules nothing', out.length === 0);
+
+  const p = new Performer(engine);
+  p.setChart(silent);
+  await p.melodic();
+  ok('does not arm a loop with nothing to repeat', p.loopHandle == null);
+  p.stop();
 }
 
 console.log(`\n${fails === 0 ? 'All arrangement checks passed.' : `${fails} FAILURE(S).`}`);
