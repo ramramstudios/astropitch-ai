@@ -489,6 +489,15 @@ function wireDesigner() {
     clearReadout();
   });
 
+  $('#designerRandomBtn').addEventListener('click', () => {
+    for (const key of DESIGNABLE_BODIES) {
+      state.design[key] = { ...state.design[key], longitude: Math.random() * 360, enabled: true };
+    }
+    saveDesign();
+    render();
+    clearReadout();
+  });
+
   $('#designerAllOffBtn').addEventListener('click', () => {
     for (const key of DESIGNABLE_BODIES) {
       state.design[key] = { ...state.design[key], enabled: false };
@@ -499,7 +508,9 @@ function wireDesigner() {
   });
 
   $('#designerAllOnBtn').addEventListener('click', () => {
-    for (const entry of Object.values(state.design)) delete entry.enabled;
+    for (const key of DESIGNABLE_BODIES) {
+      state.design[key] = { ...state.design[key], enabled: true };
+    }
     saveDesign();
     render();
   });
@@ -689,6 +700,18 @@ function wireForms() {
     }
     const chart = chartFromSelectedSigns();
     setSubject(chart, makeChartDescriptor('random-signs', chart, 'primary'));
+    saveChartConfig();
+  });
+
+  $('#signsAllOffBtn').addEventListener('click', () => {
+    for (const key of SOUNDING_BODIES) state.signEnabled[key] = false;
+    buildSignPickers();
+    saveChartConfig();
+  });
+
+  $('#signsAllOnBtn').addEventListener('click', () => {
+    for (const key of SOUNDING_BODIES) state.signEnabled[key] = true;
+    buildSignPickers();
     saveChartConfig();
   });
 }
@@ -1449,10 +1472,10 @@ function formatUtcOffset(offset) {
 
 function descriptorName(kind) {
   return {
-    birth: 'Birth data',
+    birth: 'Input',
     sky: 'Sky right now',
     random: 'Random',
-    signs: 'Just the signs',
+    signs: 'Basic',
     'random-signs': 'Random signs',
   }[kind] ?? 'Chart';
 }
@@ -1460,10 +1483,10 @@ function descriptorName(kind) {
 function descriptorDetails(descriptor, { compact = false } = {}) {
   if (!descriptor) return 'Chart';
   if (descriptor.kind === 'signs' || descriptor.kind === 'random-signs') {
-    const name = compact && descriptor.kind === 'signs' ? 'Signs' : descriptorName(descriptor.kind);
+    const name = descriptorName(descriptor.kind);
     return compact ? name : `${name} · ${descriptor.placements} placements`;
   }
-  const name = compact && descriptor.kind === 'birth' ? 'Birth' : descriptorName(descriptor.kind);
+  const name = descriptorName(descriptor.kind);
   const parts = [name, descriptor.date, compact ? null : `${descriptor.time} ${formatUtcOffset(descriptor.utcOffset)}`, compact ? null : descriptor.place]
     .filter(Boolean);
   return parts.join(' · ');

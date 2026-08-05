@@ -74,8 +74,8 @@
 
       <section class="tabpanel is-active" id="panel-chart" role="tabpanel" aria-labelledby="tab-chart" tabindex="0" data-panel="chart">
         <div class="seg" role="group" aria-label="Chart source">
-          <button class="seg-btn is-active" data-source="birth">Birth data</button>
-          <button class="seg-btn" data-source="signs">Just the signs</button>
+          <button class="seg-btn is-active" data-source="birth">Input</button>
+          <button class="seg-btn" data-source="signs">Basic</button>
           <button class="seg-btn" data-source="designer">Designer</button>
         </div>
 
@@ -140,14 +140,12 @@
         </form>
 
         <form id="signsForm" class="form is-hidden">
-          <p class="note">
-            No birth time needed. Each body sits midway through its sign. Change
-            any sign to explore.
-          </p>
           <div id="signPickers" class="sign-pickers"></div>
           <div class="form-actions">
             <button type="submit" class="primary">Cast chart</button>
             <button type="button" class="ghost" id="randomSignsBtn">Random</button>
+            <button type="button" class="ghost" id="signsAllOffBtn">All off</button>
+            <button type="button" class="ghost" id="signsAllOnBtn">All on</button>
           </div>
         </form>
 
@@ -164,6 +162,7 @@
           <div id="designerList" class="designer-list"></div>
           <div class="form-actions">
             <button type="button" class="primary" id="designerResetBtn">Reset to chart</button>
+            <button type="button" class="ghost" id="designerRandomBtn">Random</button>
             <button type="button" class="ghost" id="designerAllOffBtn">All off</button>
             <button type="button" class="ghost" id="designerAllOnBtn">All on</button>
           </div>
@@ -435,8 +434,8 @@
 
       <h3>Start listening</h3>
       <p>
-        Cast a chart from birth data, or use <strong>Just the signs</strong>
-        when that is all you know. Click any sign, planet, or aspect to hear it.
+        Use <strong>Input</strong> to cast a chart from birth data, or
+        <strong>Basic</strong> when that is all you know. Click any sign, planet, or aspect to hear it.
         Use <strong>Bloom</strong> for the chart as a chord, <strong>Sequence</strong>
         to move through it, and <strong>Drone</strong> for a changing sustain.
       </p>

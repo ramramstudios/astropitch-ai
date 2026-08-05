@@ -194,11 +194,11 @@ samples.
 
 ## Chart inputs
 
-Use **Birth data** to calculate a chart from a date, time, location, UTC offset,
+Use **Input** to calculate a chart from a date, time, location, UTC offset,
 and house system. Calculations run in the browser using the included
 ephemeris — there is no external astrology API.
 
-Use **Just the signs** when precise birth details are unavailable. Select each
+Use **Basic** when precise birth details are unavailable. Select each
 body's sign manually; the app places it at 15° of that sign, which is the honest
 position when the sign is all you know.
 
@@ -239,7 +239,7 @@ Designing is one chart at a time: entering the designer clears any overlay, sinc
 synastry puts two of everything on the wheel and cuts the sound density by contact.
 
 The label above the wheel records the chart that is actually sounding rather than
-the form currently being edited. Birth, sky-now, random, sign-only, and designer
+the form currently being edited. Input, sky-now, random, basic, and designer
 charts each identify themselves with their cast details. An overlay shortens this
 to a one-line `chart × chart` or `chart × sky` label; the complete details remain
 available as the label's tooltip.
