@@ -308,6 +308,16 @@ export class AudioEngine {
     // A voice stays in the set until its nodes are torn down. In particular,
     // `released` can mean a release scheduled seconds from now, so it is not
     // a signal that the voice has stopped consuming a polyphony slot.
+    //
+    // TODO: fix the polyphony problem causing audible digital distortion
+    // when too many tones sound at once. `_updateDuck` only backs off the
+    // mix/send buses once activeVoiceCount passes duckAt, `maxVoices`
+    // stealing here is a hard, audible fade rather than a graceful limit,
+    // and `Performer._voiceFor`'s `solo: true` path (used by melodic and
+    // the Designer preview) skips the equal-power headroom calc entirely —
+    // so a burst of solo-gain notes can still sum past what the ceiling
+    // WaveShaper can clamp without audibly clipping first. Needs a real fix
+    // (proper gain staging under load, not just voice-stealing at the cap).
     while (this.activeVoiceCount() > this.maxVoices) {
       let oldest = null;
       for (const v of this.voices) {
