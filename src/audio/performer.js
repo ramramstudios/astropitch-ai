@@ -364,6 +364,11 @@ export class Performer {
   }
 
   _panFor(placement, longitude = placement.longitude) {
+    // The Sun is the fundamental, not a voice scattered around the wheel like
+    // the rest of the ensemble — it anchors the stereo image dead center
+    // regardless of its zodiacal longitude (and in an overlay, regardless of
+    // side).
+    if ((placement.baseKey ?? placement.key) === 'sun') return 0;
     const bodyVoice = placement.voice ?? {};
     const driftDepth = Math.min(0.95, bodyVoice.panDrift?.depth ?? 0);
     // Leave room at the edge of the stereo field for a body's optional pan
