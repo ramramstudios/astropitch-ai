@@ -16,7 +16,7 @@
 
 import { Performer } from '../src/audio/performer.js';
 import { makeChart, makeSynastry, designChart } from '../src/chart.js';
-import { SOUNDING_BODIES } from '../src/ontology.js';
+import { SOUNDING_BODIES, BODY_BY_KEY } from '../src/ontology.js';
 import { frequencyFor } from '../src/audio/tuning.js';
 
 let fails = 0;
@@ -95,7 +95,7 @@ console.log('\n--- designer audition: one held voice follows the dragged longitu
 
   ok('starts the body being dragged', p.designerPreview === null && retunes.length === 1);
   ok('retunes to its new longitude',
-    Math.abs(retunes[0].freq - 432 * 2 ** (120 / 360)) < 1e-9,
+    Math.abs(retunes[0].freq - 432 * 2 ** (BODY_BY_KEY.venus.octave + 120 / 360)) < 1e-9,
     `${retunes[0].freq.toFixed(3)} Hz`);
   ok('updates its wheel-derived pan', Math.abs(retunes[0].pan - Math.sin((120 * Math.PI) / 180) * 0.8) < 1e-9);
   ok('releases on drop', releases.length === 1);
@@ -208,14 +208,33 @@ console.log('--- bloom: one chart unfolds from the solar centre ---');
   ok('times strictly increase', out.every((v, i) => i === 0 || v.time > out[i - 1].time));
 }
 
-console.log('\n--- opt-in chart angles are scheduled as voices ---');
+console.log('\n--- ASC/MC never sound as chord tones, enabled or not ---');
 {
+  // Explicitly switching ASC/MC "on" (the Designer/Basic per-body switch)
+  // still only controls their weight in the aspects and elemental balance.
+  // They stay directional references, never bloom/sequence/drone voices, and
+  // never a bare tone from the placements table either.
   const angles = designChart(chartAt({ ...spread(0), mc: 350 }), {
     asc: { enabled: true },
     mc: { enabled: true },
   });
-  const out = await run(angles, 'bloom');
-  ok('ASC and MC both join the bloom', out.some((v) => v.key === 'asc') && out.some((v) => v.key === 'mc'));
+  const bloomOut = await run(angles, 'bloom');
+  ok('an enabled ASC/MC still do not join the bloom',
+    !bloomOut.some((v) => v.key === 'asc' || v.key === 'mc'));
+
+  const droneOut = await run(angles, 'drone');
+  ok('an enabled ASC/MC still do not join the drone',
+    !droneOut.some((v) => v.key === 'asc' || v.key === 'mc'));
+
+  const sequenceOut = await run(angles, 'sequence');
+  ok('an enabled ASC/MC still do not join the sequence',
+    !sequenceOut.some((v) => v.key === 'asc' || v.key === 'mc'));
+
+  const p = new Performer(engine);
+  p.setChart(angles);
+  log.length = 0;
+  await p.playPlacement('asc');
+  ok('clicking an enabled ASC in the placements table stays silent', log.length === 0);
 }
 
 console.log('\n--- a directional handle plays its connected aspect network ---');
@@ -271,12 +290,22 @@ console.log('\n--- detune stays inside its own chart ---');
   const same = makeSynastry(chartAt(spread(0)), chartAt(spread(0)));
   const active = same.placements.filter((p) => !p.silent);
   const merged = p._detuneMap(active);
-  const alone = p._detuneMap(A.placements.filter((x) => !x.silent));
 
+  // Synastry silences whichever bodies miss the top contacts, which is a
+  // property of the aspects, not of detuning — so "alone" has to be recomputed
+  // over that same sounding subset (in chart order) rather than every body,
+  // or a silenced body dropping out of one side's "seen" list would look like
+  // a cross-side leak when it is really just a different set of inputs.
   for (const side of ['a', 'b']) {
-    const keys = active.filter((x) => x.side === side).map((x) => x.key);
+    const sidePlacements = active.filter((x) => x.side === side);
+    const keys = sidePlacements.map((x) => x.key);
     const got = new Set([...nudged(merged, keys)].map((k) => same.byKey[k].baseKey));
-    const want = nudged(alone, Object.keys(alone));
+
+    const baseKeys = new Set(sidePlacements.map((x) => x.baseKey));
+    const aloneSubset = A.placements.filter((x) => !x.silent && baseKeys.has(x.key));
+    const aloneMap = p._detuneMap(aloneSubset);
+    const want = nudged(aloneMap, Object.keys(aloneMap));
+
     ok(`side ${side}: nudged set matches the chart alone`,
       got.size === want.size && [...want].every((k) => got.has(k)),
       `merged {${[...got]}} vs alone {${[...want]}}`);
@@ -310,6 +339,25 @@ console.log('\n--- sequence: does not close on a silent ascendant ---');
 
   const single = await run(A, 'sequence');
   ok('one chart does not close on its silent ascendant', !single.some((v) => v.key === 'asc'));
+}
+
+console.log('\n--- sequence: the walk starts at the exact Ascendant, not its sign boundary ---');
+{
+  // Equal houses put the 1st cusp at the Ascendant's precise degree, ahead of
+  // where its sign began. A body sitting between the two has technically not
+  // risen yet, so the walk must not treat it as the first thing past the Asc.
+  const asc = 200; // 20 degrees into Libra (sign start 180)
+  const justBeforeAsc = 190; // in Libra, but behind the actual Ascendant
+  const justAfterAsc = 210; // in Libra, just past the actual Ascendant
+  const cusps = Array.from({ length: 12 }, (_, i) => (asc + i * 30) % 360);
+  const chart = makeChart({ asc, sun: justBeforeAsc, moon: justAfterAsc }, { cusps, system: 'equal' });
+
+  const out = await run(chart, 'sequence');
+  const order = out.map((v) => v.key);
+  ok('the body just past the Ascendant sounds first',
+    order[0] === 'moon', order.join(', '));
+  ok('the body just short of the Ascendant sounds last, having not risen yet',
+    order[order.length - 1] === 'sun', order.join(', '));
 }
 
 console.log(`\n${fails === 0 ? 'All arrangement checks passed.' : `${fails} FAILURE(S).`}`);

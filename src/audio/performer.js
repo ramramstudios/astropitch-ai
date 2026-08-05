@@ -2,21 +2,22 @@
  * Arrangement.
  *
  * A natal chart has ten planetary bodies scattered across a chromatic octave.
- * ASC and MC can be added as optional voices. Play
- * them all at one pitch level and you get a tone cluster, which is honest but
+ * ASC, MC, DSC and IC are directional reference points, not voices — they are
+ * never scheduled by bloom, sequence, or drone (see `_sounding`). They are
+ * only heard on demand, via a click on the wheel that auditions the aspect
+ * network attached to that direction (`playDirectionalAspects`). Playing all
+ * ten planets at one pitch level gets a tone cluster, which is honest but
  * unlistenable. Four things keep it musical:
  *
- *   1. Register. Each body has a fixed octave (Saturn two down, Pluto and
- *      Mercury one up),
- *      so a chromatic cluster in longitude is spread across four octave registers.
+ *   1. Register. Each body's octave follows its physical size: the Sun
+ *      anchors the bottom, doubled in unison three octaves apart, and each
+ *      smaller body sits a register higher, up to Pluto at the top — so a
+ *      chromatic cluster in longitude is spread across six octave registers.
  *   2. Entry. Voices arrive in an order that means something, not all at once.
  *   3. Balance. The Sun and Moon are loud; the outer planets are
  *      atmosphere. Low voices get trimmed because bass carries more energy.
  *   4. Space. Pan follows position on the wheel, so the chart's geometry is
  *      audible as a stereo image.
- *
- * TODO: Turn ASC/MC into an optional non-pitch effect (for example, a wah-like
- *       filter or phase motion) instead of direct tonal voices.
  */
 
 import { buildVoiceSpec, Voice } from './voices.js';
@@ -125,13 +126,19 @@ export class Performer {
     // to keep the sum in check. A lone voice is unaffected (n=1); ten together
     // each give up about two thirds.
     const headroom = solo ? 1 : 1 / Math.sqrt(this.engine.activeVoiceCount() + 1);
-    const gain = 0.22 * p.gain * gainMul * headroom * loudnessTrim(freq);
+    // A body voiced in unison across several octaves (the Sun) trims each
+    // octave layer's share so the stack lands at the same overall loudness as
+    // one.
+    const unisonOctaves = bodyVoice.unisonOctaves ?? null;
+    const unisonTrim = unisonOctaves ? 1 / Math.sqrt(unisonOctaves.length) : 1;
+    const gain = 0.22 * p.gain * gainMul * headroom * unisonTrim * loudnessTrim(freq);
 
     const voice = new Voice(this.engine, spec, {
       freq, time, duration, gain, pan, detune,
       reverbMul: bodyVoice.reverbMul,
       delayMul: bodyVoice.delayMul,
       panDrift: bodyVoice.panDrift,
+      unisonOctaves,
     });
     this.active.push(voice);
     return voice;
@@ -179,9 +186,15 @@ export class Performer {
     return map;
   }
 
+  /**
+   * The ten planetary voices only. ASC/MC are directional reference points —
+   * heard only via a click on the wheel and its connected aspects
+   * (playDirectionalAspects, off `chart.anglePoints`), never as chord tones
+   * in bloom, sequence, or drone.
+   */
   _sounding() {
     if (!this.chart) return [];
-    return this.chart.placements.filter((p) => !p.silent);
+    return this.chart.placements.filter((p) => !p.silent && !p.isAngle);
   }
 
   _placement(key) {
@@ -195,7 +208,10 @@ export class Performer {
   async playPlacement(key, { duration = 2.4 } = {}) {
     await this.engine.start();
     const p = this._placement(key);
-    if (!p || p.silent) return;
+    // ASC/MC are directional references, not voices — the placements table can
+    // still list and click them, but only a directional aspect audition
+    // (playDirectionalAspects) should ever sound them.
+    if (!p || p.silent || p.isAngle) return;
     const t = this.engine.now + 0.02;
     const voice = this._voiceFor(p, { time: t, duration, gainMul: 1.5 });
     this._retrigger(`p:${key}`, voice);
@@ -363,8 +379,8 @@ export class Performer {
 
   /**
    * The chart as a chord that assembles from its solar centre: the Sun, then
-   * the inner planets, then the Moon and Ascendant as the personal threshold,
-   * and finally the outer bodies. Everything holds, then releases together.
+   * the inner planets, then the Moon as the personal threshold, and finally
+   * the outer bodies. Everything holds, then releases together.
    *
    * With two charts overlaid the same order runs, but each body is immediately
    * followed by its opposite number — so Sun lands against Sun, and you hear
@@ -372,13 +388,13 @@ export class Performer {
    */
   async bloom() {
     await this._begin('bloom');
-    const ORDER = ['sun', 'mercury', 'venus', 'moon', 'asc', 'mc', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
+    const ORDER = ['sun', 'mercury', 'venus', 'moon', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
     const placements = this._sounding();
     const detunes = this._detuneMap(placements);
 
     // The Sun arrives at once; the inner planets move quickly, then the
     // personal threshold and slower bodies have room to settle underneath.
-    const gaps = { sun: 0, mercury: 0.75, venus: 0.55, moon: 0.95, asc: 0.7, mc: 0.35, mars: 0.55, jupiter: 0.6, saturn: 0.7, uranus: 0.55, neptune: 0.7, pluto: 0.8 };
+    const gaps = { sun: 0, mercury: 0.75, venus: 0.55, moon: 0.95, mars: 0.55, jupiter: 0.6, saturn: 0.7, uranus: 0.55, neptune: 0.7, pluto: 0.8 };
 
     const baseOf = (p) => p.baseKey ?? p.key;
     const ordered = placements
@@ -413,10 +429,13 @@ export class Performer {
    */
   async sequence() {
     await this._begin('sequence');
-    const placements = this._sounding().slice().sort((a, b) => {
-      const asc = this.chart.ascSignIndex * 30;
-      return ((a.longitude - asc + 360) % 360) - ((b.longitude - asc + 360) % 360);
-    });
+    // The walk's start line is the house-1 cusp, not the rising sign's
+    // boundary: those match for whole sign, but equal and the quadrant
+    // systems put the Ascendant's exact degree ahead of it, and a body
+    // between the two would otherwise sound before the chart has risen.
+    const asc = this.chart.cusps?.[0] ?? this.chart.ascSignIndex * 30;
+    const placements = this._sounding().slice().sort((a, b) =>
+      ((a.longitude - asc + 360) % 360) - ((b.longitude - asc + 360) % 360));
 
     const lengths = { cardinal: 0.55, fixed: 1.35, mutable: 0.9 };
     const start = this.engine.now + 0.08;
@@ -429,13 +448,8 @@ export class Performer {
       t += dur;
     }
 
-    // Land on the Ascendant an octave up, to close the circle.
-    const asc = this.chart.byKey.asc ?? this.chart.byKey['a:asc'];
-    if (asc && !asc.silent) {
-      this._voiceFor(asc, { time: t + 0.2, duration: 3.0, gainMul: 1.5, octaveShift: 1 });
-      this._emitAt({ type: 'note', key: asc.key }, t + 0.2);
-    }
-    this._endAt('sequence', t + 4.0);
+    // Buffer past the last note's nominal end for the slowest (fixed) release.
+    this._endAt('sequence', t + 3.6);
   }
 
   /**
@@ -451,10 +465,10 @@ export class Performer {
     const baseOf = (p) => p.baseKey ?? p.key;
 
     // Two charts overlaid already put two of everything in the bed, so the
-    // anchors drop to the lights and the angle to leave the same room.
+    // anchors drop to just the lights to leave the same room.
     const anchorBases = this.chart.meta?.synastry
-      ? ['asc', 'sun', 'moon']
-      : ['asc', 'sun', 'moon', 'saturn'];
+      ? ['sun', 'moon']
+      : ['sun', 'moon', 'saturn'];
     const anchorSet = new Set(anchorBases);
     const anchorPlacements = placements.filter((p) => anchorSet.has(baseOf(p)));
     const anchorKeys = new Set(anchorPlacements.map((p) => p.key));

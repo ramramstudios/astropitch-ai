@@ -160,7 +160,7 @@ export class Voice {
 
   _build({
     freq, time, duration = null, gain = 1, pan = 0, detune = 0,
-    reverbMul = 1, delayMul = 1, panDrift = null,
+    reverbMul = 1, delayMul = 1, panDrift = null, unisonOctaves = null,
   }) {
     const { ctx } = this.engine;
     const t0 = Math.max(time ?? ctx.currentTime, ctx.currentTime);
@@ -326,81 +326,92 @@ export class Voice {
       });
     }
 
-    for (const layer of layers) {
-      // A doubled gesture gets its own panner so the pair actually separates.
-      let layerOut = oscMix;
-      if (layer.pan !== 0) {
-        const lp = ctx.createStereoPanner();
-        lp.pan.value = Math.max(-1, Math.min(1, layer.pan * this.spec.width));
-        const lg = ctx.createGain();
-        lg.gain.value = layer.gain;
-        lp.connect(lg);
-        lg.connect(oscMix);
-        layerOut = lp;
-        this.nodes.push(lp, lg);
-      }
+    // A voice normally sounds at one octave (octMul 1). A body voiced in
+    // unison across several octaves — the Sun — repeats the whole stack once
+    // per offset, each at its own frequency multiple, so the same pitch class
+    // sounds simultaneously several registers apart.
+    const octaves = unisonOctaves ?? [0];
 
-      const start = t0 + layer.delay;
+    for (const oct of octaves) {
+      const octMul = 2 ** oct;
+      const octFreq = freq * octMul;
 
-      for (const p of material.partials) {
-        const osc = ctx.createOscillator();
-        // A partial is either one of the four built-in spectra or an explicit
-        // overtone series. `setPeriodicWave` supersedes `type`, so it is one or
-        // the other, never both.
-        if (p.harmonics) osc.setPeriodicWave(periodicWave(ctx, p.harmonics));
-        else osc.type = p.type;
-        osc.detune.value = p.detune + detune + layer.detuneOffset;
-        if (gesture.glide > 0) {
-          osc.frequency.setValueAtTime(freq * 0.79, start);
-          osc.frequency.exponentialRampToValueAtTime(freq, start + gesture.glide);
-        } else {
-          osc.frequency.setValueAtTime(freq, start);
+      for (const layer of layers) {
+        // A doubled gesture gets its own panner so the pair actually separates.
+        let layerOut = oscMix;
+        if (layer.pan !== 0) {
+          const lp = ctx.createStereoPanner();
+          lp.pan.value = Math.max(-1, Math.min(1, layer.pan * this.spec.width));
+          const lg = ctx.createGain();
+          lg.gain.value = layer.gain;
+          lp.connect(lg);
+          lg.connect(oscMix);
+          layerOut = lp;
+          this.nodes.push(lp, lg);
         }
-        this.pitchTargets.push({ param: osc.frequency, ratio: 1 });
-        const g = ctx.createGain();
-        g.gain.value = p.gain;
-        osc.connect(g);
-        g.connect(layerOut);
-        if (vibratoGain) vibratoGain.connect(osc.detune);
-        osc.start(start);
-        this.sources.push(osc);
-        this.nodes.push(g);
-        if (!this.lifetimeSource) this.lifetimeSource = osc;
 
-        // FM operator on the first partial only; more than that turns to mud.
-        if (this.spec.fm && p === material.partials[0]) {
-          const mod = ctx.createOscillator();
-          mod.type = 'sine';
-          mod.frequency.setValueAtTime(freq * this.spec.fm.ratio, start);
-          const modGain = ctx.createGain();
-          const peak = freq * this.spec.fm.index;
-          modGain.gain.setValueAtTime(peak, start);
-          modGain.gain.exponentialRampToValueAtTime(
-            Math.max(0.001, peak * 0.02),
-            start + this.spec.fm.decay
-          );
-          mod.connect(modGain);
-          modGain.connect(osc.frequency);
-          mod.start(start);
-          this.sources.push(mod);
-          this.nodes.push(modGain);
-          this.pitchTargets.push({ param: mod.frequency, ratio: this.spec.fm.ratio });
+        const start = t0 + layer.delay;
+
+        for (const p of material.partials) {
+          const osc = ctx.createOscillator();
+          // A partial is either one of the four built-in spectra or an explicit
+          // overtone series. `setPeriodicWave` supersedes `type`, so it is one or
+          // the other, never both.
+          if (p.harmonics) osc.setPeriodicWave(periodicWave(ctx, p.harmonics));
+          else osc.type = p.type;
+          osc.detune.value = p.detune + detune + layer.detuneOffset;
+          if (gesture.glide > 0) {
+            osc.frequency.setValueAtTime(octFreq * 0.79, start);
+            osc.frequency.exponentialRampToValueAtTime(octFreq, start + gesture.glide);
+          } else {
+            osc.frequency.setValueAtTime(octFreq, start);
+          }
+          this.pitchTargets.push({ param: osc.frequency, ratio: octMul });
+          const g = ctx.createGain();
+          g.gain.value = p.gain;
+          osc.connect(g);
+          g.connect(layerOut);
+          if (vibratoGain) vibratoGain.connect(osc.detune);
+          osc.start(start);
+          this.sources.push(osc);
+          this.nodes.push(g);
+          if (!this.lifetimeSource) this.lifetimeSource = osc;
+
+          // FM operator on the first partial only; more than that turns to mud.
+          if (this.spec.fm && p === material.partials[0]) {
+            const mod = ctx.createOscillator();
+            mod.type = 'sine';
+            mod.frequency.setValueAtTime(octFreq * this.spec.fm.ratio, start);
+            const modGain = ctx.createGain();
+            const peak = octFreq * this.spec.fm.index;
+            modGain.gain.setValueAtTime(peak, start);
+            modGain.gain.exponentialRampToValueAtTime(
+              Math.max(0.001, peak * 0.02),
+              start + this.spec.fm.decay
+            );
+            mod.connect(modGain);
+            modGain.connect(osc.frequency);
+            mod.start(start);
+            this.sources.push(mod);
+            this.nodes.push(modGain);
+            this.pitchTargets.push({ param: mod.frequency, ratio: octMul * this.spec.fm.ratio });
+          }
         }
-      }
 
-      // Sub-oscillator, an octave down.
-      if (this.spec.sub > 0.01) {
-        const sub = ctx.createOscillator();
-        sub.type = 'sine';
-        sub.frequency.setValueAtTime(freq / 2, start);
-        const sg = ctx.createGain();
-        sg.gain.value = this.spec.sub;
-        sub.connect(sg);
-        sg.connect(layerOut);
-        sub.start(start);
-        this.sources.push(sub);
-        this.nodes.push(sg);
-        this.pitchTargets.push({ param: sub.frequency, ratio: 0.5 });
+        // Sub-oscillator, an octave down from this layer's register.
+        if (this.spec.sub > 0.01) {
+          const sub = ctx.createOscillator();
+          sub.type = 'sine';
+          sub.frequency.setValueAtTime(octFreq / 2, start);
+          const sg = ctx.createGain();
+          sg.gain.value = this.spec.sub;
+          sub.connect(sg);
+          sg.connect(layerOut);
+          sub.start(start);
+          this.sources.push(sub);
+          this.nodes.push(sg);
+          this.pitchTargets.push({ param: sub.frequency, ratio: octMul * 0.5 });
+        }
       }
     }
 

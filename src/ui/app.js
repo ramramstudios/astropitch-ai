@@ -310,11 +310,11 @@ function buildSignPickers() {
         state.signEnabled[body.key] = box.checked;
         select.disabled = !box.checked;
         row.classList.toggle('is-off', !box.checked);
-        saveChartConfig();
+        castSelectedSigns();
       });
       select.addEventListener('change', () => {
         state.signSelections[body.key] = Number(select.value);
-        saveChartConfig();
+        castSelectedSigns();
       });
       label.append(box, glyph, name);
       row.append(label, select);
@@ -325,12 +325,20 @@ function buildSignPickers() {
 
 function chartFromSelectedSigns() {
   const chart = chartFromSigns(state.signSelections);
-  const mutedBodies = Object.fromEntries(
+  // The Basic checkboxes are the source of truth for every voice, including
+  // ASC, which a chart normally leaves silent unless it is explicitly enabled.
+  const soundingStates = Object.fromEntries(
     SOUNDING_BODIES
-      .filter((key) => state.signEnabled[key] === false)
-      .map((key) => [key, { enabled: false }])
+      .map((key) => [key, { enabled: state.signEnabled[key] !== false }])
   );
-  return Object.keys(mutedBodies).length ? designChart(chart, mutedBodies) : chart;
+  return designChart(chart, soundingStates);
+}
+
+/** Apply the Basic controls immediately, so only checked placements can play. */
+function castSelectedSigns(kind = state.subjectDescriptor?.kind === 'random-signs' ? 'random-signs' : 'signs') {
+  const chart = chartFromSelectedSigns();
+  setSubject(chart, makeChartDescriptor(kind, chart, 'primary'));
+  saveChartConfig();
 }
 
 // ---------------------------------------------------------------------------
@@ -649,9 +657,7 @@ function wireForms() {
 
   $('#signsForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const chart = chartFromSelectedSigns();
-    setSubject(chart, makeChartDescriptor('signs', chart, 'primary'));
-    saveChartConfig();
+    castSelectedSigns('signs');
   });
 
   $('#houseSystem').addEventListener('change', () => {
@@ -698,21 +704,19 @@ function wireForms() {
       select.value = String(v);
       state.signSelections[select.dataset.body] = v;
     }
-    const chart = chartFromSelectedSigns();
-    setSubject(chart, makeChartDescriptor('random-signs', chart, 'primary'));
-    saveChartConfig();
+    castSelectedSigns('random-signs');
   });
 
   $('#signsAllOffBtn').addEventListener('click', () => {
     for (const key of SOUNDING_BODIES) state.signEnabled[key] = false;
     buildSignPickers();
-    saveChartConfig();
+    castSelectedSigns();
   });
 
   $('#signsAllOnBtn').addEventListener('click', () => {
     for (const key of SOUNDING_BODIES) state.signEnabled[key] = true;
     buildSignPickers();
-    saveChartConfig();
+    castSelectedSigns();
   });
 }
 
@@ -1394,8 +1398,17 @@ function wireTransportVisibility() {
 function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
     const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-    if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (!$('#aboutModal').hidden || !$('#settingsModal').hidden) return;
+    // Handle this before the input guard: preventing the native checkbox
+    // action keeps Space reserved for starting and stopping the music.
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (performer.mode) performer.stop();
+      else playLastTransportMode();
+      return;
+    }
+    if (typing) return;
     if (e.key === '[') {
       collapseSide();
       return;
@@ -1404,11 +1417,7 @@ function wireKeyboard() {
       toggleTransport();
       return;
     }
-    if (e.key === ' ') {
-      e.preventDefault();
-      if (performer.mode) performer.stop();
-      else playLastTransportMode();
-    } else if (e.key.toLowerCase() === 'b') performer.bloom();
+    if (e.key.toLowerCase() === 'b') performer.bloom();
     else if (e.key.toLowerCase() === 's') performer.sequence();
     else if (e.key.toLowerCase() === 'd') performer.drone();
   });

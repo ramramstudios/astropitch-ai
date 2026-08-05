@@ -131,37 +131,44 @@ time-based behavior.
 The body identifies the part in the ensemble. A Moon, Sun, or Mercury in the
 same sign and house starts with the same Element → Timbre, House → Gesture, and
 Modality → Articulation mapping; the body shifts its octave, changes its mix
-weight, and gives it a role. The Sun and Moon are the loudest anchors, while
-outer planets are more atmospheric. Low bodies are also trimmed
-for headroom.
+weight, and gives it a role. Register follows physical size — the Sun, biggest
+by far, anchors the bottom and doubles itself in unison three octaves apart;
+each smaller body sits a register higher, up to Pluto at the top. The Sun and
+Moon are the loudest anchors regardless of register, while outer planets are
+more atmospheric. Low bodies are also trimmed for headroom.
 
 | Body | Register relative to the sign pitch | Role |
 |---|---:|---|
-| Ascendant / Sun | unshifted | outward voice / fundamental |
-| Moon / Mars | one octave down | body beneath the tone / transient |
-| Mercury / Uranus | one octave up | fast upper partial / interruption |
-| Venus / Jupiter / Neptune | unshifted | consonance / expansion / wash |
-| Saturn | two octaves down | structural bass |
-| Pluto | one octave up | distant icy glint: quiet, wide, and reflected |
+| Ascendant / MC | unshifted | outward voice / aimed-at pitch |
+| Sun | two octaves down, doubled in unison three octaves apart | the fundamental |
+| Jupiter / Saturn | one octave down | room it expands into / structural bass |
+| Uranus / Neptune | unshifted | interruption / wash |
+| Venus / Mars | one octave up | consonance / transient |
+| Mercury / Moon | two octaves up | fast upper partial / near, pale overtone |
+| Pluto | two octaves up | distant icy glint: quiet, wide, and reflected |
 
-ASC and MC are directional references, not standalone sounding bodies, so they
-default to off. DSC and IC are the same kind of reference — the opposite point
-from MC and ASC respectively — but are not independently listed or switched;
-they always mirror whichever of ASC/MC they are opposite.
+ASC and MC are directional references, not standalone sounding bodies: they
+default to off, and switching either on only affects the aspects and the
+elemental balance — neither ever joins Bloom, Sequence, or Drone as a chord
+tone. The only way to hear one is to click its direction label and audition
+the aspects attached to it (see below). DSC and IC are the same kind of
+reference — the opposite point from MC and ASC respectively — but are not
+independently listed or switched; they always mirror whichever of ASC/MC they
+are opposite.
 
 ### Example: Moon in Virgo, 3rd house vs. 4th house
 
 Assume the same exact Virgo degree. Virgo is mutable Earth, so both placements
 begin with the same D-region pitch, triangle/sine timbre, box resonance, strong
-low end, and mutable articulation. As the Moon, both are voiced one octave down
-and given anchor-level prominence.
+low end, and mutable articulation. As the Moon, both are voiced two octaves up
+but keep anchor-level loudness.
 
 | Same Moon in Virgo | House changes | Result |
 |---|---|---|
-| **3rd house** | Fast bright filter attack, doubled attack noise, short envelope, brief 11 Hz flutter, and extra delay | A low, wooden voice that speaks: tactile consonant, quick flutter, short decay |
-| **4th house** | Slow attack, low filter starting point, less noise, reinforced sub, narrower stereo, little delay | A low, wooden voice heard inside a room: muffled, weighty, close, and warm |
+| **3rd house** | Fast bright filter attack, doubled attack noise, short envelope, brief 11 Hz flutter, and extra delay | A high, wooden voice that speaks: tactile consonant, quick flutter, short decay |
+| **4th house** | Slow attack, low filter starting point, less noise, reinforced sub, narrower stereo, little delay | A high, wooden voice heard inside a room: muffled, weighty, close, and warm |
 
-Virgo remains Earth and the Moon remains low and prominent. The house changes
+Virgo remains Earth and the Moon remains high and prominent. The house changes
 **articulation, spectral envelope, density, and space**—the same instrument is
 made to speak or to settle into the room.
 
@@ -222,9 +229,11 @@ bodies* decides whether the planets turn with the sky or hold their zodiac
 position while the house ring turns under them.
 
 Each body also has a switch, including ASC and MC (off by default — see
-above). A body switched off keeps its place on the wheel and in the placement
-list, but drops out of the aspects, out of the elemental balance and out of
-all three playback modes — the fastest way to find out what a chart sounds
+above, though switching either on only ever affects the aspects and the
+elemental balance, never Bloom, Sequence, or Drone). A body switched off keeps
+its place on the wheel and in the placement list, but drops out of the
+aspects and the elemental balance — for the ten planets it also drops out of
+all three playback modes, the fastest way to find out what a chart sounds
 like without its Saturn.
 
 Moving the Ascendant turns the house ring with it, because the Ascendant *is* the

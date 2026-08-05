@@ -113,19 +113,27 @@ export const HOUSES = [
   { n: 12, meaning: 'collective unconscious, psychic ability', timbre: 'Dissolved — arrives before it begins' },
 ];
 
+// Octave register follows physical size: the Sun anchors the bottom (and
+// doubles itself in unison across three octaves, the fundamental beneath
+// everything else), then each smaller body sits a register higher, up to
+// Pluto at the top.
 export const BODIES = [
   { key: 'asc',     name: 'Ascendant', glyph: 'Asc', octave:  0, gain: 1.00, role: 'The voice you are heard in', angle: true },
-  { key: 'sun',     name: 'Sun',       glyph: '☉\uFE0E', octave:  0, gain: 1.00, role: 'The fundamental' },
-  { key: 'moon',    name: 'Moon',      glyph: '☽\uFE0E', octave: -1, gain: 0.92, role: 'The body beneath the tone' },
-  { key: 'mercury', name: 'Mercury',   glyph: '☿\uFE0E', octave:  1, gain: 0.55, role: 'The fast upper partial' },
-  { key: 'venus',   name: 'Venus',     glyph: '♀\uFE0E', octave:  0, gain: 0.70, role: 'The consonance' },
-  { key: 'mars',    name: 'Mars',      glyph: '♂\uFE0E', octave: -1, gain: 0.68, role: 'The transient' },
-  { key: 'jupiter', name: 'Jupiter',   glyph: '♃\uFE0E', octave:  0, gain: 0.62, role: 'The room it expands into' },
-  { key: 'saturn',  name: 'Saturn',    glyph: '♄\uFE0E', octave: -2, gain: 0.72, role: 'The structural bass' },
-  { key: 'uranus',  name: 'Uranus',    glyph: '♅\uFE0E', octave:  1, gain: 0.40, role: 'The interruption' },
+  {
+    key: 'sun', name: 'Sun', glyph: '☉\uFE0E', octave: -2, gain: 1.00,
+    role: 'The fundamental',
+    voice: { unisonOctaves: [-1, 0, 1] },
+  },
+  { key: 'moon',    name: 'Moon',      glyph: '☽\uFE0E', octave:  2, gain: 0.92, role: 'The near, pale overtone' },
+  { key: 'mercury', name: 'Mercury',   glyph: '☿\uFE0E', octave:  2, gain: 0.55, role: 'The fast upper partial' },
+  { key: 'venus',   name: 'Venus',     glyph: '♀\uFE0E', octave:  1, gain: 0.70, role: 'The consonance' },
+  { key: 'mars',    name: 'Mars',      glyph: '♂\uFE0E', octave:  1, gain: 0.68, role: 'The transient' },
+  { key: 'jupiter', name: 'Jupiter',   glyph: '♃\uFE0E', octave: -1, gain: 0.62, role: 'The room it expands into' },
+  { key: 'saturn',  name: 'Saturn',    glyph: '♄\uFE0E', octave: -1, gain: 0.72, role: 'The structural bass' },
+  { key: 'uranus',  name: 'Uranus',    glyph: '♅\uFE0E', octave:  0, gain: 0.40, role: 'The interruption' },
   { key: 'neptune', name: 'Neptune',   glyph: '♆\uFE0E', octave:  0, gain: 0.42, role: 'The wash' },
   {
-    key: 'pluto', name: 'Pluto', glyph: '♇\uFE0E', octave: 1, gain: 0.30,
+    key: 'pluto', name: 'Pluto', glyph: '♇\uFE0E', octave: 2, gain: 0.30,
     role: 'The distant icy glint',
     voice: {
       reverbMul: 1.65,
