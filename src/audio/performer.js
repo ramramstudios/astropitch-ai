@@ -114,16 +114,33 @@ function nearestDegreeBySemitone(pc, scale) {
 }
 
 /**
- * A short motif, stated in scale-degree deltas from wherever it starts. The
+ * A short motif, stated in scale-degree deltas from wherever it starts, each
+ * delta paired with its own note value in beats — a real melody is not just
+ * a pitch shape but a rhythm cell, and the two repeat together every time the
+ * motif is restated. Longer values fall on the leaps, shorter ones on the
+ * steps between them, the classical proportion that keeps a running line from
+ * ever landing all on the same beat — the constant-eighth-note pulse that was
+ * both the flattest-sounding phrasing and, since every note ends up the same
+ * length, the surest way to pile overlapping voices on top of each other. The
  * elemental balance of the chart decides its character: earth and water
  * charts get a stepwise, "scalar" shape (their motion is grounded, adjacent);
  * fire and air charts get an "angular" one built from skips and leaps.
  */
 function pickMotif(scalar) {
-  const scalarShapes = [[0, 1, 1], [0, 1, -1, 1], [0, -1, 1, 1], [0, 1, 2]];
-  const angularShapes = [[0, 2, -1, 2], [0, -3, 1, 2], [0, 4, -2], [0, 3, -2, 1]];
-  const shapes = scalar ? scalarShapes : angularShapes;
-  return shapes[Math.floor(Math.random() * shapes.length)];
+  const scalarMotifs = [
+    { steps: [0, 1, 1], beats: [1, 0.5, 0.5] },
+    { steps: [0, 1, -1, 1], beats: [0.75, 0.5, 0.5, 0.75] },
+    { steps: [0, -1, 1, 1], beats: [0.5, 0.5, 0.5, 1] },
+    { steps: [0, 1, 2], beats: [0.5, 0.5, 1] },
+  ];
+  const angularMotifs = [
+    { steps: [0, 2, -1, 2], beats: [1, 0.5, 0.5, 1] },
+    { steps: [0, -3, 1, 2], beats: [1, 0.5, 0.5, 0.75] },
+    { steps: [0, 4, -2], beats: [1, 0.75, 1] },
+    { steps: [0, 3, -2, 1], beats: [0.75, 0.5, 0.75, 0.5] },
+  ];
+  const motifs = scalar ? scalarMotifs : angularMotifs;
+  return motifs[Math.floor(Math.random() * motifs.length)];
 }
 
 /**
@@ -132,10 +149,13 @@ function pickMotif(scalar) {
  * motif reaches back onto a degree the chart actually has a body on. Scalar
  * charts sweep the degrees in an arch (up, then back down); angular charts
  * jump between the extremes, so the leaps between phrases match the leaps
- * within them.
+ * within them. Each degree carries the beat value the motif gave its slot,
+ * so the sequence's rhythm repeats along with its shape.
  */
 function buildDegreeWalk(present, scalar) {
-  if (present.length === 1) return [present[0], present[0], present[0]];
+  if (present.length === 1) {
+    return { degrees: [present[0], present[0], present[0]], beats: [1, 1, 1.5] };
+  }
 
   const motif = pickMotif(scalar);
   let anchors;
@@ -151,15 +171,26 @@ function buildDegreeWalk(present, scalar) {
     }
   }
 
-  const walk = [];
+  const degrees = [];
+  const beats = [];
   for (const anchor of anchors) {
-    for (const delta of motif) {
+    motif.steps.forEach((delta, i) => {
       const target = ((anchor + delta) % 7 + 7) % 7;
-      walk.push(nearestPresentDegree(target, present));
-    }
+      degrees.push(nearestPresentDegree(target, present));
+      beats.push(motif.beats[i]);
+    });
   }
-  return walk;
+  return { degrees, beats };
 }
+
+// Beat values for the notes the motif's own rhythm cell doesn't cover: a
+// coverage note is a plain aside so it gets the motif's middling value: a
+// chromatic tone is a grace note so it stays brief; a cadence note is where
+// the phrase actually arrives, so it gets the room a resolution needs — the
+// approach note held, the resolution itself held longer still.
+const COVERAGE_BEATS = 0.75;
+const CHROMATIC_BEATS = 0.3;
+const CADENCE_BEATS = [0.75, 1.25];
 
 /**
  * Assemble the full phrase: the motif sequence, then whichever present
@@ -170,35 +201,38 @@ function buildDegreeWalk(present, scalar) {
  * in-scale neighbour, the conventional way to spend an out-of-key tone.
  */
 function buildMelody(present, chromatic, scale, byDegree, scalar) {
-  const notes = buildDegreeWalk(present, scalar)
-    .map((degree) => ({ pc: byDegree.get(degree), degree, kind: 'motif' }));
+  const walk = buildDegreeWalk(present, scalar);
+  const notes = walk.degrees.map((degree, i) => (
+    { pc: byDegree.get(degree), degree, kind: 'motif', beats: walk.beats[i] }
+  ));
 
   const touched = new Set(notes.map((n) => n.degree));
   for (const degree of present) {
-    if (!touched.has(degree)) notes.push({ pc: byDegree.get(degree), degree, kind: 'coverage' });
+    if (!touched.has(degree)) {
+      notes.push({ pc: byDegree.get(degree), degree, kind: 'coverage', beats: COVERAGE_BEATS });
+    }
   }
 
   if (present.includes(3) && present.includes(2)) {
-    notes.push({ pc: byDegree.get(3), degree: 3, kind: 'cadence' });
-    notes.push({ pc: byDegree.get(2), degree: 2, kind: 'cadence' });
+    notes.push({ pc: byDegree.get(3), degree: 3, kind: 'cadence', beats: CADENCE_BEATS[0] });
+    notes.push({ pc: byDegree.get(2), degree: 2, kind: 'cadence', beats: CADENCE_BEATS[1] });
   }
   if (present.includes(6) && present.includes(0)) {
-    notes.push({ pc: byDegree.get(6), degree: 6, kind: 'cadence' });
-    notes.push({ pc: byDegree.get(0), degree: 0, kind: 'cadence' });
+    notes.push({ pc: byDegree.get(6), degree: 6, kind: 'cadence', beats: CADENCE_BEATS[0] });
+    notes.push({ pc: byDegree.get(0), degree: 0, kind: 'cadence', beats: CADENCE_BEATS[1] });
   }
 
   for (const pc of chromatic) {
     const targetDegree = nearestPresentDegree(nearestDegreeBySemitone(pc, scale), present);
-    const chromaticNote = { pc, degree: null, kind: 'chromatic' };
+    const chromaticNote = { pc, degree: null, kind: 'chromatic', beats: CHROMATIC_BEATS };
     const idx = notes.findIndex((n) => n.degree === targetDegree);
-    if (idx === -1) notes.push(chromaticNote, { pc: byDegree.get(targetDegree), degree: targetDegree, kind: 'coverage' });
-    else notes.splice(idx, 0, chromaticNote);
+    if (idx === -1) {
+      notes.push(chromaticNote, { pc: byDegree.get(targetDegree), degree: targetDegree, kind: 'coverage', beats: COVERAGE_BEATS });
+    } else notes.splice(idx, 0, chromaticNote);
   }
 
   return notes;
 }
-
-const MELODIC_NOTE_BEATS = { motif: 0.5, coverage: 0.55, chromatic: 0.3, cadence: 0.85 };
 
 export class Performer {
   constructor(engine) {
@@ -665,7 +699,7 @@ export class Performer {
       let t = startTime;
       for (const note of notes) {
         const placement = nextPlacement(note.pc);
-        const dur = MELODIC_NOTE_BEATS[note.kind] * beat;
+        const dur = note.beats * beat;
         this._voiceFor(placement, {
           time: t,
           duration: dur * 0.9,
@@ -681,7 +715,7 @@ export class Performer {
       return t;
     };
 
-    const phraseBeats = notes.reduce((sum, n) => sum + MELODIC_NOTE_BEATS[n.kind], 0);
+    const phraseBeats = notes.reduce((sum, n) => sum + n.beats, 0);
     playPhrase(this.engine.now + 0.08);
     if (phraseBeats > 0) {
       this.loopHandle = setInterval(() => {
