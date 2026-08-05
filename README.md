@@ -242,7 +242,7 @@ from the exact angle; Placidus and Porphyry have no closed form without the
 birth data behind them, so their cusps rotate rigidly and keep their unequal
 spacing.
 
-The design is stored separately from the cast chart, so *Reset to chart* always
+The design is stored separately from the cast chart, so *Revert chart* always
 has something to go back to, and nothing you drag ever edits the chart underneath.
 Designing is one chart at a time: entering the designer clears any overlay, since
 synastry puts two of everything on the wheel and cuts the sound density by contact.

@@ -58,6 +58,16 @@ const PLACES = [
   { name: 'Tokyo, JP', lat: 35.690, lon: 139.692, utc: 9 },
   { name: 'Sydney, AU', lat: -33.869, lon: 151.209, utc: 10 },
   { name: 'Auckland, NZ', lat: -36.848, lon: 174.763, utc: 12 },
+  { name: 'Decatur, AL', lat: 34.605, lon: -86.983, utc: -6 },
+  { name: 'Boaz, AL', lat: 34.200, lon: -86.167, utc: -6 },
+  { name: 'Dothan, AL', lat: 31.223, lon: -85.391, utc: -6 },
+  { name: 'Pensacola, FL', lat: 30.421, lon: -87.217, utc: -6 },
+  { name: 'Madison, AL', lat: 34.699, lon: -86.748, utc: -6 },
+  { name: 'Huntsville, AL', lat: 34.730, lon: -86.586, utc: -6 },
+  { name: 'Lapeer, MI', lat: 43.051, lon: -83.318, utc: -5 },
+  { name: 'West Palm Beach, FL', lat: 26.715, lon: -80.053, utc: -5 },
+  { name: 'Camilla, GA', lat: 31.235, lon: -84.204, utc: -5 },
+  { name: 'Springfield, IL', lat: 39.782, lon: -89.650, utc: -6 },
 ];
 
 const CHART_CONFIG_KEY = 'astropitch.chartConfig.v1';
