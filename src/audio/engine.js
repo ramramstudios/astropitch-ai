@@ -29,15 +29,58 @@
  * saturator exists to handle gracefully. Writing the curve across a wider
  * domain and scaling the signal into it by the same factor leaves the transfer
  * function unchanged below full scale — same curve, same resolution, same
- * sample points — and simply continues it above, so the clamp only bites at
- * +12 dB. Both curves are sized to keep that resolution, so the width is
- * bought with table memory and nothing else; a full chart drives the
- * saturator to about +5 dB, which is where the rest of the margin goes.
+ * sample points — and simply continues it above, so the clamp bites at +6 dB
+ * (saturator) and +12 dB (ceiling) instead of at 0. Both curves are sized to
+ * keep that resolution, so the width costs table memory and nothing else.
+ *
+ * This is a backstop, not headroom to spend. Widening it does not make a hot
+ * signal clean, only less catastrophically dirty. Keeping SAT_HEADROOM tight
+ * is deliberate: it makes the render tests fail when the staging lets too much
+ * through, which is how a 9 dB level regression got caught.
  */
-export const SAT_HEADROOM = 4;
+export const SAT_HEADROOM = 2;
 export const CEILING_HEADROOM = 4;
 
-function saturationCurve(amount = 1.6, headroom = 1, n = 8192) {
+/**
+ * How hard the saturator's tanh is driven.
+ *
+ * In terms of the signal reaching the stage the transfer function is
+ * `tanh(s * drive) / tanh(drive)`, whose slope at the origin is
+ * `drive / tanh(drive)`. At the 1.5 this used to run at that slope is 1.66,
+ * so the stage was quietly supplying +4.4 dB of level, and at the peaks the
+ * mix actually reaches it was taking about 3 dB back out again — per sample.
+ *
+ * Per-sample gain reduction across a dense polyphonic mix is intermodulation:
+ * every pair of partials breeding sum and difference tones that belong to no
+ * note being played. That is the buzz. It is not the compressors, whose gain
+ * moves over milliseconds and is heard as level rather than as dirt.
+ *
+ * Measured on a running melodic line, fitting the linear reference in 128
+ * sample blocks so that compressor gain riding is separated from waveform
+ * distortion, the residual against drive — at matched loudness throughout:
+ *
+ *     drive   1.5     1.0     0.85    0.7     0.55    0.4
+ *     resid  -29.2   -34.3   -36.7   -37.6   -40.2   -41.2 dB
+ *
+ * Turning the whole mix down 3 dB instead, with the curve left alone, moved
+ * it only from -29.2 to -31.1: this is the curve's doing and not the level's.
+ * 0.55 takes 11 dB of it while still bending the waveform audibly; below that
+ * the curve is nearly a straight line and there is little left to win.
+ */
+const SAT_DRIVE = 0.55;
+/** The drive whose small-signal gain the stage is held to, so this stays loudness-neutral. */
+const SAT_REFERENCE_DRIVE = 1.5;
+const smallSignalGain = (drive) => drive / Math.tanh(drive);
+/**
+ * Makeup for the level a softer curve no longer supplies.
+ *
+ * Exactly the small-signal gain the old curve had, so changing SAT_DRIVE moves
+ * how much the waveform is bent and nothing else. Making the mix quieter is
+ * not what fixed this and must not be smuggled in here.
+ */
+const SAT_MAKEUP = smallSignalGain(SAT_REFERENCE_DRIVE) / smallSignalGain(SAT_DRIVE);
+
+export function saturationCurve(amount = SAT_DRIVE, headroom = 1, n = 4096) {
   const curve = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     // Index i stands for an input signal of x * headroom.
@@ -46,6 +89,16 @@ function saturationCurve(amount = 1.6, headroom = 1, n = 8192) {
   }
   return curve;
 }
+
+/**
+ * What the saturator stage does to a signal of amplitude `s`, makeup included.
+ * Exported so the drive can be regression-tested without an AudioContext.
+ */
+export function saturatorResponse(s, drive = SAT_DRIVE, makeup = SAT_MAKEUP) {
+  return (Math.tanh(s * drive) / Math.tanh(drive)) * makeup;
+}
+
+export { SAT_DRIVE, SAT_MAKEUP };
 
 /**
  * Final ceiling. Linear below the knee, asymptotic above it.
@@ -76,19 +129,21 @@ function ceilingCurve(n = 8192, knee = 0.82, ceiling = 0.995, headroom = 1) {
 /** Summed voice amplitude that still passes at unity gain. */
 const LOAD_REF = 0.34;
 /** How the buses give way above it: the sum grows as load ** (1 - LOAD_EXP). */
-const LOAD_EXP = 0.4;
+const LOAD_EXP = 0.65;
 /** Hard cap on the projected sum, whatever the curve above asks for. */
-const LOAD_CEILING = 2.2;
+const LOAD_CEILING = 1.1;
 /**
- * Extra give from the sends, on top of what they already get.
+ * How much harder the sends give way than the dry bus.
  *
- * A dense chord wants proportionally less wash than a single note, but the
- * reverb and delay returns feed mixBus, so they are already carrying the bus
- * gain once by the time they are heard. Only the difference belongs here: the
- * wet path ends up at `gain ** (1 + SEND_EXP)` overall. Setting this to the
- * whole ratio instead ducks the wash twice and empties the room out.
+ * The reverb and delay returns feed mixBus, so the wet path carries the bus
+ * gain twice over: `gain ** (1 + SEND_EXP)`. That looks like a mistake and is
+ * not one. Both effects are integrators — a 3.6 s tail and a feedback delay
+ * accumulate whatever they are fed — so the send is the only place their
+ * level can actually be governed, and a dense passage wants proportionally
+ * less wash anyway. Backing this off to compensate for the double count put
+ * three times more signal into the saturator on a running transport.
  */
-const SEND_EXP = 0.3;
+const SEND_EXP = 1.5;
 /** Backing off has to beat the note that caused it; coming back can amble. */
 const DUCK_ATTACK = 0.012;
 const DUCK_RELEASE = 0.28;
@@ -242,10 +297,16 @@ export class AudioEngine {
     air.gain.value = 2.2;
     air.connect(lowCut);
 
+    // Puts back the level the softer curve no longer supplies, linearly, so
+    // the loudness comes from a gain and the character comes from the curve.
+    const satMakeup = ctx.createGain();
+    satMakeup.gain.value = SAT_MAKEUP;
+    satMakeup.connect(air);
+
     const saturator = ctx.createWaveShaper();
-    saturator.curve = saturationCurve(1.5, SAT_HEADROOM);
+    saturator.curve = saturationCurve(SAT_DRIVE, SAT_HEADROOM);
     saturator.oversample = '4x';
-    saturator.connect(air);
+    saturator.connect(satMakeup);
 
     const satTrim = ctx.createGain();
     satTrim.gain.value = 1 / SAT_HEADROOM;
@@ -264,6 +325,10 @@ export class AudioEngine {
     master.gain.value = 0.85;
     master.connect(glue);
     this.master = master;
+
+    // Named so a test can bypass one stage at a time and hear which one is
+    // responsible for an artifact. Nothing in the app reads this.
+    this.stages = { glue, satTrim, saturator, satMakeup, air, lowCut, limiter, ceilingTrim, ceiling, analyser };
 
     const mixBus = ctx.createGain();
     mixBus.connect(master);
@@ -374,22 +439,21 @@ export class AudioEngine {
   /**
    * The bus gain a given load has earned.
    *
-   * Two different sums matter here, and the exponent has to satisfy both.
+   * Constant-sum limiting (`loadRef / load`) would make a ten-voice chord
+   * exactly as loud as a single note: safe, and lifeless. Letting the sum
+   * grow as `load ** (1 - loadExp)` instead keeps an ensemble bigger than one
+   * voice while bounding it. The second term is the backstop for a burst
+   * denser or louder than a chart can ask for: it caps the projected sum
+   * outright, and in normal use it does not bind.
    *
-   * What the chain has to survive is the worst case, where voices line up in
-   * phase and amplitudes add: that grows as `load ** (1 - loadExp)`. What a
-   * listener actually hears is the far commoner uncorrelated case, where n
-   * voices of amplitude a make an RMS of `sqrt(n) * a` — so the perceived
-   * level grows as `sqrt(load) * gain`. That second sum is why the obvious
-   * choice is wrong: at loadExp 0.5, the equal-power law, the two exactly
-   * cancel and a sixteen-voice chord comes out no louder than a single note,
-   * which is safe and completely lifeless. Below 0.5 the ensemble grows
-   * again; 0.4 puts a full chart about 4 dB over one voice while holding the
-   * in-phase worst case inside what the saturator's curve is written across.
-   *
-   * The second term is the backstop for the case the curve is too generous
-   * about — a burst far denser or louder than a chart can ask for. It caps
-   * the projected sum outright, and in normal use it never binds.
+   * loadExp is deliberately high. There is an argument for lowering it — n
+   * uncorrelated voices are heard as `sqrt(n) * a`, so anything at or above
+   * 0.5 stops the ensemble growing with density, and 0.65 lets it shrink a
+   * little. That argument is real but it is worth less than the headroom it
+   * costs: at 0.4 a running melodic line drove the saturator to 2.05 where
+   * this drives it to 0.69, and the difference is plainly audible as
+   * distortion. The master chain's compressor supplies the loudness. This
+   * stage's job is to hand it something clean, so it errs toward quiet.
    */
   gainForLoad(load) {
     if (!(load > this.loadRef)) return 1;

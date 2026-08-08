@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AstroPitch — running transport tests</title>
+  <style>
+    body { font: 13px ui-monospace, Menlo, monospace; background: #0b0819; color: #ddd; padding: 2rem; }
+    .pass { color: #8fbf6a; } .fail { color: #ff6a5d; } .info { color: #8d8fae; }
+    h2 { font-size: 14px; color: #e9cd93; margin: 1.6rem 0 0.5rem; font-weight: 400; }
+    pre { margin: 0.15rem 0; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<h1 style="font-size:16px;font-weight:400">Running transport tests</h1>
+<div id="out"></div>
+
+<script type="module">
+/**
+ * What a transport sounds like once it has been left playing.
+ *
+ * Separate from tests/audio.test.html for one reason: that file renders about
+ * 460 scenes, and these render tens of seconds of audio several times over.
+ * Stacked on each other they exhaust the headless renderer, which dies without
+ * a message and looks exactly like a hang. Kept apart, both finish.
+ *
+ * These drive the real melodic() and drone(), not an imitation of them. That
+ * distinction has already cost this engine one wrong diagnosis: a scene built
+ * to look like a melodic line is a guess about note lengths, gains and
+ * overlap, and every one of those guesses changes the level arriving at the
+ * master chain. The only way to be sure the thing measured is the thing the
+ * user hears is to run the code the button runs.
+ */
+import { AudioEngine, SAT_HEADROOM, SAT_DRIVE } from '../src/audio/engine.js';
+import { Performer } from '../src/audio/performer.js';
+import { makeChart } from '../src/chart.js';
+import { SOUNDING_BODIES } from '../src/ontology.js';
+
+const out = document.getElementById('out');
+let failures = 0;
+
+const log = (cls, msg) => {
+  const pre = document.createElement('pre');
+  pre.className = cls;
+  pre.textContent = msg;
+  out.appendChild(pre);
+};
+const head = (t) => { const h = document.createElement('h2'); h.textContent = t; out.appendChild(h); };
+const check = (label, ok, detail = '') => {
+  if (!ok) failures++;
+  log(ok ? 'pass' : 'fail', `${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
+};
+
+const RATE = 48000;
+const spread = (offset) => Object.fromEntries(SOUNDING_BODIES.map((k, i) => [k, (i * 33 + offset) % 360]));
+const CHART = makeChart(spread(0), { system: 'whole' });
+
+/**
+ * Deterministic renders: the impulse response, the noise buffer and drone's
+ * choice of which body surfaces next all come from Math.random, and a paired
+ * comparison of two renders is only a comparison if both got the same room,
+ * the same noise and the same notes.
+ */
+const realRandom = Math.random;
+const seedRandom = () => {
+  let s = 20260807;
+  Math.random = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+};
+
+function saturationCurveAt(drive, headroom, n = 4096) {
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.tanh(x * headroom * drive) / Math.tanh(drive);
+  }
+  return curve;
+}
+
+/**
+ * Render the real melodic() or drone() for `seconds`.
+ *
+ * Both modes drive their repeats from setInterval, and a wall-clock timer is
+ * no use inside an offline render: it fires while the render is computing, at
+ * a rate set by how fast this machine happens to be, so the same test would
+ * schedule different music every run. So the timer functions are swapped for a
+ * queue keyed to ctx.currentTime and drained from suspend(), which advances
+ * the context to a known point and hands control back. The mode code is
+ * untouched and unaware — it is the genuine implementation, on the audio clock
+ * instead of the wall clock, and deterministic.
+ *
+ * Scheduling a whole run up front is *not* equivalent: every voice would be
+ * pending at once, blow past maxVoices, and what got measured would be the
+ * slot-reclaim path rather than the steady state.
+ */
+async function renderMode(seconds, mode, { tap = false, trim = 1, config = {}, drive = null } = {}) {
+  seedRandom();
+  const ctx = new OfflineAudioContext({
+    numberOfChannels: 2, length: Math.ceil(RATE * seconds), sampleRate: RATE,
+  });
+  const engine = new AudioEngine({ context: ctx });
+  engine.start = async () => ctx;
+  Object.assign(engine, config);
+  // The trim goes on master, ahead of the whole master chain: that is what
+  // makes the quiet pass a linear reference for what the chain did. It cannot
+  // go on mixBus, whose gain the staging rewrites with absolute targets.
+  engine.master.gain.value *= trim;
+  if (drive !== null) {
+    // Restore an older, harder saturator setting, makeup included, to show
+    // the checks below can tell the difference.
+    engine.stages.saturator.curve = saturationCurveAt(drive, SAT_HEADROOM);
+    engine.stages.satMakeup.gain.value = 1;
+  }
+  if (tap) {
+    // Straight off the master, bypassing glue/saturator/limiter/ceiling: this
+    // is the level that arrives at the saturator's WaveShaper, which clamps
+    // its input before the curve lookup and so hard clips past SAT_HEADROOM.
+    engine.master.disconnect();
+    engine.master.connect(ctx.destination);
+  }
+
+  const queue = new Map();
+  let nextId = 1;
+  const real = {
+    si: window.setInterval, st: window.setTimeout,
+    ci: window.clearInterval, ct: window.clearTimeout,
+  };
+  const shim = () => {
+    window.setInterval = (fn, ms) => {
+      const id = nextId++;
+      queue.set(id, { fn, due: ctx.currentTime + ms / 1000, every: ms / 1000 });
+      return id;
+    };
+    window.setTimeout = (fn, ms) => {
+      const id = nextId++;
+      queue.set(id, { fn, due: ctx.currentTime + (ms || 0) / 1000, every: null });
+      return id;
+    };
+    window.clearInterval = (id) => queue.delete(id);
+    window.clearTimeout = (id) => queue.delete(id);
+  };
+  const restore = () => {
+    window.setInterval = real.si; window.setTimeout = real.st;
+    window.clearInterval = real.ci; window.clearTimeout = real.ct;
+  };
+
+  shim();
+  const performer = new Performer(engine);
+  performer.setChart(CHART);
+  try { await performer[mode](); } finally { restore(); }
+
+  const PERIOD = 0.25;
+  const pending = [];
+  for (let k = 1; k * PERIOD < seconds - 3; k++) {
+    const at = k * PERIOD;
+    pending.push(ctx.suspend(at).then(() => {
+      shim();
+      try {
+        for (const [id, t] of [...queue].sort((a, b) => a[1].due - b[1].due)) {
+          if (t.due > at) continue;
+          if (t.every == null) queue.delete(id); else t.due += t.every;
+          t.fn();
+        }
+      } catch (e) {
+        // A throw here would leave resume() uncalled and the render would
+        // never finish, which reads as a hang rather than as a failure.
+        log('fail', `FAIL  the mode threw at ${at.toFixed(2)}s: ${e && e.message}`);
+        failures++;
+      }
+      restore();
+      ctx.resume();
+    }));
+  }
+  const buffer = await ctx.startRendering();
+  await Promise.all(pending);
+  Math.random = realRandom;
+  return buffer;
+}
+
+function peakPerWindow(buffer, size) {
+  const peaks = [];
+  for (let start = 0; start + size * RATE <= buffer.length; start += size * RATE) {
+    let peak = 0;
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const d = buffer.getChannelData(ch);
+      for (let i = start; i < start + size * RATE; i++) peak = Math.max(peak, Math.abs(d[i]));
+    }
+    peaks.push(peak);
+  }
+  return peaks;
+}
+
+function statsOf(buffer) {
+  let peak = 0;
+  let clipped = 0;
+  let sumSq = 0;
+  let n = 0;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const d = buffer.getChannelData(ch);
+    for (let i = 0; i < d.length; i++) {
+      const a = Math.abs(d[i]);
+      if (a > peak) peak = a;
+      if (a >= 0.9999) clipped++;
+      sumSq += d[i] * d[i];
+      n++;
+    }
+  }
+  return { peak, clipped, rms: Math.sqrt(sumSq / n) };
+}
+
+/**
+ * Residual against a linear reference, in dB relative to signal.
+ *
+ * The run is rendered twice, the second time 18 dB down and scaled back up.
+ * Nothing in the chain is working at that level, so the quiet pass is what the
+ * loud one should have looked like had the chain stayed linear. Each block is
+ * gain-matched by least squares before differencing, which subtracts the
+ * compressors' level moves and leaves what the waveform itself did.
+ *
+ * The block length is the whole measurement, and getting it wrong cost this
+ * engine a wrong diagnosis. At 2048 samples (43 ms) a single fitted gain
+ * cannot follow a limiter, so the limiter's ordinary gain riding lands in the
+ * residual and swamps everything else: measured that way, deleting the
+ * saturator outright changed the number by 0.2 dB. At 128 samples (2.7 ms) the
+ * fit tracks the compressors and what remains is waveform distortion — and the
+ * same comparison moves by 12 dB. Anything claiming to measure distortion here
+ * has to use the short block; the long one is reported only as context.
+ */
+function residualDb(loud, quiet, scale, block) {
+  let residual = 0;
+  let signal = 0;
+  for (let ch = 0; ch < loud.numberOfChannels; ch++) {
+    const b = loud.getChannelData(ch);
+    const a = quiet.getChannelData(ch);
+    for (let start = 0; start + block <= b.length; start += block) {
+      let aa = 0;
+      let ab = 0;
+      for (let i = start; i < start + block; i++) {
+        const av = a[i] * scale;
+        aa += av * av;
+        ab += av * b[i];
+      }
+      if (aa < 1e-12) continue;
+      const alpha = ab / aa;
+      for (let i = start; i < start + block; i++) {
+        const fit = alpha * a[i] * scale;
+        const e = b[i] - fit;
+        residual += e * e;
+        signal += fit * fit;
+      }
+    }
+  }
+  return signal > 0 ? 10 * Math.log10(residual / signal) : -Infinity;
+}
+
+const RUN = 30;
+/**
+ * What the residual has to stay under, as a proportion of signal.
+ *
+ * -34 dB is 2.0%. This is not a claim about audibility — a percentage does not
+ * become inaudible at a threshold, and it depends on what the distortion is
+ * and what it sits under. It is the level the chain measures at with the
+ * saturator set where the measurements settled, plus enough room that ordinary
+ * variation does not fail the suite. melodic() measures -40.2 dB and drone()
+ * -37.8; the drive that caused the reported buzzing measured -29.2 and -27.7.
+ */
+const RESIDUAL_LIMIT = -34;
+
+// ---------------------------------------------------------------------------
+
+for (const mode of ['melodic', 'drone']) {
+  head(`${mode}() left running for ${RUN}s settles somewhere clean`);
+
+  const pre = peakPerWindow(await renderMode(RUN, mode, { tap: true }), 5);
+  const loud = await renderMode(RUN, mode);
+  const quiet = await renderMode(RUN, mode, { trim: 1 / 8 });
+  const post = statsOf(loud);
+  const shortBlock = residualDb(loud, quiet, 8, 128);
+  const longBlock = residualDb(loud, quiet, 8, 2048);
+  const worst = Math.max(...pre);
+
+  log('info', `      into the saturator per 5s: ${pre.map((p) => p.toFixed(2)).join(' ')}`);
+  log('info', `      worst ${worst.toFixed(2)} of ${SAT_HEADROOM}   out peak ${post.peak.toFixed(3)}   ` +
+    `rms ${post.rms.toFixed(4)}   residual ${shortBlock.toFixed(1)} dB (${longBlock.toFixed(1)} dB at 2048)`);
+
+  check('never overruns the saturator\'s input range', worst < SAT_HEADROOM,
+    `worst ${worst.toFixed(2)} of ${SAT_HEADROOM}`);
+  // Loosening the staging shows here first and by a wide margin, long before
+  // a one-shot render notices.
+  check('and settles with real margin, not merely inside it', worst < SAT_HEADROOM * 0.6,
+    `worst ${worst.toFixed(2)} of ${SAT_HEADROOM}`);
+  check('no clipping anywhere in the run', post.clipped === 0, `${post.clipped} samples`);
+  check(`the chain adds under ${(10 ** (RESIDUAL_LIMIT / 20) * 100).toFixed(1)}% waveform distortion`,
+    shortBlock < RESIDUAL_LIMIT,
+    `${shortBlock.toFixed(1)} dB = ${(10 ** (shortBlock / 20) * 100).toFixed(1)}% of signal`);
+
+  // Effects that accumulate show as a level that keeps climbing. Only the
+  // upward direction means anything: drone surfaces bodies whose gains differ
+  // threefold and the last window is tail after scheduling stops, so spread on
+  // its own says nothing. What must not happen is a later window louder than
+  // the opening ones.
+  const early = Math.max(...pre.slice(0, 2));
+  const later = Math.max(...pre.slice(2, -1));
+  check('the level settles rather than climbing as the effects fill up',
+    later < early * 1.2, `later ${later.toFixed(2)} vs opening ${early.toFixed(2)}`);
+}
+
+head('The saturator drive is what is keeping the waveform clean');
+{
+  // The regression guard proper. The buzzing the engine shipped with was this
+  // stage's tanh driven at 1.5, where it applied ~3 dB of gain reduction per
+  // sample and intermodulated a dense mix. Without this comparison the check
+  // above only says some number is small, not that the drive is why.
+  const loud = await renderMode(RUN, 'melodic');
+  const quiet = await renderMode(RUN, 'melodic', { trim: 1 / 8 });
+  const now = residualDb(loud, quiet, 8, 128);
+
+  const hardLoud = await renderMode(RUN, 'melodic', { drive: 1.5 });
+  const hardQuiet = await renderMode(RUN, 'melodic', { drive: 1.5, trim: 1 / 8 });
+  const before = residualDb(hardLoud, hardQuiet, 8, 128);
+
+  log('info', `      drive ${SAT_DRIVE}: ${now.toFixed(1)} dB   drive 1.5: ${before.toFixed(1)} dB   ` +
+    `rms ${statsOf(loud).rms.toFixed(4)} vs ${statsOf(hardLoud).rms.toFixed(4)}`);
+
+  check('the drive that caused the buzzing measures much dirtier',
+    before > now + 6, `${before.toFixed(1)} dB vs ${now.toFixed(1)} dB`);
+  // Without this the check above could be passed by simply turning everything
+  // down, which is the one fix that was ruled out by measurement.
+  check('and the improvement was not bought by making the mix quieter',
+    statsOf(loud).rms > statsOf(hardLoud).rms * 0.85,
+    `rms ${statsOf(loud).rms.toFixed(4)} vs ${statsOf(hardLoud).rms.toFixed(4)}`);
+}
+
+head('The gain staging is what is keeping the level in range');
+{
+  // Without this, every check above would still pass on an engine that had
+  // quietly stopped doing anything, and there would be no evidence that the
+  // margins are earned rather than incidental.
+  const staged = Math.max(...peakPerWindow(await renderMode(RUN, 'melodic', { tap: true }), 5));
+  const defeated = Math.max(...peakPerWindow(
+    await renderMode(RUN, 'melodic', { tap: true, config: { loadRef: Infinity } }), 5));
+
+  log('info', `      staged ${staged.toFixed(2)}   staging defeated ${defeated.toFixed(2)}   ` +
+    `(hard clip at ${SAT_HEADROOM})`);
+  check('with the staging defeated the same run overruns the saturator',
+    defeated > SAT_HEADROOM, `${defeated.toFixed(2)} of ${SAT_HEADROOM}`);
+  check('the staging is doing the work, not the scene being quiet',
+    staged < defeated / 2, `${staged.toFixed(2)} vs ${defeated.toFixed(2)}`);
+}
+
+const summary = document.createElement('h2');
+summary.textContent = failures === 0 ? 'ALL RUNNING TRANSPORT TESTS PASSED' : `${failures} RUNNING TRANSPORT TEST(S) FAILED`;
+summary.style.color = failures === 0 ? '#8fbf6a' : '#ff6a5d';
+out.appendChild(summary);
+window.__testFailures = failures;
+window.__testDone = true;
+</script>
+</body>
+</html>

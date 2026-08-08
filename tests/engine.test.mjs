@@ -12,7 +12,7 @@
  * tests/audio.test.html, in a browser.
  */
 
-import { AudioEngine } from '../src/audio/engine.js';
+import { AudioEngine, saturatorResponse } from '../src/audio/engine.js';
 import { Voice, envelopeAt } from '../src/audio/voices.js';
 
 let fails = 0;
@@ -87,24 +87,19 @@ console.log('\n--- the bus gain a load has earned ---');
   ok('the curve is continuous at the reference',
     Math.abs(sum(e.loadRef) - sum(e.loadRef + 1e-6)) < 1e-4);
 
-  // The property that keeps it musical rather than merely safe. Voices in a
-  // chord are near enough uncorrelated that what a listener hears is the RMS,
-  // sqrt(n) * a — so an exponent of exactly 0.5 would cancel that growth
-  // dead and make a full chart no louder than one note. This is the test that
-  // catches it: a render at loadExp 0.5 went 0.247 -> 0.181 -> 0.092 as
-  // voices were added, which the in-phase sum above is quite happy with.
-  const perceived = (n, a = 0.2) => Math.sqrt(n) * n * a * e.gainForLoad(n * a) / n;
-  const heard = [1, 2, 4, 8, 16, 24].map((n) => perceived(n));
-  let louder = true;
-  for (let i = 1; i < heard.length; i++) if (heard[i] <= heard[i - 1]) louder = false;
-  ok('every voice added makes the mix audibly bigger', louder,
-    heard.map((x) => x.toFixed(3)).join(' -> '));
-  ok('a full chart is meaningfully louder than one note',
-    heard[heard.length - 1] > heard[0] * 1.4,
-    `${(heard[heard.length - 1] / heard[0]).toFixed(2)}x`);
-  ok('but not unboundedly so',
-    heard[heard.length - 1] < heard[0] * 4,
-    `${(heard[heard.length - 1] / heard[0]).toFixed(2)}x`);
+  // What a listener hears is not the in-phase sum but the RMS of largely
+  // uncorrelated voices, sqrt(n) * a. Against that, loadExp 0.65 lets density
+  // cost a little level rather than add it. That is a deliberate trade and
+  // not a free one, so what is asserted is the band it has to stay inside:
+  // the mix must not collapse as a chart fills up, and must not run away.
+  // Chasing growth here instead is what caused the 9 dB regression the
+  // running-transport section of tests/audio.test.html now guards.
+  const heard = (n, a = 0.2) => Math.sqrt(n) * a * e.gainForLoad(n * a);
+  const band = [1, 2, 4, 8, 16, 24].map((n) => heard(n) / heard(1));
+  ok('a full chart does not collapse as it fills up',
+    Math.min(...band) > 0.5, band.map((x) => x.toFixed(2)).join(' -> '));
+  ok('nor does density run away with the level',
+    Math.max(...band) < 4, band.map((x) => x.toFixed(2)).join(' -> '));
 
   // The old rule attenuated only the arriving voice, by the count it found.
   // Ten voices that each gave up 1/sqrt(n) still summed to about five.
@@ -238,6 +233,46 @@ console.log('\n--- the cap is enforced, gracefully ---');
   live.register(voice({ t0: -1, peak: live.loadRef }));
   ok('a sounding voice is faded, not cut', loud.stolen && loud.stealFade > live.stealFade,
     `faded over ${loud.stealFade}s vs a ${live.stealFade}s cut`);
+}
+
+console.log('\n--- the saturator bends the waveform gently ---');
+{
+  // The buzzing this engine shipped with was the saturator's tanh run at a
+  // drive of 1.5, where it applied about 3 dB of gain reduction *per sample*
+  // to a dense mix. Per-sample gain reduction across many simultaneous
+  // partials is intermodulation, and the loudness it bought could be had from
+  // a plain gain instead. Measured on a running melodic line, softening the
+  // drive took the residual from -29.2 dB to -40.2 dB at matched loudness.
+  //
+  // These are the two properties that fix depends on, checked without an
+  // AudioContext so a browser is not needed to catch a regression:
+  const gainAt = (s) => saturatorResponse(s) / s;
+  const smallSignal = gainAt(1e-6);
+  const reduction = (s) => 20 * Math.log10(smallSignal / gainAt(s));
+
+  // One: the stage still supplies the level it always did, so a future change
+  // to SAT_DRIVE cannot quietly turn the mix down and call that a fix.
+  ok('the stage is loudness-neutral against the drive it replaced',
+    Math.abs(smallSignal - 1.5 / Math.tanh(1.5)) < 1e-3,
+    `small-signal gain ${smallSignal.toFixed(4)}`);
+
+  // Two: it is gentle where the mix actually runs. A running transport peaks
+  // around 0.76 into this stage; the old curve took 2.92 dB out there.
+  ok('under 1 dB of per-sample gain reduction at the level the mix runs',
+    reduction(0.76) < 1, `${reduction(0.76).toFixed(2)} dB at s=0.76`);
+  ok('and still under 1 dB at full scale', reduction(1) < 1,
+    `${reduction(1).toFixed(2)} dB at s=1`);
+
+  // It has to remain a curve, though — a straight line is not a saturator,
+  // and the stage is what keeps transients off the limiter.
+  ok('but it is still bending the waveform, not passing it through',
+    reduction(1) > 0.2, `${reduction(1).toFixed(2)} dB at s=1`);
+
+  // The old setting must fail these, or they are not a tripwire.
+  const old = (s) => (Math.tanh(s * 1.5) / Math.tanh(1.5)) / s;
+  const oldReduction = 20 * Math.log10(old(1e-6) / old(0.76));
+  ok('the drive that caused the buzzing would fail the check above',
+    oldReduction > 1, `the old curve took ${oldReduction.toFixed(2)} dB at s=0.76`);
 }
 
 console.log('\n--- no context, no crash ---');

@@ -36,13 +36,34 @@ const check = (label, ok, detail = '') => {
   log(ok ? 'pass' : 'fail', `${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
 };
 
+/**
+ * Deterministic renders. The impulse response and the noise buffer are both
+ * built from Math.random, so without this every run gets a different room and
+ * a different noise floor. Every render helper below goes through it: a paired
+ * comparison is only a comparison if both passes got the same room, and a
+ * reported figure that moves between runs is not a tripwire. renderPreMaster
+ * was left unseeded once, and the staging section's numbers moved by 3 dB
+ * between two runs of the same code.
+ *
+ * Declared here, above the helpers, because the scenes start rendering part
+ * way down this file and a const referenced before its declaration runs is a
+ * ReferenceError, not a hoisted binding.
+ */
+const realRandom = Math.random;
+function seeded(fn) {
+  let s = 20260807;
+  Math.random = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  try { return fn(); } finally { Math.random = realRandom; }
+}
+
 /** Render a scene through the full master chain and measure the result. */
 async function render(seconds, build) {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
-  const engine = new AudioEngine({ context: ctx });
-  build(engine);
-  const buffer = await ctx.startRendering();
-  return analyse(buffer);
+  const ctx = seeded(() => {
+    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    build(new AudioEngine({ context: c }));
+    return c;
+  });
+  return analyse(await ctx.startRendering());
 }
 
 /**
@@ -306,27 +327,44 @@ head('Click-burst dynamics: staggered burst is not squashed flat');
 // actually keeps the master chain out of trouble.
 // ---------------------------------------------------------------------------
 
-/** Render with the master chain bypassed, to see what arrives at it. */
-async function renderPreMaster(seconds, build, config = {}) {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
-  const engine = new AudioEngine({ context: ctx });
-  Object.assign(engine, config);
-  build(engine);
-  engine.master.disconnect();
-  engine.master.connect(ctx.destination);
+/**
+ * Render one path of the graph alone.
+ *
+ * The dry signal and the effect returns answer to density very differently on
+ * purpose — the sends give way harder than the bus does, so a dense passage
+ * is drier as well as compensated. Measuring the sum of the two says nothing
+ * useful about either: these renders are mostly tail, so total RMS is
+ * dominated by the wash and reads an intended reduction in reverb as the mix
+ * falling apart.
+ */
+async function renderPath(seconds, build, path) {
+  const ctx = seeded(() => {
+    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const engine = new AudioEngine({ context: c });
+    if (path === 'dry') {
+      engine.reverbReturn.gain.value = 0;
+      engine.delayReturn.gain.value = 0;
+    } else {
+      engine.dryBus.gain.value = 0;
+    }
+    build(engine);
+    return c;
+  });
   return analyse(await ctx.startRendering());
 }
 
-/**
- * Deterministic renders. The impulse response and the noise buffer are both
- * built from Math.random, and the paired render below is only a comparison if
- * both passes get the same room and the same noise.
- */
-const realRandom = Math.random;
-function seeded(fn) {
-  let s = 20260807;
-  Math.random = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-  try { return fn(); } finally { Math.random = realRandom; }
+/** Render with the master chain bypassed, to see what arrives at it. */
+async function renderPreMaster(seconds, build, config = {}) {
+  const ctx = seeded(() => {
+    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const engine = new AudioEngine({ context: c });
+    Object.assign(engine, config);
+    build(engine);
+    engine.master.disconnect();
+    engine.master.connect(c.destination);
+    return c;
+  });
+  return analyse(await ctx.startRendering());
 }
 
 async function renderSeeded(seconds, build, trim = 1, config = {}) {
@@ -342,33 +380,39 @@ async function renderSeeded(seconds, build, trim = 1, config = {}) {
 }
 
 /**
- * Non-linear distortion, in dB relative to signal.
+ * Residual against a linear reference, in dB relative to signal.
  *
  * The same scene is rendered twice, the second time 18 dB down and scaled back
  * up. Nothing in the chain is working at that level, so the quiet pass is what
  * the loud one should have looked like if the chain were linear. Gain-matching
- * each block by least squares before differencing removes the glue
- * compressor's slow level changes, leaving what the waveform itself did:
- * clipping, and the harmonics that come with it.
+ * each block by least squares before differencing removes the compressors'
+ * level changes, leaving what the waveform itself did.
+ *
+ * The block length decides what is being measured, and the default here is
+ * deliberately short. At 2048 samples (43 ms) one fitted gain cannot follow a
+ * limiter, so the limiter's ordinary gain riding lands in the residual and
+ * swamps the rest: measured that way, deleting the saturator outright moved
+ * the number by 0.2 dB. At 128 samples (2.7 ms) the fit tracks the
+ * compressors, what remains is waveform distortion, and the same comparison
+ * moves by 12 dB.
  */
-function distortionDb(loud, quiet, scale) {
-  const BLOCK = 2048;
+function distortionDb(loud, quiet, scale, block = 128) {
   let residual = 0;
   let signal = 0;
   for (let ch = 0; ch < loud.numberOfChannels; ch++) {
     const b = loud.getChannelData(ch);
     const a = quiet.getChannelData(ch);
-    for (let start = 0; start + BLOCK <= b.length; start += BLOCK) {
+    for (let start = 0; start + block <= b.length; start += block) {
       let aa = 0;
       let ab = 0;
-      for (let i = start; i < start + BLOCK; i++) {
+      for (let i = start; i < start + block; i++) {
         const av = a[i] * scale;
         aa += av * av;
         ab += av * b[i];
       }
       if (aa < 1e-12) continue;
       const alpha = ab / aa;
-      for (let i = start; i < start + BLOCK; i++) {
+      for (let i = start; i < start + block; i++) {
         const fit = alpha * a[i] * scale;
         const e = b[i] - fit;
         residual += e * e;
@@ -415,12 +459,15 @@ head('Polyphony: the master chain is never driven past what it can take');
   for (const n of [1, 2, 4, 8, 16, 32]) {
     const pre = await renderPreMaster(8, dense(n));
     const post = await render(8, dense(n));
+    const dry = await renderPath(8, dense(n), 'dry');
+    const wet = await renderPath(8, dense(n), 'wet');
     worstPre = Math.max(worstPre, pre.peak);
     totalClipped += post.clipped;
-    levels.push({ n, pre: pre.peak, rms: post.rms, peak: post.peak });
+    levels.push({ n, pre: pre.peak, peak: post.peak, dry: dry.rms, wet: wet.rms });
   }
   for (const l of levels) {
-    log('info', `      ${String(l.n).padStart(2)} voices  into master ${l.pre.toFixed(3)}  out peak ${l.peak.toFixed(3)}  rms ${l.rms.toFixed(4)}`);
+    log('info', `      ${String(l.n).padStart(2)} voices  into master ${l.pre.toFixed(3)}  out peak ${l.peak.toFixed(3)}` +
+      `  dry ${l.dry.toFixed(4)}  wet ${l.wet.toFixed(4)}`);
   }
 
   // The mechanism the old code fell foul of: a WaveShaper clamps its input to
@@ -430,21 +477,33 @@ head('Polyphony: the master chain is never driven past what it can take');
     worstPre < SAT_HEADROOM, `worst ${worstPre.toFixed(3)} of ${SAT_HEADROOM}`);
   check('no clipping at any density', totalClipped === 0, `${totalClipped} samples`);
 
-  // Bounded, but not flattened. Holding the mix at one level however many
-  // voices arrive would pass every check above and be the wrong answer: the
-  // ensemble has to grow, just far less than linearly. Which way the exponent
-  // errs is invisible to a peak measurement, so it is asserted here.
-  const one = levels[0].rms;
-  const many = levels[levels.length - 1].rms;
-  check('32 voices are louder than one', many > one * 1.15, `${(many / one).toFixed(2)}x`);
-  check('32 voices are not 32 times louder', many < one * 8, `${(many / one).toFixed(2)}x`);
-  let collapsed = null;
-  for (let i = 1; i < levels.length; i++) {
-    if (levels[i].rms < levels[i - 1].rms * 0.85) collapsed = `${levels[i - 1].n} -> ${levels[i].n}`;
-  }
-  check('no density makes the mix collapse', collapsed === null,
-    collapsed ?? levels.map((l) => l.rms.toFixed(3)).join(' -> '));
+  // Bounded, and not collapsed either. Judged on the dry path, which is the
+  // notes: a chart filling up has to stay present without running away.
+  const dryBand = levels.map((l) => l.dry / levels[0].dry);
+  check('a chart filling up does not gut the notes', Math.min(...dryBand) > 0.9,
+    dryBand.map((x) => x.toFixed(2)).join(' -> '));
+  check('nor does density run away with them', Math.max(...dryBand) < 4,
+    dryBand.map((x) => x.toFixed(2)).join(' -> '));
+
+  // The wash is deliberately the part that gives way — the sends back off
+  // harder than the bus, so density buys dryness as well as headroom. It
+  // still has to be there at full density, not gone.
+  const wetBand = levels.map((l) => l.wet / levels[0].wet);
+  check('the wash thins out as the chart fills, as intended',
+    wetBand[wetBand.length - 1] < 0.9, wetBand.map((x) => x.toFixed(2)).join(' -> '));
+  check('but never disappears', Math.min(...wetBand) > 0.25,
+    wetBand.map((x) => x.toFixed(2)).join(' -> '));
 }
+
+/**
+ * What the residual has to stay under, as a proportion of signal.
+ *
+ * -30 dB is 3.2%. Not a claim about audibility: a percentage does not become
+ * inaudible at a threshold, and what it sounds like depends on what the
+ * distortion is and what it sits under. It is where these scenes measure with
+ * the saturator drive the engine now ships, plus room for ordinary variation.
+ */
+const DISTORTION_LIMIT = -30;
 
 head('Polyphony: the gain staging is what is keeping the chain clean');
 {
@@ -473,9 +532,14 @@ head('Polyphony: the gain staging is what is keeping the chain clean');
   check('and the result measurably cleaner', staged.thd < loose.thd - 3,
     `${staged.thd.toFixed(1)} dB vs ${loose.thd.toFixed(1)} dB`);
 
+  // Stated as what it is — a proportion of the signal — rather than as a claim
+  // about audibility. A residual does not become inaudible at a threshold, and
+  // the old wording here dressed up -18 dB, which is 12.6% of signal, as
+  // "well under audibility".
   const worst = Math.max(...await Promise.all([4, 12, 24].map(async (n) => (await measure(n, {})).thd)));
-  check('distortion stays well under audibility at every density',
-    worst < -18, `worst ${worst.toFixed(1)} dB`);
+  check(`waveform distortion stays under ${(10 ** (DISTORTION_LIMIT / 20) * 100).toFixed(1)}% at every density`,
+    worst < DISTORTION_LIMIT,
+    `worst ${worst.toFixed(1)} dB = ${(10 ** (worst / 20) * 100).toFixed(1)}% of signal`);
 }
 
 head('Polyphony: reaching the cap fades voices instead of cutting them');
@@ -542,6 +606,11 @@ head('Polyphony: the bus follows a release down rather than holding it under');
   check('reaching full gain by the end of the release', seen[seen.length - 1][1] > 0.9,
     `${seen[seen.length - 1][1].toFixed(3)}`);
 }
+
+// A transport left running — the steady state a one-shot render never
+// reaches — is covered by tests/polyphony.test.html, on its own page. It has
+// to render tens of seconds of audio several times over, and stacked on top
+// of the ~460 renders above it exhausts the headless renderer.
 
 head('Reverb impulse response is well formed');
 {
