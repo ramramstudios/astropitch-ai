@@ -116,13 +116,13 @@ console.log('\n--- Placidus sanity ---');
   if (rp.system !== 'porphyry') fails++;
 }
 
-console.log('\n--- Real chart: the SQL author, 1982-04-04 12:36 ---');
+console.log('\n--- Real chart: Bob Dylan, 1941-05-24 21:05 CST, Duluth ---');
 {
-  // AstroPitch.sql User row 3: sunID 97 => Aries/9th, moonID 6 => Virgo,
-  // ascID 5 => Leo. Sun in Aries with Leo rising does put the Sun in the 9th.
+  // Birth record: 1941-05-24 at 21:05 CST in Duluth, MN (46.78, -92.10).
+  // The Sun should be in Gemini.
   const sky = computeSky(
-    { year: 1982, month: 4, day: 4, hour: 12, minute: 36, utcOffset: -5 },
-    { latitude: 33.75, longitude: -84.39, houseSystem: 'whole' }
+    { year: 1941, month: 5, day: 24, hour: 21, minute: 5, utcOffset: -6 },
+    { latitude: 46.78, longitude: -92.10, houseSystem: 'whole' }
   );
   const SIGNS = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
   const fmt = (l) => `${(l % 30).toFixed(2)}° ${SIGNS[Math.floor(l / 30)]}`;
@@ -130,10 +130,12 @@ console.log('\n--- Real chart: the SQL author, 1982-04-04 12:36 ---');
   const sunSign = SIGNS[Math.floor(sky.positions.sun / 30)];
   const moonSign = SIGNS[Math.floor(sky.positions.moon / 30)];
   const ascSign = SIGNS[Math.floor(sky.positions.asc / 30)];
-  console.log(`  ${sunSign === 'Aries' ? 'PASS' : 'FAIL'}  Sun in Aries (SQL says Aries)`);
-  console.log(`  ${moonSign === 'Virgo' ? 'PASS' : 'INFO'}  Moon computed ${moonSign} (SQL says Virgo)`);
-  console.log(`  ${ascSign === 'Leo' ? 'PASS' : 'INFO'}  Asc computed ${ascSign} (SQL says Leo)`);
-  if (sunSign !== 'Aries') fails++;
+  console.log(`  ${sunSign === 'Gemini' ? 'PASS' : 'FAIL'}  Sun in Gemini (Bob Dylan)`);
+  console.log(`  ${moonSign === 'Taurus' ? 'PASS' : 'FAIL'}  Moon in Taurus (Bob Dylan)`);
+  console.log(`  ${ascSign === 'Sagittarius' ? 'PASS' : 'FAIL'}  Asc in Sagittarius (Bob Dylan)`);
+  if (sunSign !== 'Gemini') fails++;
+  if (moonSign !== 'Taurus') fails++;
+  if (ascSign !== 'Sagittarius') fails++;
 }
 
 console.log(`\n${fails === 0 ? 'ALL CHECKS PASSED' : fails + ' CHECK(S) FAILED'}`);
