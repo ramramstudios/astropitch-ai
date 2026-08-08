@@ -125,6 +125,25 @@ export function buildVoiceSpec({ element, house, modality, palette }) {
   };
 }
 
+/**
+ * Value of a piecewise exponential envelope at `time`.
+ *
+ * `points` is [[time, value], ...] ascending, mirroring the ramps actually
+ * scheduled on the param — so this computes what the param *will* read at a
+ * future time, which `AudioParam.value` cannot: that reports the envelope now.
+ */
+export function envelopeAt(points, time) {
+  if (time <= points[0][0]) return points[0][1];
+  for (let i = 1; i < points.length; i++) {
+    const [t0, v0] = points[i - 1];
+    const [t1, v1] = points[i];
+    if (time >= t1) continue;
+    // The shape exponentialRampToValueAtTime interpolates.
+    return v0 * (v1 / v0) ** ((time - t0) / (t1 - t0));
+  }
+  return points[points.length - 1][1];
+}
+
 let voiceSerial = 0;
 
 export class Voice {
@@ -145,6 +164,12 @@ export class Voice {
     // own state and can free a polyphony slot immediately.
     this.stolen = false;
     this.releaseAt = null;
+    // What the engine's gain staging reads: the amplitude this voice asks for,
+    // when it starts asking, and the window over which it stops. `peak` is set
+    // once the envelope is known; the fade bounds are set by `release`.
+    this.peak = 0;
+    this.fadeFrom = null;
+    this.fadeUntil = null;
     // The designer needs one voice that can follow a body around the wheel.
     // Keep the AudioParams that are defined by pitch together so retuning is a
     // small automation change, rather than repeatedly destroying and creating
@@ -426,13 +451,12 @@ export class Voice {
       nf.frequency.value = clampF(noise.tracks ? freq * noise.freq : noise.freq);
       nf.Q.value = noise.Q;
       const ng = ctx.createGain();
+      const noiseFloor = Math.max(0.0001, noise.gain * (noise.tracks ? 0.35 : 0.001));
+      this.noiseEnvelope = [[t0, 0.0001], [t0 + 0.004, noise.gain], [t0 + noise.decay, noiseFloor]];
       ng.gain.setValueAtTime(0.0001, t0);
       ng.gain.exponentialRampToValueAtTime(noise.gain, t0 + 0.004);
       // A long decay keeps Air breathing; a short one is a strike.
-      ng.gain.exponentialRampToValueAtTime(
-        Math.max(0.0001, noise.gain * (noise.tracks ? 0.35 : 0.001)),
-        t0 + noise.decay
-      );
+      ng.gain.exponentialRampToValueAtTime(noiseFloor, t0 + noise.decay);
       src.connect(nf);
       nf.connect(ng);
       ng.connect(oscMix);
@@ -445,7 +469,17 @@ export class Voice {
 
     // --- amplitude envelope ---
     const peak = Math.max(0.0002, gain);
+    // A gated gesture adds its depth on top of the envelope rather than
+    // carving into it, so the loudest this voice gets is more than `peak`.
+    this.peak = peak * (1 + (gesture.gate ? gesture.gate.depth * 0.5 * amp.sustain : 0));
     const g = vca.gain;
+    // Kept so a release scheduled ahead of the note can work out where the
+    // envelope will be when it arrives. Mirrors the ramps written just below.
+    this.ampEnvelope = [
+      [t0, 0.0001],
+      [t0 + amp.attack, peak],
+      [t0 + amp.attack + amp.decay, Math.max(0.0002, peak * amp.sustain)],
+    ];
     g.setValueAtTime(0.0001, t0);
     g.exponentialRampToValueAtTime(peak, t0 + amp.attack);
     g.exponentialRampToValueAtTime(
@@ -529,17 +563,21 @@ export class Voice {
     this.released = true;
     this.releaseAt = t;
     const rel = overrideRelease ?? this.spec.amp.release;
+    this.fadeFrom = t;
+    this.fadeUntil = t + rel;
     const g = this.vca.gain;
 
-    g.cancelScheduledValues(t);
-    // Hold whatever the envelope had reached, then fall from there.
-    g.setValueAtTime(Math.max(0.0002, g.value), t);
+    // Hold whatever the envelope will have reached *at t*, then fall from
+    // there. Reading `g.value` instead would sample the envelope now, and a
+    // release is very often scheduled before the note has even started — a
+    // fixed duration schedules one at construction — which put a step down to
+    // near-silence at the release instead of a ramp down from the sustain.
+    this._holdAt(g, t, Math.max(0.0002, envelopeAt(this.ampEnvelope, t)));
     g.exponentialRampToValueAtTime(0.0001, t + rel);
     g.linearRampToValueAtTime(0, t + rel + 0.03);
 
     if (this.noiseGain) {
-      this.noiseGain.gain.cancelScheduledValues(t);
-      this.noiseGain.gain.setValueAtTime(Math.max(0.0001, this.noiseGain.gain.value), t);
+      this._holdAt(this.noiseGain.gain, t, Math.max(0.0001, envelopeAt(this.noiseEnvelope, t)));
       this.noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + rel * 0.7);
     }
 
@@ -558,13 +596,84 @@ export class Voice {
     // a tab in the background), reclaim the nodes on a timer anyway.
     if (this._cleanupTimer) clearTimeout(this._cleanupTimer);
     this._cleanupTimer = setTimeout(cleanup, Math.max(0, (stopAt - ctx.currentTime) * 1000) + 250);
+
+    // The engine budgets headroom from when voices fade, so it has to be told
+    // that this one now does. A release scheduled after registration — a bloom
+    // holds its whole chord, then releases it — is the common case.
+    this.engine.refreshGainStaging?.(this);
+  }
+
+  /**
+   * Pin an AudioParam to the value its automation reaches at `time`, so a ramp
+   * scheduled from there continues the envelope rather than stepping off it.
+   *
+   * `value` is that point on the envelope, worked out from the ramps that were
+   * scheduled. Safari before 14.1 has no cancelAndHoldAtTime, and there it is
+   * the only correct answer — sampling `param.value` there would reintroduce
+   * exactly the step this method exists to avoid.
+   */
+  _holdAt(param, time, value) {
+    if (typeof param.cancelAndHoldAtTime === 'function') {
+      param.cancelAndHoldAtTime(time);
+      // An exponential ramp cannot start from zero, and a finished envelope
+      // ends there. The computed value keeps the ramp legal and inaudible.
+      if (param.value <= 0) param.setValueAtTime(value, time);
+    } else {
+      param.cancelScheduledValues(time);
+      param.setValueAtTime(value, time);
+    }
   }
 
   /** Release this voice early because another voice needs its polyphony slot. */
   steal(at, fade = 0.12) {
     if (this.stolen) return;
     this.stolen = true;
-    this.release(at, fade);
+    // A voice that has not started costs nothing to drop — but only if it is
+    // really dropped. `release` cannot put its ramp before t0 + 0.01, so going
+    // through it lets the note start, reach full level (an attack can be 2 ms)
+    // and then fade: a ~100 ms blip in place of a note nobody would have
+    // missed. Stopping the sources before they run is the actual free option.
+    if (at < this.t0) this._drop();
+    else this.release(at, fade);
+  }
+
+  /** Silence a voice that has not begun, so that it never does. */
+  _drop() {
+    const { ctx } = this.engine;
+    this.released = true;
+    this.releaseAt = this.t0;
+    // Nothing of it will sound, so it asks the gain staging for nothing.
+    this.peak = 0;
+    this.vca.gain.cancelScheduledValues(this.t0);
+    this.vca.gain.setValueAtTime(0, this.t0);
+    // Every source starts at or after t0, and a source told to stop before it
+    // starts never produces output.
+    for (const s of this.sources) {
+      try {
+        s.stop(this.t0);
+      } catch {
+        /* already stopped */
+      }
+    }
+    const cleanup = () => this.dispose();
+    if (this.lifetimeSource) this.lifetimeSource.onended = cleanup;
+    if (this._cleanupTimer) clearTimeout(this._cleanupTimer);
+    this._cleanupTimer = setTimeout(cleanup, Math.max(0, (this.t0 - ctx.currentTime) * 1000) + 250);
+    this.engine.refreshGainStaging?.(this);
+  }
+
+  /**
+   * What this voice contributes to the engine's load at a given time.
+   *
+   * Amplitude, not presence: a voice still waiting for its start time is not
+   * competing for headroom yet, and one most of the way through its release is
+   * no longer asking for what it held at full sustain.
+   */
+  amplitudeAt(t) {
+    if (t < this.t0) return 0;
+    if (this.fadeFrom == null || t <= this.fadeFrom) return this.peak;
+    if (t >= this.fadeUntil) return 0;
+    return this.peak * (1 - (t - this.fadeFrom) / (this.fadeUntil - this.fadeFrom));
   }
 
   dispose() {

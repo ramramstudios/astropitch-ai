@@ -11,6 +11,7 @@ Always ask the user if they want to commit changes, and if so, have them provide
 ## Tests
 
 - `node tests/performer.test.mjs` — run arrangement/scheduling tests (no audio needed)
+- `node tests/engine.test.mjs` — polyphony gain staging and voice-stealing arithmetic (no audio needed)
 - `node tests/mobile.test.mjs` — pure-logic checks for mobile mode: pinch/pan view math, bottom-sheet state transitions, and the app.js/index.html MODE_QUERY consistency check
 - `tests/audio.test.html` — open in browser with dev server for OfflineAudioContext render tests
 

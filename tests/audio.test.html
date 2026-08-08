@@ -15,7 +15,7 @@
 <div id="out"></div>
 
 <script type="module">
-import { AudioEngine } from '../src/audio/engine.js';
+import { AudioEngine, SAT_HEADROOM } from '../src/audio/engine.js';
 import { buildVoiceSpec, Voice } from '../src/audio/voices.js';
 import { PALETTES, PALETTE_IDS } from '../src/audio/palettes.js';
 import { frequencyFor } from '../src/audio/tuning.js';
@@ -294,6 +294,253 @@ head('Click-burst dynamics: staggered burst is not squashed flat');
     `burst crest ${burstCrest.toFixed(2)} vs solo ${soloCrest.toFixed(2)}`);
   check('burst RMS stays under saturator friendly level', burstStats.rms < 0.6, `rms ${burstStats.rms.toFixed(3)}`);
   log('info', `      solo: ${fmt(soloStats)}  |  burst: ${fmt(burstStats)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Polyphony.
+//
+// The engine's answer to a lot of voices at once is to write bus gain
+// automation from the summed amplitude of everything scheduled to sound
+// (AudioEngine._scheduleGainStaging). tests/engine.test.mjs covers that
+// arithmetic; what is left for a real render is whether the arithmetic
+// actually keeps the master chain out of trouble.
+// ---------------------------------------------------------------------------
+
+/** Render with the master chain bypassed, to see what arrives at it. */
+async function renderPreMaster(seconds, build, config = {}) {
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+  const engine = new AudioEngine({ context: ctx });
+  Object.assign(engine, config);
+  build(engine);
+  engine.master.disconnect();
+  engine.master.connect(ctx.destination);
+  return analyse(await ctx.startRendering());
+}
+
+/**
+ * Deterministic renders. The impulse response and the noise buffer are both
+ * built from Math.random, and the paired render below is only a comparison if
+ * both passes get the same room and the same noise.
+ */
+const realRandom = Math.random;
+function seeded(fn) {
+  let s = 20260807;
+  Math.random = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  try { return fn(); } finally { Math.random = realRandom; }
+}
+
+async function renderSeeded(seconds, build, trim = 1, config = {}) {
+  const ctx = seeded(() => {
+    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const engine = new AudioEngine({ context: c });
+    Object.assign(engine, config);
+    build(engine);
+    engine.master.gain.value *= trim;
+    return c;
+  });
+  return await ctx.startRendering();
+}
+
+/**
+ * Non-linear distortion, in dB relative to signal.
+ *
+ * The same scene is rendered twice, the second time 18 dB down and scaled back
+ * up. Nothing in the chain is working at that level, so the quiet pass is what
+ * the loud one should have looked like if the chain were linear. Gain-matching
+ * each block by least squares before differencing removes the glue
+ * compressor's slow level changes, leaving what the waveform itself did:
+ * clipping, and the harmonics that come with it.
+ */
+function distortionDb(loud, quiet, scale) {
+  const BLOCK = 2048;
+  let residual = 0;
+  let signal = 0;
+  for (let ch = 0; ch < loud.numberOfChannels; ch++) {
+    const b = loud.getChannelData(ch);
+    const a = quiet.getChannelData(ch);
+    for (let start = 0; start + BLOCK <= b.length; start += BLOCK) {
+      let aa = 0;
+      let ab = 0;
+      for (let i = start; i < start + BLOCK; i++) {
+        const av = a[i] * scale;
+        aa += av * av;
+        ab += av * b[i];
+      }
+      if (aa < 1e-12) continue;
+      const alpha = ab / aa;
+      for (let i = start; i < start + BLOCK; i++) {
+        const fit = alpha * a[i] * scale;
+        const e = b[i] - fit;
+        residual += e * e;
+        signal += fit * fit;
+      }
+    }
+  }
+  return signal > 0 ? 10 * Math.log10(residual / signal) : -Infinity;
+}
+
+const DENSE_SPECS = [
+  { element: 'air', house: 1, modality: 'cardinal' },
+  { element: 'water', house: 8, modality: 'fixed' },
+  { element: 'earth', house: 4, modality: 'mutable' },
+  { element: 'fire', house: 10, modality: 'cardinal' },
+];
+
+/**
+ * n sustaining voices, entering in quick succession and overlapping.
+ *
+ * Deliberately all one voice type at one gain: the level checks below read
+ * density off this, so density has to be the only thing that varies. Mixing
+ * timbres in would mean the 2-voice case and the 16-voice case differed by
+ * which instruments happened to be in them as much as by how many.
+ */
+const dense = (n, gain = 0.2) => (engine) => {
+  const spec = buildVoiceSpec({ element: 'air', house: 3, modality: 'fixed' });
+  for (let i = 0; i < n; i++) {
+    new Voice(engine, spec, {
+      freq: 160 * 2 ** (((i * 7) % 25) / 12),
+      time: 0.05 + i * 0.05,
+      duration: 4,
+      gain,
+      pan: Math.sin(i),
+    });
+  }
+};
+
+head('Polyphony: the master chain is never driven past what it can take');
+{
+  let worstPre = 0;
+  let totalClipped = 0;
+  const levels = [];
+  for (const n of [1, 2, 4, 8, 16, 32]) {
+    const pre = await renderPreMaster(8, dense(n));
+    const post = await render(8, dense(n));
+    worstPre = Math.max(worstPre, pre.peak);
+    totalClipped += post.clipped;
+    levels.push({ n, pre: pre.peak, rms: post.rms, peak: post.peak });
+  }
+  for (const l of levels) {
+    log('info', `      ${String(l.n).padStart(2)} voices  into master ${l.pre.toFixed(3)}  out peak ${l.peak.toFixed(3)}  rms ${l.rms.toFixed(4)}`);
+  }
+
+  // The mechanism the old code fell foul of: a WaveShaper clamps its input to
+  // [-1, 1] before the curve lookup, so anything past the range its curve was
+  // written across is hard clipped, whatever the curve says.
+  check('the saturator is never fed past its curve\'s input range',
+    worstPre < SAT_HEADROOM, `worst ${worstPre.toFixed(3)} of ${SAT_HEADROOM}`);
+  check('no clipping at any density', totalClipped === 0, `${totalClipped} samples`);
+
+  // Bounded, but not flattened. Holding the mix at one level however many
+  // voices arrive would pass every check above and be the wrong answer: the
+  // ensemble has to grow, just far less than linearly. Which way the exponent
+  // errs is invisible to a peak measurement, so it is asserted here.
+  const one = levels[0].rms;
+  const many = levels[levels.length - 1].rms;
+  check('32 voices are louder than one', many > one * 1.15, `${(many / one).toFixed(2)}x`);
+  check('32 voices are not 32 times louder', many < one * 8, `${(many / one).toFixed(2)}x`);
+  let collapsed = null;
+  for (let i = 1; i < levels.length; i++) {
+    if (levels[i].rms < levels[i - 1].rms * 0.85) collapsed = `${levels[i - 1].n} -> ${levels[i].n}`;
+  }
+  check('no density makes the mix collapse', collapsed === null,
+    collapsed ?? levels.map((l) => l.rms.toFixed(3)).join(' -> '));
+}
+
+head('Polyphony: the gain staging is what is keeping the chain clean');
+{
+  // The same renders with the staging defeated. Without this comparison the
+  // section above only proves that some scene is quiet enough to be safe, not
+  // that anything here is what makes it safe.
+  const defeated = { loadRef: Infinity };
+  const measure = async (n, config) => {
+    const loud = await renderSeeded(8, dense(n), 1, config);
+    const quiet = await renderSeeded(8, dense(n), 1 / 8, config);
+    const pre = await renderPreMaster(8, dense(n), config);
+    return { thd: distortionDb(loud, quiet, 8), pre: pre.peak };
+  };
+
+  const staged = await measure(24, {});
+  const loose = await measure(24, defeated);
+  log('info', `      24 voices  staged: into master ${staged.pre.toFixed(2)}, ${staged.thd.toFixed(1)} dB` +
+    `   defeated: into master ${loose.pre.toFixed(2)}, ${loose.thd.toFixed(1)} dB`);
+
+  check('without the staging, 24 voices drive the saturator past full scale',
+    loose.pre > 1, `${loose.pre.toFixed(2)}`);
+  check('the staging more than halves what reaches it',
+    staged.pre < loose.pre / 1.8, `${staged.pre.toFixed(2)} vs ${loose.pre.toFixed(2)}`);
+  check('leaving it well inside the curve\'s input range',
+    staged.pre < SAT_HEADROOM * 0.5, `${staged.pre.toFixed(2)} of ${SAT_HEADROOM}`);
+  check('and the result measurably cleaner', staged.thd < loose.thd - 3,
+    `${staged.thd.toFixed(1)} dB vs ${loose.thd.toFixed(1)} dB`);
+
+  const worst = Math.max(...await Promise.all([4, 12, 24].map(async (n) => (await measure(n, {})).thd)));
+  check('distortion stays well under audibility at every density',
+    worst < -18, `worst ${worst.toFixed(1)} dB`);
+}
+
+head('Polyphony: reaching the cap fades voices instead of cutting them');
+{
+  // Far past maxVoices, so slots have to be reclaimed from voices that are
+  // genuinely sounding rather than merely scheduled.
+  const stats = await render(10, (engine) => {
+    dense(24, 0.3)(engine);
+    for (let i = 0; i < 24; i++) {
+      const spec = buildVoiceSpec(DENSE_SPECS[i % DENSE_SPECS.length]);
+      new Voice(engine, spec, {
+        freq: 190 * 2 ** (((i * 5) % 25) / 12), time: 2.0 + i * 0.05, duration: 4, gain: 0.3, pan: -Math.sin(i),
+      });
+    }
+  });
+  log('info', `      ${fmt(stats)}`);
+  check('stealing a sounding voice leaves no hard cut', stats.hardCuts === 0, `${stats.hardCuts}`);
+  check('no clipping while the cap is being enforced', stats.clipped === 0, `${stats.clipped} samples`);
+  check('the arrangement keeps sounding throughout', stats.silentFor < 1.0, `longest gap ${stats.silentFor.toFixed(2)}s`);
+}
+
+head('Polyphony: a voice stolen before it starts never sounds at all');
+{
+  const ctx = new OfflineAudioContext({ numberOfChannels: 1, length: 48000 * 4, sampleRate: 48000 });
+  const engine = new AudioEngine({ context: ctx });
+  // The fastest attack any gesture has is 2 ms, and release() cannot put its
+  // ramp earlier than t0 + 0.01 — so releasing a pending voice rather than
+  // dropping it lets the note reach full level and fade: a blip in place of a
+  // note that was never going to be heard.
+  const spec = buildVoiceSpec({ element: 'fire', house: 2, modality: 'cardinal' });
+  const v = new Voice(engine, spec, { freq: 440, time: 1.0, duration: 2, gain: 0.5, reverbMul: 0, delayMul: 0 });
+  v.steal(0, engine.stealFade);
+  const d = (await ctx.startRendering()).getChannelData(0);
+  let peak = 0;
+  for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+  check('a voice stolen a second before its onset is silent', peak < 1e-4, `peak ${peak.toFixed(5)}`);
+}
+
+head('Polyphony: the bus follows a release down rather than holding it under');
+{
+  const ctx = new OfflineAudioContext({ numberOfChannels: 1, length: 48000 * 12, sampleRate: 48000 });
+  const engine = new AudioEngine({ context: ctx });
+  const spec = buildVoiceSpec({ element: 'water', house: 8, modality: 'fixed' });
+  for (let i = 0; i < 4; i++) {
+    new Voice(engine, spec, { freq: 200 + i * 90, time: 0.05, duration: 1.95, gain: 0.4 });
+  }
+  // suspend() is the only way to read automation that has been written but
+  // not yet reached.
+  const seen = [];
+  for (const t of [1.0, 3.0, 5.0, 7.0]) {
+    ctx.suspend(t).then(() => { seen.push([t, engine.mixBus.gain.value]); ctx.resume(); });
+  }
+  await ctx.startRendering();
+  seen.sort((a, b) => a[0] - b[0]);
+  log('info', `      release ${spec.amp.release.toFixed(2)}s from t=2.0;  ` +
+    seen.map(([t, g]) => `t=${t} ${g.toFixed(3)}`).join('  '));
+
+  const held = seen[0][1];
+  check('the bus is ducked while all four sustain', held < 0.8, `${held.toFixed(3)}`);
+  let recovering = true;
+  for (let i = 1; i < seen.length; i++) if (seen[i][1] <= seen[i - 1][1] + 0.01) recovering = false;
+  check('and gives the level back as the tail decays', recovering,
+    seen.map(([, g]) => g.toFixed(3)).join(' -> '));
+  check('reaching full gain by the end of the release', seen[seen.length - 1][1] > 0.9,
+    `${seen[seen.length - 1][1].toFixed(3)}`);
 }
 
 head('Reverb impulse response is well formed');

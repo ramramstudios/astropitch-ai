@@ -314,7 +314,7 @@ export class Performer {
    * @param {object} p       placement from the chart
    * @param {object} o       { time, duration, gainMul, detune, octaveShift }
    */
-  _voiceFor(p, { time, duration = null, gainMul = 1, detune = 0, octaveShift = 0, solo = false } = {}) {
+  _voiceFor(p, { time, duration = null, gainMul = 1, detune = 0, octaveShift = 0 } = {}) {
     const spec = buildVoiceSpec({
       element: p.element,
       house: p.house,
@@ -329,17 +329,20 @@ export class Performer {
     });
     const bodyVoice = p.voice ?? {};
     const pan = this._panFor(p);
-    // Equal-power headroom: however many voices are already sounding, from
-    // whichever playback path put them there, each new one yields enough gain
-    // to keep the sum in check. A lone voice is unaffected (n=1); ten together
-    // each give up about two thirds.
-    const headroom = solo ? 1 : 1 / Math.sqrt(this.engine.activeVoiceCount() + 1);
     // A body voiced in unison across several octaves (the Sun) trims each
     // octave layer's share so the stack lands at the same overall loudness as
     // one.
     const unisonOctaves = bodyVoice.unisonOctaves ?? null;
     const unisonTrim = unisonOctaves ? 1 / Math.sqrt(unisonOctaves.length) : 1;
-    const gain = 0.22 * p.gain * gainMul * headroom * unisonTrim * loudnessTrim(freq);
+    // Deliberately free of any headroom term. Keeping the ensemble inside the
+    // master chain is the engine's job now (see AudioEngine.gainForLoad),
+    // because only the engine can back off the voices that were *already*
+    // sounding. Attenuating each arrival by the count it found, as this used
+    // to, could only ever quieten the newcomer: the sum still grew, a chord's
+    // later entries lost up to 10 dB purely by order of arrival rather than by
+    // the balance `p.gain` sets, and any caller that opted out of the
+    // calculation — a melodic line, a Designer preview — escaped it entirely.
+    const gain = 0.22 * p.gain * gainMul * unisonTrim * loudnessTrim(freq);
 
     const voice = new Voice(this.engine, spec, {
       freq, time, duration, gain, pan, detune,
@@ -469,7 +472,7 @@ export class Performer {
     preview.timbre = this._designerTimbre(current);
     preview.voice = this._voiceFor(
       { ...current, longitude: preview.longitude },
-      { time: t, gainMul: 1.2, solo: true }
+      { time: t, gainMul: 1.2 }
     );
     this._emit({ type: 'note', key, time: t });
   }
@@ -500,7 +503,7 @@ export class Performer {
       preview.voice.release(time, 0.08);
       preview.voice = this._voiceFor(
         { ...placement, longitude },
-        { time, gainMul: 1.2, solo: true }
+        { time, gainMul: 1.2 }
       );
       preview.timbre = timbre;
       return;
@@ -720,7 +723,6 @@ export class Performer {
           // a melodic line they need to be heard as clearly as the Sun is.
           gainMul: Math.min(1.8, 1 / placement.gain),
           octaveShift: REGISTER - placement.octave,
-          solo: true,
         });
         this._emitAt({ type: 'note', key: placement.key }, t);
         t += dur;
