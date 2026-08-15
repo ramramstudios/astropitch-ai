@@ -155,7 +155,7 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
   return { placements, byKey, aspects, anglePoints, angleAspects, cusps, system, balance, modal, meta, ascSignIndex };
 }
 
-export function chartFromBirth(birth, place, houseSystem = 'placidus') {
+export function chartFromBirth(birth, place, houseSystem = 'whole') {
   const sky = computeSky(birth, { ...place, houseSystem });
   const jd = julianDayFromBirth(birth);
   const T = centuriesSinceJ2000(jd + deltaT(birth.year) / 86400);
@@ -254,7 +254,7 @@ export function designChart(base, design = {}) {
   });
 }
 
-export function chartForNow(place, houseSystem = 'placidus') {
+export function chartForNow(place, houseSystem = 'whole') {
   const d = new Date();
   return chartFromBirth(
     {

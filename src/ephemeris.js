@@ -385,7 +385,7 @@ const PLANET_KEYS = ['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 
  * Every longitude AstroPitch needs for one moment and place.
  * @returns {{positions: Record<string, number>, angles: object, cusps: number[], system: string}}
  */
-export function computeSky(birth, { latitude = 0, longitude = 0, houseSystem = 'placidus' } = {}) {
+export function computeSky(birth, { latitude = 0, longitude = 0, houseSystem = 'whole' } = {}) {
   const jd = julianDayFromBirth(birth);
   // Planetary theories are functions of Terrestrial Time; sidereal time is UT.
   const T = centuriesSinceJ2000(jd + deltaT(birth.year) / 86400);
