@@ -51,6 +51,12 @@
      is added — everything that needs to clear it (the sheet, the wheel
      panel) should measure against this, not the bare --transport-h. */
   --transport-total-h: calc(var(--transport-h) + env(safe-area-inset-bottom));
+  /* The stage's own vertical padding, named so anything sizing itself to the
+     leftover height can subtract exactly what the stage reserves. Keeping
+     these as one definition is the point: a sticky child that guesses at
+     them instead drifts out of step and overhangs the fold. */
+  --stage-pad-top: calc(clamp(1rem, 1.8vw, 1.75rem) + env(safe-area-inset-top));
+  --stage-pad-bottom: calc(var(--transport-total-h) + 1.5rem);
   --rail-w: 46px;
   --column-gap: clamp(2rem, 5vw, 7rem);
 }
@@ -95,7 +101,9 @@ body {
   overflow-x: hidden;
 }
 
-body.is-transport-hidden .stage { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+/* Set on the variable, not on .stage's padding directly, so the sticky panel
+   sizing itself off --stage-pad-bottom grows into the reclaimed strip too. */
+body.is-transport-hidden { --stage-pad-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
 
 /* Where the mobile control sheet's fixed bottom edge sits — above the
    transport bar normally, clear of the home indicator once it's hidden. */
@@ -172,9 +180,9 @@ html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56re
      more than that is dead space you have to travel through. The env()
      terms are 0 on devices with no physical safe area, so this is the same
      as before everywhere except a notch/home-indicator/rounded corner. */
-  padding-top: calc(clamp(1rem, 1.8vw, 1.75rem) + env(safe-area-inset-top));
+  padding-top: var(--stage-pad-top);
   padding-right: calc(clamp(1rem, 3.2vw, 3.5rem) + env(safe-area-inset-right));
-  padding-bottom: calc(var(--transport-total-h) + 1.5rem);
+  padding-bottom: var(--stage-pad-bottom);
   padding-left: calc(clamp(1rem, 3.2vw, 3.5rem) + env(safe-area-inset-left));
 }
 
@@ -257,8 +265,18 @@ html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56re
 .wheel-holder {
   position: relative;
   width: 100%;
-  max-width: min(84vh, 800px);
-  margin: clamp(1rem, 2vw, 2rem) auto;
+  /* Governs the panel-open desktop state; every other state overrides it.
+     The stage's own padding plus this panel's chrome — the kicker and both
+     wheel margins — so the wheel grows to fill the height and stops exactly
+     where the page would start to scroll. Reading the padding from the same
+     variables the stage uses means hiding the dock widens the wheel too, and
+     the ceiling matches focus mode's: on a tall screen the height stops being
+     the limit, and without it the wheel would sit small in an empty panel. */
+  max-width: min(calc(100vh - var(--stage-pad-top) - var(--stage-pad-bottom) - 46px), 1040px);
+  /* Tight, because nothing sits below the wheel in this state any more — the
+     readout only appears once the panel is closed. Every pixel here is one
+     the wheel cannot have. */
+  margin: 0.6rem auto;
   aspect-ratio: 1;
   /* Contains the mobile pinch-zoomed .wheel-viewport, which can otherwise
      paint (and be hit-tested) well outside this box and balloon the page's
@@ -584,6 +602,15 @@ html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56re
   background: var(--paper-translucent);
 }
 
+/* With the controls panel open there is already somewhere to read the chart,
+   and stacked under the wheel the readout only costs the wheel its height.
+   It earns its place in focus mode, where the closed panel leaves a column
+   beside the wheel for it. The :not() guard rather than a mobile override:
+   the hide rule would otherwise outrank `html[data-mode="mobile"] .readout`
+   on specificity, and mobile needs it always — the sheet is an overlay
+   there, so this is the only surface a hover or tap can report to. */
+html:not([data-mode="mobile"]) .stage:not(.is-side-collapsed) .readout { display: none; }
+
 .readout-hint {
   margin: 0;
   font-family: var(--mono);
@@ -656,8 +683,10 @@ html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56re
   /* A fixed height (not max-height) so the panel always claims its full
      budget instead of shrinking to whichever tab is shortest — the tabpanel
      below stretches into it, so a short tab gets a taller scroll area
-     instead of leaving dead page space under the panel's own border. */
-  height: calc(100vh - var(--transport-h) - 2.5rem);
+     instead of leaving dead page space under the panel's own border. Exactly
+     the stage's leftover height: any more and this, the tallest thing in the
+     grid, is what pushes the page into scrolling. */
+  height: calc(100vh - var(--stage-pad-top) - var(--stage-pad-bottom));
   flex-direction: column;
   overflow: hidden;
   border-top: 2px solid var(--ink);
