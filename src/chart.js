@@ -314,6 +314,11 @@ export function makeSynastry(chartA, chartB, { maxContacts = 8 } = {}) {
   // nothing are drawn but never sounded — that is the whole density control,
   // and it means the cut is made by the astrology rather than by a rule that
   // says "only ever play the Sun, Moon and Ascendant".
+  //
+  // TODO: this also means overlay playback (Bloom/Scalar/Drone/Melodic) only
+  // ever sounds bodies held by a cross-chart contact, not the two charts in
+  // full — make overlay playback sound both complete charts instead of just
+  // this held-contact subset.
   const held = {};
   for (const c of contacts) {
     held[c.a] = Math.max(held[c.a] ?? 0, c.exactness);
