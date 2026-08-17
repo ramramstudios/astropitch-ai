@@ -241,6 +241,14 @@ function boot() {
   applySource(state.source);
 
   window.addEventListener('resize', onResize);
+  // The wheel's box can change without the window doing so — hiding the
+  // transport bar or the controls panel both re-cap its max-width. The scope
+  // canvas is sized from that box, so anything that moves it has to re-measure
+  // or the trace keeps its old size, anchored to the holder's top-left corner
+  // instead of the wheel's centre.
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => wheel.resizeScope()).observe($('#wheelHolder'));
+  }
   onResize();
 
   performer.onEvent(onPerformerEvent);

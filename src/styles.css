@@ -286,9 +286,13 @@ html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56re
 }
 
 /* Collapsing the panel is only worth doing if the wheel actually grows, so the
-   height cap lifts with it. */
+   height cap lifts with it. The bottom padding is a term rather than part of
+   the constant so that hiding the dock lifts the cap again — the two toggles
+   have to compound, or closing both leaves a dead strip under the wheel. The
+   98px is what is left: the kicker, the readout below it, and this element's
+   own margins. */
 .stage.is-side-collapsed .wheel-holder {
-  max-width: clamp(360px, calc(100vh - 190px), 1040px);
+  max-width: clamp(360px, calc(100vh - var(--stage-pad-bottom) - 98px), 1040px);
   margin-top: 0.6rem;
   margin-bottom: 0.6rem;
 }
@@ -299,21 +303,33 @@ html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56re
 @media (min-width: 1200px) {
   /* Focus mode. The tightened padding is buying vertical room for the wheel,
      because on a laptop the height is what caps it — what is left then fits
-     between the top edge and the dock without the page scrolling at all. */
+     between the top edge and the dock without the page scrolling at all.
+     Written as variables rather than as padding directly so the wheel's own
+     cap below can be stated in the same terms, and so hiding the dock only
+     has to restate the one value both of them read. */
   .stage.is-side-collapsed {
-    padding-top: 0.5rem;
-    padding-bottom: calc(var(--transport-h) + 0.75rem);
+    --stage-pad-top: calc(0.5rem + env(safe-area-inset-top));
+    --stage-pad-bottom: calc(var(--transport-total-h) + 0.75rem);
+  }
+
+  /* With no dock to clear, the only reserve left is the same margin the top
+     gets. Scoped past body.is-transport-hidden's own value, which is the
+     roomier one the uncollapsed layout wants. */
+  body.is-transport-hidden .stage.is-side-collapsed {
+    --stage-pad-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
 
   /* Three columns, and the empty third is doing work: it mirrors the readout
      so the wheel stays centred on the page instead of being shunted right by
      it. The middle column is the wheel's own cap, so the gutters are simply
-     whatever is left over. */
+     whatever is left over. That cap is the viewport minus the stage's own
+     padding — so it grows when the dock is hidden — minus the 44px of chrome
+     between the two: the kicker and the wheel's top margin. */
   .stage.is-side-collapsed .wheel-panel {
     display: grid;
     grid-template-columns:
       minmax(190px, 1fr)
-      minmax(0, clamp(360px, calc(100vh - 132px), 1040px))
+      minmax(0, clamp(360px, calc(100vh - var(--stage-pad-top) - var(--stage-pad-bottom) - 44px), 1040px))
       minmax(190px, 1fr);
     grid-template-areas:
       "kicker kicker kicker"
