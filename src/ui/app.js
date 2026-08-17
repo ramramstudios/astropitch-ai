@@ -79,6 +79,12 @@ const SHEET_KEY = 'astropitch.sheetState';
 const MICROTONES_KEY = 'astropitch.microtones';
 const PALETTE_KEY = 'astropitch.palette';
 const LOCK_BODIES_KEY = 'astropitch.designerLockBodies';
+// Kept apart from MICROTONES_KEY so the two preferences can be validated and
+// migrated independently.
+const TUNING_KEY = 'astropitch.tuning.v1';
+const DEFAULT_TUNING = { refA: 432, temperament: 'equal' };
+const AUDIO_KEY = 'astropitch.audio.v1';
+const DEFAULT_VOLUME = 0.75;
 
 const SOURCES = ['birth', 'signs', 'designer'];
 
@@ -164,6 +170,35 @@ function readSavedDesign() {
   } catch { return {}; }
 }
 
+function readSavedTuning() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TUNING_KEY) ?? 'null');
+    if (!saved || typeof saved !== 'object') return { ...DEFAULT_TUNING };
+    const refA = Number.isFinite(saved.refA) && saved.refA >= 392 && saved.refA <= 466
+      ? saved.refA : DEFAULT_TUNING.refA;
+    const temperament = typeof saved.temperament === 'string' && TEMPERAMENTS[saved.temperament]
+      ? saved.temperament : DEFAULT_TUNING.temperament;
+    return { refA, temperament };
+  } catch { return { ...DEFAULT_TUNING }; }
+}
+
+const savedTuning = readSavedTuning();
+
+export function validatedAudioPreferences(saved) {
+  const volume = saved && !Array.isArray(saved) && Number.isFinite(saved.volume)
+    ? Math.min(1, Math.max(0, saved.volume))
+    : DEFAULT_VOLUME;
+  return { volume };
+}
+
+function readSavedAudioPreferences() {
+  try {
+    return validatedAudioPreferences(JSON.parse(localStorage.getItem(AUDIO_KEY) ?? 'null'));
+  } catch { return validatedAudioPreferences(null); }
+}
+
+const savedAudioPreferences = readSavedAudioPreferences();
+
 const savedSource = SOURCES.includes(savedChartConfig?.source) ? savedChartConfig.source : 'birth';
 
 const state = {
@@ -184,7 +219,7 @@ const state = {
   overlaySource: 'sky',
   lockBodies: false,
   angleFocusKey: null,
-  tuning: { refA: 432, temperament: 'equal', microtones: false },
+  tuning: { ...savedTuning, microtones: false },
   // The sign-only fallback is a pure A-major voicing: A (Aries), C♯ (Leo),
   // and E (Scorpio). Bodies still keep their own octaves and roles, so the
   // chord is spread across the ensemble rather than packed into one register.
@@ -222,6 +257,8 @@ let starfield;
 let formTouchedSinceCast = false;
 // Same idea as formTouchedSinceCast, for the partner form in Overlay.
 let partnerFormTouchedSinceCast = false;
+// Mute is session-only. Restoring a silent session makes a later visit look
+// broken; only the user's chosen volume level survives reload.
 let muted = false;
 let lastTransportMode = 'bloom';
 let angleDrag = null;
@@ -238,6 +275,14 @@ function setMuted(next) {
   toggle.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
   toggle.title = muted ? 'Unmute' : 'Mute';
   applyVolume();
+}
+
+function saveAudioPreferences() {
+  try {
+    localStorage.setItem(AUDIO_KEY, JSON.stringify({
+      volume: Number($('#volume').value),
+    }));
+  } catch { /* session-only fallback */ }
 }
 
 function playLastTransportMode() {
@@ -1073,12 +1118,13 @@ function stepBirthDate({ days = 0, months = 0 }) {
   castFromBirthForm();
 }
 
-/** A synastry against an empty chart is meaningless — this is the one place
- *  that decides whether the primary chart is real enough to overlay against,
- *  so every overlay entry point (submit handlers, Random, the disabled state
- *  in renderOverlay) agrees on the same answer. */
+/** A synastry against an empty chart is meaningless. */
+export function hasUsableChart(chart) {
+  return Array.isArray(chart?.placements) && chart.placements.length > 0;
+}
+
 function hasUsableSubject() {
-  return !!state.subject?.placements?.length;
+  return hasUsableChart(state.subject);
 }
 
 function wireOverlay() {
@@ -1197,18 +1243,34 @@ function restoreYourPartner() {
   setPartner(state.yourPartner, state.yourPartnerDescriptor);
 }
 
+function saveTuning() {
+  try {
+    localStorage.setItem(TUNING_KEY, JSON.stringify({
+      refA: state.tuning.refA,
+      temperament: state.tuning.temperament,
+    }));
+  } catch { /* session-only fallback */ }
+}
+
 function wireSoundControls() {
+  $('#refA').value = String(state.tuning.refA);
+  $('#refAOut').textContent = String(state.tuning.refA);
+  $('#volume').value = String(savedAudioPreferences.volume);
+  setMuted(false);
+
   $('#temperament').addEventListener('change', (e) => {
     state.tuning.temperament = e.target.value;
     performer.setTuning(state.tuning);
     $('#temperamentNote').textContent = TEMPERAMENTS[e.target.value].blurb;
     renderPlacements();
+    saveTuning();
   });
 
   $('#refA').addEventListener('input', (e) => {
     state.tuning.refA = Number(e.target.value);
     performer.setTuning(state.tuning);
     $('#refAOut').textContent = e.target.value;
+    saveTuning();
   });
 
   $('#tempo').addEventListener('input', (e) => {
@@ -1218,6 +1280,7 @@ function wireSoundControls() {
   });
 
   $('#volume').addEventListener('input', () => {
+    saveAudioPreferences();
     // Moving the slider is an explicit choice to hear the selected level.
     if (muted) setMuted(false);
     else applyVolume();

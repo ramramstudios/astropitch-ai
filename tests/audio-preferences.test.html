@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Audio preference regression tests</title>
+</head>
+<body>
+  <pre id="results"></pre>
+  <script type="module">
+    const AUDIO_KEY = 'astropitch.audio.v1';
+    const results = document.querySelector('#results');
+    window.__testFailures = 0;
+
+    function ok(label, condition, detail = '') {
+      if (!condition) window.__testFailures++;
+      results.textContent += `${condition ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}\n`;
+    }
+
+    const settle = (win) => new Promise((resolve) => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)));
+    let frame = null;
+
+    async function loadApp(rawPreference) {
+      frame?.remove();
+      if (rawPreference === undefined) localStorage.removeItem(AUDIO_KEY);
+      else localStorage.setItem(AUDIO_KEY, rawPreference);
+
+      frame = document.createElement('iframe');
+      frame.src = `../index.html?audio-test=${Date.now()}-${Math.random()}`;
+      document.body.append(frame);
+      await new Promise((resolve, reject) => {
+        frame.addEventListener('load', resolve, { once: true });
+        frame.addEventListener('error', () => reject(new Error('index.html did not load')), { once: true });
+      });
+      await settle(frame.contentWindow);
+      return {
+        win: frame.contentWindow,
+        doc: frame.contentDocument,
+        $: (selector) => frame.contentDocument.querySelector(selector),
+      };
+    }
+
+    try {
+      localStorage.clear();
+
+      let app = await loadApp(JSON.stringify({ volume: 0.31, muted: true }));
+      ok('the saved volume initializes the slider', app.$('#volume').value === '0.31', app.$('#volume').value);
+      ok('saved mute data is deliberately ignored',
+        app.$('#volumeToggle').getAttribute('aria-pressed') === 'false'
+        && app.$('#volumeToggle').getAttribute('aria-label') === 'Mute'
+        && app.$('#volumeToggle').title === 'Mute'
+        && !app.$('#volumeToggle').classList.contains('is-muted'));
+
+      const { engine } = await app.win.Function("return import('/src/audio/engine.js')")();
+      const applied = [];
+      engine.setVolume = (volume) => applied.push(volume);
+
+      app.$('#volumeToggle').click();
+      ok('muting applies silence and updates every control state',
+        applied.at(-1) === 0
+        && app.$('#volumeToggle').getAttribute('aria-pressed') === 'true'
+        && app.$('#volumeToggle').getAttribute('aria-label') === 'Unmute'
+        && app.$('#volumeToggle').title === 'Unmute'
+        && app.$('#volumeToggle').classList.contains('is-muted'));
+
+      app.$('#volume').value = '0.42';
+      app.$('#volume').dispatchEvent(new app.win.Event('input', { bubbles: true }));
+      const savedAfterMove = JSON.parse(localStorage.getItem(AUDIO_KEY));
+      ok('moving the slider while muted saves and applies the selected level',
+        savedAfterMove.volume === 0.42 && applied.at(-1) === 0.42);
+      ok('moving the slider explicitly unmutes',
+        app.$('#volumeToggle').getAttribute('aria-pressed') === 'false'
+        && app.$('#volumeToggle').getAttribute('aria-label') === 'Mute'
+        && !app.$('#volumeToggle').classList.contains('is-muted'));
+
+      app.$('#volumeToggle').click();
+      app = await loadApp(localStorage.getItem(AUDIO_KEY));
+      ok('reload restores volume but resets mute',
+        app.$('#volume').value === '0.42'
+        && app.$('#volumeToggle').getAttribute('aria-pressed') === 'false'
+        && app.$('#volumeToggle').getAttribute('aria-label') === 'Mute');
+
+      const reloadedEngine = await app.win.Function("return import('/src/audio/engine.js')")();
+      const startVolumes = [];
+      reloadedEngine.engine.start = async () => null;
+      reloadedEngine.engine.setVolume = (volume) => startVolumes.push(volume);
+      app.$('#bloomBtn').click();
+      await settle(app.win);
+      ok('the next audio start applies the restored slider level', startVolumes.includes(0.42), startVolumes.join(', '));
+
+      app = await loadApp(JSON.stringify({ volume: 2 }));
+      ok('an out-of-range saved volume is clamped', app.$('#volume').value === '1', app.$('#volume').value);
+
+      app = await loadApp(JSON.stringify({ volume: 'loud' }));
+      ok('a non-numeric saved volume falls back safely', app.$('#volume').value === '0.75', app.$('#volume').value);
+
+      app = await loadApp('{bad json');
+      ok('malformed saved JSON does not prevent boot',
+        app.$('#volume').value === '0.75' && !!app.$('#chartLabel'));
+
+      app = await loadApp(undefined);
+      ok('users without an audio preference keep the existing default', app.$('#volume').value === '0.75');
+    } catch (error) {
+      window.__testFailures++;
+      results.textContent += `FAIL  unexpected error — ${error.stack ?? error}\n`;
+    } finally {
+      frame?.remove();
+      localStorage.removeItem(AUDIO_KEY);
+      window.__testDone = true;
+    }
+  </script>
+</body>
+</html>

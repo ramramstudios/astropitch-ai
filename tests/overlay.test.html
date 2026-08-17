@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Overlay state regression tests</title>
+</head>
+<body>
+  <pre id="results"></pre>
+  <script type="module">
+    const results = document.querySelector('#results');
+    window.__testFailures = 0;
+
+    function ok(label, condition, detail = '') {
+      if (!condition) window.__testFailures++;
+      results.textContent += `${condition ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}\n`;
+    }
+
+    const settle = (win) => new Promise((resolve) => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)));
+    const frame = document.createElement('iframe');
+
+    try {
+      localStorage.clear();
+      frame.src = '../index.html';
+      document.body.append(frame);
+      await new Promise((resolve, reject) => {
+        frame.addEventListener('load', resolve, { once: true });
+        frame.addEventListener('error', () => reject(new Error('index.html did not load')), { once: true });
+      });
+
+      const win = frame.contentWindow;
+      const doc = frame.contentDocument;
+      const $ = (selector) => doc.querySelector(selector);
+      const set = (selector, value) => {
+        const input = $(selector);
+        input.value = value;
+        input.dispatchEvent(new win.Event('input', { bubbles: true }));
+      };
+      const submit = (selector) => {
+        $(selector).dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+      };
+      const emptyOverlayIsShown = () =>
+        $('#verdict').textContent.includes('Cast a chart in Input before creating an overlay.')
+        && $('#contactsTable tbody').children.length === 0
+        && !$('#verdict .verdict-title');
+
+      await settle(win);
+
+      ok('a first visit shows the overlay empty state', emptyOverlayIsShown());
+      ok('a first visit disables every overlay action',
+        $('#skyOverlayBtn').disabled && $('#partnerOverlayBtn').disabled && $('#bRandomBtn').disabled);
+
+      submit('#skyForm');
+      set('#bDate', '1985-09-17');
+      set('#bTime', '08:20');
+      set('#bLat', '51.507');
+      set('#bLon', '-0.128');
+      set('#bUtcOffset', '0');
+      submit('#partnerForm');
+      ok('programmatic submissions cannot bypass the blank-primary guard', emptyOverlayIsShown());
+
+      set('#birthDate', '2000-01-01');
+      set('#birthTime', '12:00');
+      set('#lat', '0');
+      set('#lon', '0');
+      set('#utcOffset', '0');
+      submit('#birthForm');
+      $('#tab-overlay').click();
+      await settle(win);
+
+      ok('casting a primary chart re-enables overlay actions',
+        !$('#skyOverlayBtn').disabled && !$('#partnerOverlayBtn').disabled && !$('#bRandomBtn').disabled);
+      ok('casting a primary does not restore an old overlay',
+        !$('#verdict .verdict-title') && $('#contactsTable tbody').children.length === 0);
+
+      $('[data-overlay="person"]').click();
+      set('#bDate', '1985-09-17');
+      set('#bTime', '08:20');
+      set('#bLat', '51.507');
+      set('#bLon', '-0.128');
+      set('#bUtcOffset', '0');
+      submit('#partnerForm');
+      await settle(win);
+      ok('a partner can be overlaid once a primary exists', !!$('#verdict .verdict-title'));
+
+      $('#tab-chart').click();
+      $('#clearChartBtn').click();
+      $('#tab-overlay').click();
+      await settle(win);
+      ok('cross-tab Clear removes the verdict and contacts', emptyOverlayIsShown());
+      ok('cross-tab Clear removes the stale partner label', !$('#chartLabel').textContent.includes('×'));
+      ok('cross-tab Clear disables overlay actions',
+        $('#skyOverlayBtn').disabled && $('#partnerOverlayBtn').disabled && $('#bRandomBtn').disabled);
+
+      $('#tab-chart').click();
+      set('#birthDate', '2000-01-02');
+      submit('#birthForm');
+      $('#tab-overlay').click();
+      await settle(win);
+      ok('recasting restores eligibility without restoring the partner',
+        !$('#skyOverlayBtn').disabled && !$('#verdict .verdict-title') && $('#contactsTable tbody').children.length === 0);
+
+      set('#bDate', '1985-09-18');
+      submit('#partnerForm');
+      await settle(win);
+      ok('the partner can be submitted again after recasting', !!$('#verdict .verdict-title'));
+
+      $('#clearChartBtn').click();
+      await settle(win);
+      ok('Clear while Overlay is active immediately shows the same empty state', emptyOverlayIsShown());
+      ok('Clear while Overlay is active also removes the stale partner label', !$('#chartLabel').textContent.includes('×'));
+    } catch (error) {
+      window.__testFailures++;
+      results.textContent += `FAIL  unexpected error — ${error.stack ?? error}\n`;
+    } finally {
+      frame.remove();
+      window.__testDone = true;
+    }
+  </script>
+</body>
+</html>
