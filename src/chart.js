@@ -198,13 +198,9 @@ export function chartFromSigns(signMap, houseSystem = 'whole') {
   return makeChart(positions, { cusps, system: 'whole', meta: { manual: true, requestedSystem: houseSystem } });
 }
 
-// ---------------------------------------------------------------------------
-// Designer
-//
 // A chart you build by hand: drag the bodies where you want them and switch the
 // ones you do not want off. The result is a normal chart-shaped object, so the
 // wheel, the tables and the performer read it without knowing it was invented.
-// ---------------------------------------------------------------------------
 
 /** The designer can move the Ascendant, but the Midheaven follows it. */
 export const DESIGNABLE_BODIES = BODIES.filter((b) => b.key !== 'mc').map((b) => b.key);

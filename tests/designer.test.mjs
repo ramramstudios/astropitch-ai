@@ -1,13 +1,9 @@
 /**
- * Designer checks.
- *
- * Run with:  node tests/designer.test.mjs
- *
- * The claim the whole feature rests on is that a designed chart is an ordinary
- * chart. If it is, the wheel, the tables and the performer need no special case
- * for it, and the only new things worth pinning are that a moved body carries
- * all of its derived data with it, that a body switched off stops counting for
- * anything you can hear, and that moving the Ascendant turns the houses.
+ * The feature depends on a designed chart remaining an ordinary chart. If it
+ * does, the wheel, tables, and performer need no special case; the only new
+ * behavior to pin is that a moved body carries all derived data with it, a
+ * disabled body stops counting for anything audible, and moving the Ascendant
+ * turns the houses.
  */
 
 import { makeChart, chartFromSigns, designChart, DESIGNABLE_BODIES } from '../src/chart.js';

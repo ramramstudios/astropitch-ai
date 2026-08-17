@@ -1,6 +1,4 @@
 /**
- * Timbre synthesis.
- *
  * Three independent axes compose into one voice:
  *
  *   ELEMENT  sets timbre       — oscillator stack, harmonic content, noise,
@@ -192,7 +190,6 @@ export class Voice {
     const { material, gesture, amp, vibrato } = this.spec;
     this.t0 = t0;
 
-    // --- output stage ---
     const panner = ctx.createStereoPanner();
     panner.pan.value = Math.max(-1, Math.min(1, pan * this.spec.width));
     this.panner = panner;
@@ -240,7 +237,6 @@ export class Voice {
     }
     this.nodes.push(panner, dryGain);
 
-    // --- optional per-voice drive ---
     let chainHead = vca;
     if (this.spec.drive > 0.02) {
       const shaper = ctx.createWaveShaper();
@@ -255,7 +251,6 @@ export class Voice {
       this.nodes.push(shaper, trim);
     }
 
-    // --- tilt EQ: the material's spectral signature ---
     const tilt = ctx.createBiquadFilter();
     tilt.type = 'highshelf';
     tilt.frequency.value = 2400;
@@ -263,7 +258,6 @@ export class Voice {
     tilt.connect(chainHead);
     this.nodes.push(tilt);
 
-    // --- main filter, with its own envelope ---
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.Q.value = material.resonance * gesture.filter.qMul;
@@ -284,7 +278,6 @@ export class Voice {
       t0 + gesture.filter.attack + gesture.filter.decay
     );
 
-    // --- resonant body: the material's fixed formant ---
     const body = ctx.createBiquadFilter();
     body.type = 'peaking';
     body.frequency.value = clampF(freq * material.body.ratio);
@@ -310,7 +303,6 @@ export class Voice {
     oscMix.connect(body);
     this.nodes.push(oscMix);
 
-    // --- vibrato / drift modulators ---
     let vibratoGain = null;
     if (vibrato.depth > 0.1) {
       const lfo = ctx.createOscillator();
@@ -339,7 +331,6 @@ export class Voice {
       this.nodes.push(driftAmt);
     }
 
-    // --- oscillator stack ---
     const layers = [{ detuneOffset: 0, gain: 1, pan: 0, delay: 0 }];
     if (gesture.double) {
       layers[0].pan = -gesture.double.pan;
@@ -440,7 +431,6 @@ export class Voice {
       }
     }
 
-    // --- noise layer: attack transient, or sustained breath for Air ---
     const noise = this.spec.noise;
     if (noise && noise.gain > 0.01) {
       const src = ctx.createBufferSource();
@@ -467,7 +457,6 @@ export class Voice {
       if (noise.tracks) this.pitchControls.noiseFilter = nf;
     }
 
-    // --- amplitude envelope ---
     const peak = Math.max(0.0002, gain);
     // A gated gesture adds its depth on top of the envelope rather than
     // carving into it, so the loudest this voice gets is more than `peak`.
@@ -487,7 +476,6 @@ export class Voice {
       t0 + amp.attack + amp.decay
     );
 
-    // --- rhythmic gate ---
     if (gesture.gate) {
       const gateOsc = ctx.createOscillator();
       gateOsc.type = 'square';
@@ -589,7 +577,6 @@ export class Voice {
         /* already stopped */
       }
     }
-    // Tear the graph down once the voice has actually finished sounding.
     const cleanup = () => this.dispose();
     if (this.lifetimeSource) this.lifetimeSource.onended = cleanup;
     // Belt and braces: if the ended event never arrives (a suspended context,
@@ -624,7 +611,6 @@ export class Voice {
     }
   }
 
-  /** Release this voice early because another voice needs its polyphony slot. */
   steal(at, fade = 0.12) {
     if (this.stolen) return;
     this.stolen = true;
@@ -637,7 +623,6 @@ export class Voice {
     else this.release(at, fade);
   }
 
-  /** Silence a voice that has not begun, so that it never does. */
   _drop() {
     const { ctx } = this.engine;
     this.released = true;

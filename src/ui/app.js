@@ -1,7 +1,3 @@
-/**
- * Application wiring: form -> chart -> wheel + tables + synthesiser.
- */
-
 import {
   SIGNS, HOUSES, ELEMENTS, MODALITIES, ASPECTS, BODIES, BODY_BY_KEY, SOUNDING_BODIES, norm360,
 } from '../ontology.js';
@@ -18,10 +14,8 @@ import { Starfield } from './starfield.js';
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-// ---------------------------------------------------------------------------
 // Places. Latitude/longitude only — the UTC offset is a default, not a lookup,
 // because historical daylight saving cannot be derived from coordinates.
-// ---------------------------------------------------------------------------
 
 const PLACES = [
   { name: 'Atlanta, US', lat: 33.749, lon: -84.388, utc: -5 },
@@ -153,7 +147,6 @@ function savedSignEnabled(rawSelections, rawEnabled) {
   return enabled;
 }
 
-/** Hand-placed overrides, `{ [bodyKey]: { longitude?, enabled? } }`. */
 function readSavedDesign() {
   try {
     const saved = JSON.parse(localStorage.getItem(DESIGN_KEY) ?? 'null');
@@ -208,6 +201,13 @@ const state = {
   yourChart: null,
   yourChartDescriptor: null,
   yourChartForm: null,
+  // Same idea as yourChart, but for the partner side of Overlay: the last
+  // hand-typed secondary chart, kept separately from `partner` so
+  // Random can take over without losing it — see captureYourPartner,
+  // restoreYourPartner.
+  yourPartner: null,
+  yourPartnerDescriptor: null,
+  yourPartnerForm: null,
 };
 
 const performer = new Performer(engine);
@@ -220,6 +220,8 @@ let starfield;
 // the same click on the same button, so this is the only way to tell them
 // apart. Reset on every cast and on restoreYourChart, set by direct edits.
 let formTouchedSinceCast = false;
+// Same idea as formTouchedSinceCast, for the partner form in Overlay.
+let partnerFormTouchedSinceCast = false;
 let muted = false;
 let lastTransportMode = 'bloom';
 let angleDrag = null;
@@ -252,7 +254,7 @@ function boot() {
   starfield = new Starfield($('#stars'));
 
   buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 'custom');
-  buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 10);
+  buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 'custom');
   restoreBirthForm();
   // Pure computation from saved strings, no DOM fields touched — whichever
   // chart actually belongs on screen (typed, sky, or random) still comes from
@@ -342,9 +344,8 @@ function buildPlaceOptions(selectId, fields, defaultIndex) {
   });
   // Typing coordinates by hand no longer describes any named place, so that
   // flips the selector to Custom. The UTC offset doesn't — it's the DST-
-  // adjusted local clock, not part of "where" — so nudging it alone (the
-  // note right below this field exists for exactly that case) used to drop
-  // the place name for a location that never actually changed.
+  // adjusted local clock, not part of "where" — so nudging it alone must not
+  // drop the place name for a location that never changed.
   for (const id of [fields.lat, fields.lon]) {
     $(id).addEventListener('input', () => { select.value = 'custom'; });
   }
@@ -410,16 +411,11 @@ function chartFromSelectedSigns() {
   return designChart(chart, soundingStates);
 }
 
-/** Apply the Basic controls immediately, so only checked placements can play. */
 function castSelectedSigns(kind = state.subjectDescriptor?.kind === 'random-signs' ? 'random-signs' : 'signs') {
   const chart = chartFromSelectedSigns();
   setSubject(chart, makeChartDescriptor(kind, chart, 'primary'));
   saveChartConfig();
 }
-
-// ---------------------------------------------------------------------------
-// Designer
-// ---------------------------------------------------------------------------
 
 const designerRows = {};
 
@@ -471,7 +467,6 @@ function buildDesignerList() {
   );
 }
 
-/** Mirror the live chart back into the control list. */
 function syncDesignerList(chart) {
   for (const key of DESIGNABLE_BODIES) {
     const ref = designerRows[key];
@@ -508,7 +503,6 @@ function saveDesign() {
   } catch { /* the design still holds for this session */ }
 }
 
-/** Redraw the wheel from an uncommitted position, mid-drag. */
 function previewDesign(key, longitude) {
   if (state.source !== 'designer' || !state.subject) return;
   const design = { ...state.design, [key]: { ...state.design[key], longitude } };
@@ -837,6 +831,10 @@ function wireForms() {
     state.subjectDescriptor = { kind: 'cleared' };
     state.design = {};
     saveDesign();
+    // An overlay against nothing is a synastry with an empty chart — the
+    // partner form's typed fields (and any remembered "your secondary
+    // chart") are left alone, only the active overlay drops.
+    setPartner(null);
     render();
     clearReadout();
     saveChartConfig();
@@ -969,9 +967,8 @@ function revertBasicToYourChart() {
 }
 
 /** Designer sits directly on `subject`, so unlike Basic it can revert to the
- *  typed chart at full precision — snap back to it, then drop the hand edits
- *  on top of it. Falls back to just dropping the hand edits when nothing was
- *  ever typed, which is what this button did before it could do the former. */
+ *  typed chart at full precision. Without a typed chart, only the hand edits
+ *  are dropped. */
 function revertDesignerToYourChart() {
   if (state.yourChart) {
     state.subject = state.yourChart;
@@ -1076,6 +1073,14 @@ function stepBirthDate({ days = 0, months = 0 }) {
   castFromBirthForm();
 }
 
+/** A synastry against an empty chart is meaningless — this is the one place
+ *  that decides whether the primary chart is real enough to overlay against,
+ *  so every overlay entry point (submit handlers, Random, the disabled state
+ *  in renderOverlay) agrees on the same answer. */
+function hasUsableSubject() {
+  return !!state.subject?.placements?.length;
+}
+
 function wireOverlay() {
   for (const btn of $$('[data-overlay]')) {
     btn.addEventListener('click', () => {
@@ -1088,18 +1093,47 @@ function wireOverlay() {
 
   $('#skyForm').addEventListener('submit', (e) => {
     e.preventDefault();
+    if (state.partner) { setPartner(null); return; }
+    if (!hasUsableSubject()) return;
     // The sky is read at the subject's own place, so its angles mean something.
     const chart = chartForNow(readPlace(), $('#houseSystem').value);
     setPartner(chart, makeChartDescriptor('sky', chart, 'primary'));
   });
 
+  // Overlay/Your secondary chart/Back-to-one-chart share one button, the same way
+  // Cast chart/Your chart/Sky/Random do on Input — see updateOverlayButtons
+  // for the label and the comment there for why each branch below exists.
   $('#partnerForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const chart = readPartnerChart();
-    if (chart) setPartner(chart, makeChartDescriptor('birth', chart, 'partner'));
+    if (partnerFormTouchedSinceCast) {
+      if (!hasUsableSubject()) return;
+      const chart = readPartnerChart();
+      if (chart) {
+        const descriptor = makeChartDescriptor('birth', chart, 'partner');
+        // Capture and clear the dirty flag before setPartner's render() reads
+        // them, or the label it computes mid-render would still see the old
+        // "fields are dirty, nothing typed yet" state.
+        partnerFormTouchedSinceCast = false;
+        captureYourPartner(chart, descriptor);
+        setPartner(chart, descriptor);
+      }
+      return;
+    }
+    if (state.yourPartner && state.partnerDescriptor?.kind !== 'birth') {
+      if (!hasUsableSubject()) return;
+      restoreYourPartner();
+      return;
+    }
+    if (state.partner) setPartner(null);
   });
 
+  for (const id of ['bDate', 'bTime', 'bLat', 'bLon', 'bUtcOffset']) {
+    $(`#${id}`).addEventListener('input', () => { partnerFormTouchedSinceCast = true; updateOverlayButtons(); });
+  }
+  $('#bPlacePreset').addEventListener('change', () => { partnerFormTouchedSinceCast = true; updateOverlayButtons(); });
+
   $('#bRandomBtn').addEventListener('click', () => {
+    if (!hasUsableSubject()) return;
     const place = PLACES[Math.floor(Math.random() * PLACES.length)];
     const year = 1930 + Math.floor(Math.random() * 90);
     const month = 1 + Math.floor(Math.random() * 12);
@@ -1110,11 +1144,13 @@ function wireOverlay() {
     $('#bLon').value = place.lon;
     $('#bUtcOffset').value = place.utc;
     $('#bPlacePreset').value = String(PLACES.indexOf(place));
+    // Random supplies its own definite values — not a mid-edit — so it
+    // doesn't leave the form "touched" the way a hand-edit would, the same
+    // as castFromBirthForm('random') on Input.
+    partnerFormTouchedSinceCast = false;
     const chart = readPartnerChart();
     if (chart) setPartner(chart, makeChartDescriptor('random', chart, 'partner'));
   });
-
-  $('#clearOverlayBtn').addEventListener('click', () => setPartner(null));
 }
 
 function readPartnerChart() {
@@ -1131,6 +1167,34 @@ function readPartnerChart() {
     { latitude: Number($('#bLat').value) || 0, longitude: Number($('#bLon').value) || 0 },
     $('#houseSystem').value
   );
+}
+
+function partnerFormValues() {
+  return Object.fromEntries(
+    ['bDate', 'bTime', 'bLat', 'bLon', 'bUtcOffset', 'bPlacePreset']
+      .map((id) => [id, $(`#${id}`).value])
+  );
+}
+
+/** Remember the partner just typed by hand, independent of `partner` —
+ *  Random is free to take over the overlay without losing it — see
+ *  restoreYourPartner and the Overlay submit handler in wireOverlay(). */
+function captureYourPartner(chart, descriptor) {
+  state.yourPartner = chart;
+  state.yourPartnerDescriptor = descriptor;
+  state.yourPartnerForm = partnerFormValues();
+}
+
+/** Bring the typed partner back: restores the form fields it was cast from
+ *  (Random overwrites them) and re-shows the exact chart. */
+function restoreYourPartner() {
+  if (!state.yourPartner || !state.yourPartnerForm) return;
+  for (const [id, value] of Object.entries(state.yourPartnerForm)) {
+    const el = $(`#${id}`);
+    if (el && typeof value === 'string') el.value = value;
+  }
+  partnerFormTouchedSinceCast = false;
+  setPartner(state.yourPartner, state.yourPartnerDescriptor);
 }
 
 function wireSoundControls() {
@@ -1426,10 +1490,6 @@ function usesMicrotones() {
   return state.tuning.temperament === 'equal' && state.tuning.microtones;
 }
 
-// ---------------------------------------------------------------------------
-// Layout mode
-// ---------------------------------------------------------------------------
-
 /**
  * Desktop and mobile get different layouts (see data-mode selectors in
  * styles.css). The mode auto-follows the device via MODE_QUERY, set early by
@@ -1468,17 +1528,12 @@ function wireLayoutMode() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Bottom sheet (mobile)
-//
 // On mobile the tabbed controls panel (#sidePanel) becomes a draggable
 // bottom sheet with three snap heights instead of desktop's sticky in-flow
 // panel. The drag handle owns the gesture; a plain tap on it cycles states
 // as a discoverable alternative to dragging. Height is set directly (not via
 // a translateY trick) — simpler to reason about, and this DOM subtree is
 // light enough that the per-frame reflow during a drag is a non-issue.
-// ---------------------------------------------------------------------------
-
 const SHEET_STATES = ['peek', 'half', 'full'];
 
 /** A tap on the handle (no drag) cycles states as an alternative to dragging. */
@@ -1590,14 +1645,9 @@ function wireSheet() {
   handle.addEventListener('pointercancel', endDrag);
 }
 
-// ---------------------------------------------------------------------------
-// Sidebar
-// ---------------------------------------------------------------------------
-
 const SIDE_KEY = 'astropitch.sideCollapsed';
 const TRANSPORT_KEY = 'astropitch.transportHidden';
 
-/** Read/write a preference without caring whether storage exists. */
 function stored(key, value) {
   try {
     if (value === undefined) return localStorage.getItem(key);
@@ -1739,7 +1789,6 @@ function setPartner(chart, descriptor = null) {
   render();
 }
 
-/** A concise record of the inputs that produced a chart, frozen at cast time. */
 function makeChartDescriptor(kind, chart, form) {
   const partner = form === 'partner';
   const select = $(partner ? '#bPlacePreset' : '#placePreset');
@@ -1845,7 +1894,6 @@ function renderChartLabel() {
 function render() {
   if (!state.subject) return;
   const designing = state.source === 'designer';
-  // A designed chart is chart-shaped, so it drops into the same pipeline.
   const subject = designing ? designChart(state.subject, state.design) : state.subject;
   state.showingOverlay = state.activeTab === 'overlay' && !!state.partner;
   state.chart = state.showingOverlay
@@ -1911,7 +1959,6 @@ function renderPlacements() {
 
       const house = document.createElement('td');
       house.className = 'cell-house';
-      // A house number for an angle is circular — the Ascendant *is* the 1st cusp.
       house.textContent = p.isAngle ? '—' : String(p.house);
 
       const pitch = document.createElement('td');
@@ -1938,7 +1985,6 @@ function renderPlacements() {
   );
 }
 
-/** A body's glyph, tagged with which chart it came from when there are two. */
 function glyphWithSide(p) {
   const frag = document.createDocumentFragment();
   frag.append(document.createTextNode(p.glyph));
@@ -1951,7 +1997,6 @@ function glyphWithSide(p) {
   return frag;
 }
 
-/** One row of the aspect tables. Shared by the natal list and the contacts. */
 function aspectRow(a) {
   const { byKey, anglePoints } = state.chart;
   const A = byKey[a.a] ?? anglePoints?.[a.a];
@@ -2032,16 +2077,45 @@ const HARMONY_BANDS = [
   { min: -1, name: 'Dissonant', line: 'Squares and oppositions carry it. This one will not sit still.' },
 ];
 
+/** Swapping the submit labels in place avoids a disabled secondary control
+ *  below the currently selected form. */
+function updateOverlayButtons() {
+  const hasPartner = !!state.partner;
+  $('#skyOverlayBtn').textContent = hasPartner ? 'Back to one chart' : 'Overlay the sky';
+
+  // Mirrors the submit handler's own branch order in wireOverlay(): fresh
+  // edits win, then a remembered typed partner not currently showing (e.g.
+  // Random took over), then falling back to whatever's showing.
+  const partnerBtn = $('#partnerOverlayBtn');
+  if (partnerFormTouchedSinceCast) partnerBtn.textContent = 'Overlay Secondary Chart';
+  else if (state.yourPartner && state.partnerDescriptor?.kind !== 'birth') partnerBtn.textContent = 'Your secondary chart';
+  else partnerBtn.textContent = hasPartner ? 'Back to one chart' : 'Overlay Secondary Chart';
+}
+
 function renderOverlay() {
   const holder = $('#verdict');
   const tbody = $('#contactsTable tbody');
   const meta = state.chart?.meta;
-  $('#clearOverlayBtn').disabled = !state.partner;
+  const usable = hasUsableSubject();
+  updateOverlayButtons();
+
+  $('#skyOverlayBtn').disabled = !usable;
+  $('#partnerOverlayBtn').disabled = !usable;
+  $('#bRandomBtn').disabled = !usable;
+
+  if (!usable) {
+    const hint = document.createElement('p');
+    hint.className = 'note';
+    hint.textContent = 'Cast a chart in Input before creating an overlay.';
+    holder.replaceChildren(hint);
+    tbody.replaceChildren();
+    return;
+  }
 
   if (!meta?.synastry) {
     const hint = document.createElement('p');
     hint.className = 'note';
-    hint.textContent = 'One chart. Overlay the sky or another person to hear how they sit together.';
+    hint.textContent = 'One chart. Overlay the sky or a secondary chart to hear how they sit together.';
     holder.replaceChildren(hint);
     tbody.replaceChildren();
     return;

@@ -1,11 +1,7 @@
 /**
- * Mobile-mode regression checks: the pure view/zoom/sheet-state math, plus a
- * couple of "these two files must agree" checks for constants that are
- * necessarily duplicated across index.html and app.js (index.html's inline
- * bootstrap script runs before any module loads — to avoid a flash of the
- * wrong layout — so it can't import a shared constant).
- *
- * Run with: node tests/mobile.test.mjs
+ * These checks cover pure view/zoom/sheet-state math and the constants that
+ * must agree between files. The inline bootstrap runs before modules load to
+ * avoid a layout flash, so index.html cannot import the shared query.
  *
  * This covers the DOM-independent logic only. CSS layout/cascade behaviour
  * (the mode-scoped structural rules in styles.css), actual pointer/touch

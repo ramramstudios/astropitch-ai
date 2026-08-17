@@ -56,7 +56,6 @@ function seeded(fn) {
   try { return fn(); } finally { Math.random = realRandom; }
 }
 
-/** Render a scene through the full master chain and measure the result. */
 async function render(seconds, build) {
   const ctx = seeded(() => {
     const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
@@ -124,8 +123,6 @@ function analyse(buffer) {
 const fmt = (s) =>
   `peak ${s.peak.toFixed(3)}  rms ${s.rms.toFixed(4)}  clipped ${s.clipped}  ` +
   `hardCuts ${s.hardCuts}  dc ${s.dc.toExponential(1)}  nonFinite ${s.nonFinite}`;
-
-// ---------------------------------------------------------------------------
 
 // Every palette has to survive the same 144 renders. A wavetable spectrum is a
 // new way to produce a signal that is too hot or too quiet, so a palette that
@@ -266,7 +263,6 @@ head('Polyphony cap vs. legitimate synastry bloom');
     { element: 'earth', house: 4, modality: 'mutable' },
     { element: 'fire', house: 10, modality: 'cardinal' },
   ];
-  // Simulate a two-chart bloom: 11 bodies × 2 sides, arriving over ~10s in staggered pairs
   for (let side = 0; side < 2; side++) {
     for (let i = 0; i < 11; i++) {
       const spec = buildVoiceSpec(specs[i % specs.length]);
@@ -288,13 +284,11 @@ head('Polyphony cap vs. legitimate synastry bloom');
 head('Click-burst dynamics: staggered burst is not squashed flat');
 {
   const soloStats = await render(2.5, (engine) => {
-    // Solo reference: one dense voice
     const spec = buildVoiceSpec({ element: 'water', house: 8, modality: 'fixed' });
     new Voice(engine, spec, { freq: 200, time: 0.05, duration: 2.0, gain: 0.15 });
   });
 
   const burstStats = await render(3.6, (engine) => {
-    // Staggered burst: ~20 dense voices at jittered onsets (not simultaneous)
     const specs = [
       { element: 'air', house: 1, modality: 'cardinal' },
       { element: 'water', house: 8, modality: 'fixed' },
@@ -317,16 +311,11 @@ head('Click-burst dynamics: staggered burst is not squashed flat');
   log('info', `      solo: ${fmt(soloStats)}  |  burst: ${fmt(burstStats)}`);
 }
 
-// ---------------------------------------------------------------------------
-// Polyphony.
-//
 // The engine's answer to a lot of voices at once is to write bus gain
 // automation from the summed amplitude of everything scheduled to sound
 // (AudioEngine._scheduleGainStaging). tests/engine.test.mjs covers that
 // arithmetic; what is left for a real render is whether the arithmetic
 // actually keeps the master chain out of trouble.
-// ---------------------------------------------------------------------------
-
 /**
  * Render one path of the graph alone.
  *
@@ -353,7 +342,6 @@ async function renderPath(seconds, build, path) {
   return analyse(await ctx.startRendering());
 }
 
-/** Render with the master chain bypassed, to see what arrives at it. */
 async function renderPreMaster(seconds, build, config = {}) {
   const ctx = seeded(() => {
     const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
@@ -668,8 +656,6 @@ head('Tuning');
   const just = frequencyFor(120, { octave: 0, refA: 440, temperament: 'just' });
   check('just intonation gives a pure 5/4 on the trine', Math.abs(just - 440 * 5 / 4) < 1e-9, `${just.toFixed(3)}`);
 }
-
-// ---------------------------------------------------------------------------
 
 const summary = document.createElement('h2');
 summary.textContent = failures === 0 ? 'ALL AUDIO TESTS PASSED' : `${failures} AUDIO TEST(S) FAILED`;

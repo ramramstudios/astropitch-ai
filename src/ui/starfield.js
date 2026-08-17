@@ -1,7 +1,6 @@
 /**
- * A quiet technical-paper backdrop. The old coloured starfield made the
- * interface feel like a game; this construction grid lets the chart read like
- * a printed astronomical diagram and only darkens slightly with the audio.
+ * A quiet construction grid keeps the chart legible as a printed astronomical
+ * diagram and only darkens slightly with the audio.
  */
 export class Starfield {
   constructor(canvas) {

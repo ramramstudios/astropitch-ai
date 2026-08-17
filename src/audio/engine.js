@@ -1,7 +1,5 @@
 /**
- * The audio engine.
- *
- * One graph, built once, reused for the life of the page:
+ * One graph is built once and reused for the life of the page:
  *
  *   voices -> dryBus --------------------------\
  *          -> reverbSend -> preDelay -> IR -> damp -> \
@@ -13,11 +11,9 @@
  * automation written ahead of the voices, from the summed amplitude of
  * everything scheduled to sound. See _scheduleGainStaging.
  *
- * The previous version built a fresh PolySynth *and* a fresh Reverb/Distortion/
- * Chorus on every single click and never disposed any of them, so CPU climbed
- * until the tab crackled. Nothing here is allocated per click except the
- * oscillators and gains for a single note, which are stopped and disconnected
- * when they finish.
+ * Only a note's oscillators and gains may be allocated per click, and they must
+ * be stopped and disconnected when finished. Rebuilding shared effects per
+ * click accumulates live nodes until the tab crackles.
  */
 
 /**
@@ -123,8 +119,6 @@ function ceilingCurve(n = 8192, knee = 0.82, ceiling = 0.995, headroom = 1) {
   }
   return curve;
 }
-
-// --- polyphony gain staging -------------------------------------------------
 
 /** Summed voice amplitude that still passes at unity gain. */
 const LOAD_REF = 0.34;
@@ -460,7 +454,6 @@ export class AudioEngine {
     return Math.min((this.loadRef / load) ** this.loadExp, this.loadCeiling / load);
   }
 
-  /** Every moment between now and the horizon at which the load changes. */
   _loadBreakpoints(now) {
     const times = new Set([now]);
     const add = (t) => {
@@ -525,7 +518,6 @@ export class AudioEngine {
     }
   }
 
-  /** Re-derive the gain staging after a voice's schedule changed. */
   refreshGainStaging(voice = null) {
     if (voice && !this.voices.has(voice)) return;
     this._scheduleGainStaging();
@@ -561,7 +553,6 @@ export class AudioEngine {
     return best;
   }
 
-  /** Would taking `v`'s slot cost less than taking `other`'s? */
   _cheaperToSteal(v, other, t) {
     const tier = (x) => (t < x.t0 ? 0 : x.fadeFrom != null && t >= x.fadeFrom ? 1 : 2);
     const difference = tier(v) - tier(other);

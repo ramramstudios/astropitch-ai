@@ -1,7 +1,5 @@
 /**
- * Palettes — the synthesis data behind the three semantic axes.
- *
- * A palette is nothing but two tables:
+ * A palette is two tables:
  *
  *   materials  one entry per ELEMENT  (fire / earth / air / water)
  *   gestures   one entry per HOUSE    (1..12)
@@ -18,15 +16,10 @@
  * dependency: everything below is data for the existing renderer.
  */
 
-// ---------------------------------------------------------------------------
-// Harmonic spectra
-//
 // The four built-in oscillator types are four fixed spectra. `createPeriodicWave`
 // takes an arbitrary list of harmonic amplitudes, so a partial can specify the
 // exact shape of its overtone series instead of picking the nearest preset.
 // A partial with `harmonics` uses a wavetable; one with `type` uses a built-in.
-// ---------------------------------------------------------------------------
-
 /** Every harmonic, amplitude falling as 1/k^rolloff. Higher rolloff = darker. */
 function series(count, rolloff, { skipEven = false, skipOdd = false } = {}) {
   const h = [];
@@ -46,12 +39,8 @@ function sparse(spec, count = 16) {
   return h;
 }
 
-// ---------------------------------------------------------------------------
-// AstroPitch — the original palette.
-//
 // Subtractive, physical, and deliberately not pretty. Each element is built from
 // what it would be made of: fire burns, earth thuds, air breathes, water slides.
-// ---------------------------------------------------------------------------
 
 const astropitchMaterials = {
   // Dense, bright, every harmonic present. Saws beating against each other,
@@ -269,16 +258,11 @@ const astropitchGestures = {
   }),
 };
 
-// ---------------------------------------------------------------------------
-// Harmonic — the consonant palette.
-//
 // Same semantics, different physics. Where AstroPitch reaches for a saw and a
 // filter, this reaches for a specified overtone series: amplitudes fall smoothly,
 // noise is mostly gone, and drive is nearly absent. The point is that a
 // sign-locked chord — twelve semitones of chromatic cluster spread over five
 // octaves — should be pleasant on first listen rather than merely legible.
-//
-// Two things about that are counter-intuitive and were both got wrong first time.
 //
 // Body ratios stay OFF the harmonic grid. A body is a formant — a fixed physical
 // resonance — not a pitch, so there is nothing to be consonant with. Put the peak
@@ -298,8 +282,6 @@ const astropitchGestures = {
 // about 4%, while a 30% cut in send level moved it by 8% and brought time spent
 // above the soft-clip ceiling from +39% to +2% against the original palette.
 // The sends below are the result of that sweep, not of taste.
-// ---------------------------------------------------------------------------
-
 const harmonicMaterials = {
   // Brass, not fire. A full series that rolls off steeply enough to stay warm,
   // with a fifth above doubling the fundamental instead of a detuned saw.
@@ -505,8 +487,6 @@ const harmonicGestures = {
     widthMul: 1.5,
   }),
 };
-
-// ---------------------------------------------------------------------------
 
 export const PALETTES = {
   astropitch: {

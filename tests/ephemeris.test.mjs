@@ -1,8 +1,4 @@
 /**
- * Ephemeris checks against published reference values.
- *
- * Run with:  node tests/ephemeris.test.mjs
- *
  * Reference data comes from Meeus, "Astronomical Algorithms" 2nd ed. (the
  * worked examples are given to more digits than we need) and from JPL Horizons
  * for the planets.
@@ -109,7 +105,6 @@ console.log('\n--- Placidus sanity ---');
   console.log(`  ${mono ? 'PASS' : 'FAIL'}  cusps advance monotonically`);
   if (!mono) fails++;
 
-  // Polar fallback
   const c = angles(jd, 78, 15);
   const rp = houseCusps('placidus', c, 78);
   console.log(`  ${rp.system === 'porphyry' ? 'PASS' : 'FAIL'}  lat 78 falls back to ${rp.system}`);

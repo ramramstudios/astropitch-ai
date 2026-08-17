@@ -16,16 +16,6 @@ SET time_zone = "+00:00";
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8mb4 */;
 
---
--- Database: `AstroPitch`
---
-
--- --------------------------------------------------------
-
---
--- Table structure for table `Ascendant`
---
-
 CREATE TABLE `Ascendant` (
   `ascID` int(3) NOT NULL,
   `zodiacID` int(3) NOT NULL,
@@ -33,28 +23,14 @@ CREATE TABLE `Ascendant` (
   `ascDesc` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
---
--- Dumping data for table `Ascendant`
---
-
 INSERT INTO `Ascendant` (`ascID`, `zodiacID`, `houseID`, `ascDesc`) VALUES
 (1, 1, 1, ''),
 (5, 5, 1, '@christopherstrickland66');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `House`
---
 
 CREATE TABLE `House` (
   `houseID` int(2) NOT NULL,
   `meaning` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
---
--- Dumping data for table `House`
---
 
 INSERT INTO `House` (`houseID`, `meaning`) VALUES
 (1, '1st house: ego, sense of self'),
@@ -70,22 +46,12 @@ INSERT INTO `House` (`houseID`, `meaning`) VALUES
 (11, '11th house: humanity, technology'),
 (12, '12th house: collective unconscious, psychic abilities');
 
--- --------------------------------------------------------
-
---
--- Table structure for table `Moon`
---
-
 CREATE TABLE `Moon` (
   `moonID` int(3) NOT NULL,
   `zodiacID` int(3) DEFAULT NULL,
   `houseID` int(3) DEFAULT NULL,
   `moonDesc` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
---
--- Dumping data for table `Moon`
---
 
 INSERT INTO `Moon` (`moonID`, `zodiacID`, `houseID`, `moonDesc`) VALUES
 (1, 1, 1, 'The moon rules your emotions, moods, and feelings. This field describes what it means to have your moon in ARIES and also in your first house '),
@@ -102,12 +68,6 @@ INSERT INTO `Moon` (`moonID`, `zodiacID`, `houseID`, `moonDesc`) VALUES
 (12, 12, 1, NULL),
 (13, 1, 2, NULL);
 
--- --------------------------------------------------------
-
---
--- Table structure for table `Sun`
---
-
 CREATE TABLE `Sun` (
   `sunID` int(3) NOT NULL,
   `zodiacID` int(3) NOT NULL,
@@ -115,10 +75,6 @@ CREATE TABLE `Sun` (
   `sunDesc` varchar(255) NOT NULL,
   `sunPitch` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
---
--- Dumping data for table `Sun`
---
 
 INSERT INTO `Sun` (`sunID`, `zodiacID`, `houseID`, `sunDesc`, `sunPitch`) VALUES
 (1, 1, 1, 'this text describes what it means to have your sun sign be ARIES and also in your FIRST house', 'this text descibes what sun in ARIES/1st house sounds like'),
@@ -266,12 +222,6 @@ INSERT INTO `Sun` (`sunID`, `zodiacID`, `houseID`, `sunDesc`, `sunPitch`) VALUES
 (143, 11, 12, '', ''),
 (144, 12, 12, '', '');
 
--- --------------------------------------------------------
-
---
--- Table structure for table `User`
---
-
 CREATE TABLE `User` (
   `userID` int(11) NOT NULL,
   `userName` varchar(255) NOT NULL,
@@ -282,20 +232,10 @@ CREATE TABLE `User` (
   `ascID` int(3) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
---
--- Dumping data for table `User`
---
-
 INSERT INTO `User` (`userID`, `userName`, `email`, `birthTime`, `sunID`, `moonID`, `ascID`) VALUES
 (1, 'crick', '', '2021-04-27 19:55:28', 33, NULL, NULL),
 (2, 'qwerty', 'qwerty@aol.com', '1999-04-27 21:14:39', 44, NULL, NULL),
 (3, '@christopherstrickland66', 'cmstrickland@gmail.com', '1982-04-04 12:36:00', 97, 6, 5);
-
--- --------------------------------------------------------
-
---
--- Table structure for table `Zodiac`
---
 
 CREATE TABLE `Zodiac` (
   `zodiacID` int(2) NOT NULL,
@@ -304,10 +244,6 @@ CREATE TABLE `Zodiac` (
   `frequency` float(11,2) NOT NULL,
   `element` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
---
--- Dumping data for table `Zodiac`
---
 
 INSERT INTO `Zodiac` (`zodiacID`, `zodiacName`, `pitch`, `frequency`, `element`) VALUES
 (1, 'Aries', 'A', 440.00, 'fire'),
@@ -323,43 +259,24 @@ INSERT INTO `Zodiac` (`zodiacID`, `zodiacName`, `pitch`, `frequency`, `element`)
 (11, 'Aquarius', 'G', 783.99, 'air'),
 (12, 'Pisces', 'G#/Ab', 830.61, 'water');
 
---
--- Indexes for dumped tables
---
-
---
--- Indexes for table `Ascendant`
---
 ALTER TABLE `Ascendant`
   ADD PRIMARY KEY (`ascID`),
   ADD KEY `zodiacID` (`zodiacID`,`houseID`),
   ADD KEY `houseID` (`houseID`);
 
---
--- Indexes for table `House`
---
 ALTER TABLE `House`
   ADD PRIMARY KEY (`houseID`);
 
---
--- Indexes for table `Moon`
---
 ALTER TABLE `Moon`
   ADD PRIMARY KEY (`moonID`),
   ADD KEY `zodiacID` (`zodiacID`,`houseID`),
   ADD KEY `houseID` (`houseID`);
 
---
--- Indexes for table `Sun`
---
 ALTER TABLE `Sun`
   ADD PRIMARY KEY (`sunID`),
   ADD KEY `zodiacID` (`zodiacID`,`houseID`),
   ADD KEY `houseID` (`houseID`);
 
---
--- Indexes for table `User`
---
 ALTER TABLE `User`
   ADD PRIMARY KEY (`userID`),
   ADD UNIQUE KEY `userName` (`userName`),
@@ -368,40 +285,21 @@ ALTER TABLE `User`
   ADD KEY `moonID` (`moonID`),
   ADD KEY `ascID` (`ascID`);
 
---
--- Indexes for table `Zodiac`
---
 ALTER TABLE `Zodiac`
   ADD PRIMARY KEY (`zodiacID`);
 
---
--- Constraints for dumped tables
---
-
---
--- Constraints for table `Ascendant`
---
 ALTER TABLE `Ascendant`
   ADD CONSTRAINT `ascendant_ibfk_1` FOREIGN KEY (`zodiacID`) REFERENCES `Zodiac` (`zodiacID`) ON DELETE NO ACTION ON UPDATE NO ACTION,
   ADD CONSTRAINT `ascendant_ibfk_2` FOREIGN KEY (`houseID`) REFERENCES `House` (`houseID`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 
---
--- Constraints for table `Moon`
---
 ALTER TABLE `Moon`
   ADD CONSTRAINT `moon_ibfk_2` FOREIGN KEY (`zodiacID`) REFERENCES `Zodiac` (`zodiacID`),
   ADD CONSTRAINT `moon_ibfk_3` FOREIGN KEY (`houseID`) REFERENCES `House` (`houseID`);
 
---
--- Constraints for table `Sun`
---
 ALTER TABLE `Sun`
   ADD CONSTRAINT `sun_ibfk_1` FOREIGN KEY (`houseID`) REFERENCES `House` (`houseID`),
   ADD CONSTRAINT `sun_ibfk_2` FOREIGN KEY (`zodiacID`) REFERENCES `Zodiac` (`zodiacID`);
 
---
--- Constraints for table `User`
---
 ALTER TABLE `User`
   ADD CONSTRAINT `user_ibfk_1` FOREIGN KEY (`sunID`) REFERENCES `Sun` (`sunID`),
   ADD CONSTRAINT `user_ibfk_2` FOREIGN KEY (`moonID`) REFERENCES `Moon` (`moonID`) ON DELETE NO ACTION ON UPDATE CASCADE,

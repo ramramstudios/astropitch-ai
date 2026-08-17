@@ -1,6 +1,4 @@
 /**
- * The AstroPitch ontology.
- *
  * The mapping begins with a simple correspondence: the zodiac has 12 signs of
  * 30 degrees, and an octave has 12 semitones. Walking chromatically from Aries
  * (A, 432 Hz) to Pisces (G#, 815.50 Hz) makes the mapping exact and lossless:
@@ -74,15 +72,10 @@ export const MODALITIES = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Signs — pitch. Index 0 (Aries) is A; each subsequent sign is one semitone up.
-//
 // Glyphs carry U+FE0E (VARIATION SELECTOR-15). Without it the zodiac range
 // U+2648..U+2653 has emoji presentation by default, so the browser draws a
 // colour emoji that ignores `fill` — the signs lose their element colour and
 // turn into purple boxes.
-// ---------------------------------------------------------------------------
-
 export const SIGNS = [
   { name: 'Aries',       glyph: '♈\uFE0E', pitch: 'A',     element: 'fire',  modality: 'cardinal', ruler: 'Mars',    keyword: 'the spark' },
   { name: 'Taurus',      glyph: '♉\uFE0E', pitch: 'A♯/B♭', element: 'earth', modality: 'fixed',    ruler: 'Venus',   keyword: 'the body' },
@@ -153,15 +146,10 @@ export const ANGLE_BODIES = BODIES.filter((b) => b.angle).map((b) => b.key);
 
 export const SOUNDING_BODIES = BODIES.filter((b) => b.key !== 'mc').map((b) => b.key);
 
-// ---------------------------------------------------------------------------
-// Aspects — which are intervals, because 30 degrees is a semitone.
-//
 // Sextile and quincunx use stand-ins. Their proper codepoints (U+26B9 and
 // U+26BB, in the astrological block) are absent from the symbol fonts shipped
 // on macOS, Windows and the Noto set alike, so they render as tofu everywhere.
 // A six-pointed star for the sextile at least means "one sixth of the circle".
-// ---------------------------------------------------------------------------
-
 export const ASPECTS = [
   { name: 'Conjunction', glyph: '☌', angle: 0,   orb: 8, semitones: 0,  interval: 'unison',        consonance: 1.0,  color: '#f2e8c9' },
   { name: 'Sextile',     glyph: '✶', angle: 60,  orb: 5, semitones: 2,  interval: 'major second',  consonance: 0.55, color: '#7fd3f0' },

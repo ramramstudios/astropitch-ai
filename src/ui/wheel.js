@@ -1,6 +1,4 @@
 /**
- * The chart wheel.
- *
  * Drawn the traditional way: Ascendant on the left at nine o'clock, longitude
  * increasing counter-clockwise. Aspect lines are chords across the middle,
  * which is the picture of the whole argument — a chord between two planets is
@@ -397,7 +395,6 @@ export class Wheel {
     this.svg.classList.toggle('is-designing', this.designer);
   }
 
-  /** Focus the aspect network of one placement; repeating the key clears it. */
   toggleAspectFocus(key) {
     this.angleFocusKey = null;
     this.aspectFocusKey = this.aspectFocusKey === key ? null : key;
@@ -419,7 +416,6 @@ export class Wheel {
     if (hadFocus || hadAngleFocus) this._drawPlanets();
   }
 
-  /** Only one cardinal direction is expanded at a time to keep the wheel legible. */
   toggleAngleFocus(key) {
     this.aspectFocusKey = null;
     this.angleFocusKey = this.angleFocusKey === key ? null : key;
@@ -434,7 +430,6 @@ export class Wheel {
     return `${asp.a}-${asp.b}`;
   }
 
-  /** Keep a clicked chord visible until another chord or the empty wheel is clicked. */
   toggleAspectSelection(asp) {
     const key = this._aspectKey(asp);
     this.selectedAspectKey = this.selectedAspectKey === key ? null : key;
@@ -702,7 +697,6 @@ export class Wheel {
     for (const item of items) {
       if (item.p.isAngle) item.shown = item.lon;
     }
-    // Anything still crowded gets pushed to an inner ring.
     for (let i = 1; i < items.length; i++) {
       if (norm360(items[i].shown - items[i - 1].shown) < MIN * 0.85) {
         items[i].ring = (items[i - 1].ring + 1) % 2;
@@ -711,14 +705,8 @@ export class Wheel {
     return items;
   }
 
-  // -------------------------------------------------------------------------
-  // Designer dragging
-  //
   // Angular position only: however far the pointer wanders toward or away from
   // the centre, the body stays on its ring and only its longitude changes.
-  // -------------------------------------------------------------------------
-
-  /** Screen coordinates -> longitude, with the wheel's rotation undone. */
   _longitudeAt(event) {
     const ctm = this.svg.getScreenCTM();
     if (!ctm) return null;
@@ -816,7 +804,6 @@ export class Wheel {
       const { p, shown, ring } = item;
       const radius = R.planet - ring * 44;
 
-      // A pointer from the true degree on the ring to the drawn glyph.
       const [tx1, ty1] = this._point(p.longitude, R.planetTick);
       const [tx2, ty2] = this._point(p.longitude, R.planetTick - 10);
       const [gx, gy] = this._point(shown, radius);
@@ -900,7 +887,6 @@ export class Wheel {
     g.replaceChildren(...nodes);
   }
 
-  /** Flash a body when it sounds. */
   pulse(key) {
     const marker = this.markers?.[key];
     if (!marker) return;

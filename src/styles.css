@@ -1,7 +1,3 @@
-/* ===========================================================================
-   AstroPitch — monochrome astrological editorial system
-   ========================================================================== */
-
 :root {
   --paper: #f4f4f2;
   --paper-bright: #fbfbfa;
@@ -16,6 +12,7 @@
   --wheel-hub-fill: rgba(244, 244, 242, 0.14);
   --hover: #e5e5e1;
   --tab-hover: #e9e9e5;
+  --primary-hover: #333;
   --wheel-rim-muted: #bdbdb9;
   --tick: #cececa;
   --transport-bg: #0b0b0b;
@@ -79,6 +76,7 @@
   --wheel-hub-fill: rgba(11, 11, 11, 0.28);
   --hover: #292927;
   --tab-hover: #242422;
+  --primary-hover: #d8d8d4;
   --wheel-rim-muted: #535350;
   --tick: #4b4b48;
   color-scheme: dark;
@@ -178,8 +176,7 @@ html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56re
   margin: 0 auto;
   /* Just enough bottom room to scroll the readout clear of the fixed dock —
      more than that is dead space you have to travel through. The env()
-     terms are 0 on devices with no physical safe area, so this is the same
-     as before everywhere except a notch/home-indicator/rounded corner. */
+     terms are 0 on devices with no physical safe area. */
   padding-top: var(--stage-pad-top);
   padding-right: calc(clamp(1rem, 3.2vw, 3.5rem) + env(safe-area-inset-right));
   padding-bottom: var(--stage-pad-bottom);
@@ -297,9 +294,8 @@ html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56re
   margin-bottom: 0.6rem;
 }
 
-/* With the panel closed there is room beside the wheel, so the readout moves
-   into it. Stacked below the wheel it fell under the fold on a laptop, which
-   is the one place it cannot be: it is what you read while you hover. */
+/* With the panel closed there is room beside the wheel for the readout. It must
+   remain above the fold on a laptop because it reports the current hover. */
 @media (min-width: 1200px) {
   /* Focus mode. The tightened padding is buying vertical room for the wheel,
      because on a laptop the height is what caps it — what is left then fits
@@ -856,11 +852,8 @@ html[data-mode="mobile"] .tabpanel { overflow-y: auto; }
   cursor: not-allowed;
 }
 
-/* The action rows inside the three chart-source forms run four equal-width
-   segments in the same space three used to have (or that a two-word label
-   like "Revert chart" used to get on its own) — tighter than the Input/Basic
-   Designer picker and the Overlay toggle above them, which only ever hold
-   one short word per segment and can keep the room. */
+/* Four equal-width chart actions need tighter spacing than the shorter
+   Input/Basic/Designer and Overlay segments above them. */
 .form .seg-btn {
   padding: 0.62rem 0.3rem;
   font-size: 0.58rem;
@@ -1056,7 +1049,7 @@ button.primary {
   color: var(--on-ink);
 }
 
-button.primary:hover { background: #333; }
+button.primary:hover { background: var(--primary-hover); }
 button.ghost { margin-left: -1px; }
 button.ghost:hover { background: var(--hover); }
 
@@ -1467,7 +1460,6 @@ html[data-mode="mobile"] .volume-toggle { width: 2.5rem; height: 2.5rem; }
 
 .modal[hidden] { display: none; }
 
-/* The page behind a modal should not scroll under it. */
 body.is-modal-open { overflow: hidden; }
 
 .modal-card {
@@ -1532,7 +1524,6 @@ body.is-modal-open { overflow: hidden; }
   margin: 0 0 1.4rem;
   padding: 1rem;
   border: 1px solid var(--ink);
-  /* Keep the staff on a distinct, theme-aware sheet from the modal card. */
   background: var(--paper);
 }
 
@@ -1831,27 +1822,10 @@ html[data-mode="mobile"] .modal-close {
 }
 
 
-/* ---------------------------------------------------------------------------
-   Mobile mode — structural and chrome rules
-   ---------------------------------------------------------------------------
-   Everything below keys off data-mode, not viewport width, so the Settings
-   override ("preview the other layout") is authoritative: forcing mobile on
-   a wide desktop window gets the real mobile structure, and forcing desktop
-   on a phone gets the real desktop structure, rather than a hybrid of
-   whichever width-based rules happened to also match.
-
-   This used to be three separate width breakpoints (1040/660/430px) that
-   applied purely by viewport width, mode-agnostic. Two of those thresholds
-   (660, 430) sat entirely inside mode's own 760px auto-switch range, so
-   converting them changed nothing for auto-detected users — only for an
-   explicit override. The 1040px stacking breakpoint was wider than 760px
-   though, so it used to also give a genuine desktop-mode browser window a
-   graceful single-column fallback between 761–1040px. Folding it in here
-   too means that narrow-but-still-desktop-mode window now gets the full
-   (cramped) 3-column grid instead — a real tradeoff, but data-mode has no
-   way to tell "auto-detected desktop" apart from "explicitly forced
-   desktop" once set, and the override has to win in the latter case, or
-   forcing desktop on a phone doesn't actually show the desktop layout. */
+/* Keying layout to data-mode makes the Settings override authoritative instead
+   of mixing it with whichever viewport-width rules also match. A narrow window
+   explicitly forced to desktop therefore keeps the desktop grid: data-mode
+   cannot distinguish that choice from an auto-detected desktop. */
 
 html[data-mode="mobile"] .stage,
 html[data-mode="mobile"] .stage.is-side-collapsed {
@@ -1892,9 +1866,8 @@ html[data-mode="mobile"] .transport-main {
   display: grid;
   width: 100%;
   min-height: 46px;
-  /* Keep every transport action in the grid. The hide button used to be
-     absolutely positioned here, which made the final grid column empty and
-     allowed controls to collide at narrow widths. */
+  /* Keeping every transport action in the grid prevents an empty final column
+     and control collisions at narrow widths. */
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
@@ -1947,7 +1920,6 @@ html[data-mode="mobile"] .readout-title .rd-pitch { width: 100%; margin-left: 0;
 }
 
 
-/* Which chart a body came from. Small enough to read as a footnote. */
 .side-tag {
   margin-left: 0.25em;
   color: var(--muted);
@@ -2023,10 +1995,6 @@ tr.is-silent { opacity: 0.42; }
 
 html[data-mode="mobile"] .verdict-title { font-size: 1.35rem; }
 
-
-/* ---------------------------------------------------------------------------
-   Designer
-   --------------------------------------------------------------------------- */
 
 /* A generous target for a fingertip. Transparent rather than absent, because
    `visiblePainted` hit-testing needs a paint to hit. */

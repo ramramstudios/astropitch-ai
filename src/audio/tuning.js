@@ -1,6 +1,4 @@
 /**
- * Longitude to frequency.
- *
  * The zodiac is a chromatic octave: the centre of Aries is A, and every 30
  * degrees is one semitone. That makes the mapping continuous, so a planet at
  * 14 degrees 22 minutes of Aries is not "an A" but an A just below centre.

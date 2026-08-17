@@ -202,12 +202,12 @@
 
       <section class="tabpanel" id="panel-overlay" role="tabpanel" aria-labelledby="tab-overlay" tabindex="0" data-panel="overlay">
         <p class="panel-lede">
-          Overlay two charts to hear their synastry.
+          Overlay another chart to hear synastry.
         </p>
 
         <div class="seg" role="group" aria-label="Overlay against">
-          <button class="seg-btn is-active" data-overlay="sky">The sky now</button>
-          <button class="seg-btn" data-overlay="person">Another person</button>
+          <button class="seg-btn is-active" data-overlay="sky">sky</button>
+          <button class="seg-btn" data-overlay="person">input</button>
         </div>
 
         <form id="skyForm" class="form">
@@ -215,7 +215,7 @@
             The sky uses the chart's place. Refresh to hear the transit move.
           </p>
           <div class="form-actions">
-            <button type="submit" class="primary">Overlay the sky</button>
+            <button type="submit" class="primary" id="skyOverlayBtn">Overlay the sky</button>
           </div>
         </form>
 
@@ -223,11 +223,11 @@
           <div class="field-row">
             <label class="field">
               <span>Date</span>
-              <input type="date" id="bDate" value="1985-09-17">
+              <input type="date" id="bDate">
             </label>
             <label class="field">
               <span>Time</span>
-              <input type="time" id="bTime" value="08:20">
+              <input type="time" id="bTime">
             </label>
           </div>
 
@@ -239,27 +239,23 @@
           <div class="field-row">
             <label class="field">
               <span>Lat<span class="sr-only">itude</span></span>
-              <input type="number" id="bLat" value="51.507" step="0.001" min="-90" max="90">
+              <input type="number" id="bLat" step="0.001" min="-90" max="90">
             </label>
             <label class="field">
               <span>Lon<span class="sr-only">gitude</span></span>
-              <input type="number" id="bLon" value="-0.128" step="0.001" min="-180" max="180">
+              <input type="number" id="bLon" step="0.001" min="-180" max="180">
             </label>
             <label class="field narrow">
               <span>UTC<span class="sr-only"> offset</span></span>
-              <input type="number" id="bUtcOffset" value="0" step="0.5" min="-12" max="14">
+              <input type="number" id="bUtcOffset" step="0.5" min="-12" max="14">
             </label>
           </div>
 
           <div class="form-actions">
-            <button type="submit" class="primary">Overlay</button>
+            <button type="submit" class="primary" id="partnerOverlayBtn">Overlay Secondary Chart</button>
             <button type="button" class="ghost" id="bRandomBtn">Random</button>
           </div>
         </form>
-
-        <div class="form-actions">
-          <button type="button" class="ghost" id="clearOverlayBtn" disabled>Back to one chart</button>
-        </div>
 
         <div class="verdict" id="verdict"></div>
 
@@ -312,7 +308,6 @@
 
   <footer class="transport" id="transportBar">
     <div class="transport-main">
-      <!-- TODO: replace the temporary PNG mark with a production SVG logo. -->
       <img class="transport-brand" src="favicon.png" alt="AstroPitch">
       <button class="play" id="bloomBtn" aria-pressed="false" title="The chart opens like a flower, petal by petal outward from the Sun to Pluto. Click again to stop.">
         <span class="play-name">Bloom</span>

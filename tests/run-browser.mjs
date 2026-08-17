@@ -26,9 +26,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = '/' + path.relative(ROOT, path.resolve(process.argv[2] ?? 'tests/audio.test.html')).split(path.sep).join('/');
 const TIMEOUT = Number(process.argv[3] ?? 900) * 1000;
-/** No single protocol request may take longer than this. */
 const REQUEST_TIMEOUT = 30000;
-/** Consecutive request failures before the renderer is declared gone. */
 const MAX_MISSES = 5;
 
 const CHROME = [

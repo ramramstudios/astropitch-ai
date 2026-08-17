@@ -34,20 +34,10 @@ function loudnessTrim(freq) {
   return clamp(0.45 + (freq / 220) * 0.55, 0.4, 1);
 }
 
-// ---------------------------------------------------------------------------
 // Melodic mode: a tonal line built only from the pitch classes present in the
 // chart. See `melodic()` for the composition itself; these are its pure
 // scale-degree helpers, kept free of the engine so they stay easy to reason
 // about (and to test) in isolation.
-//
-// TODO: this hand-rolled fitScale/pickMotif/buildDegreeWalk/buildMelody
-// pipeline is one fixed algorithm. Consider feeding the chart's placements
-// (pitch class, register, house, element/modality, aspects) to an AI model
-// prompted with real western-music-theory conventions (voice leading,
-// tension/resolution, phrase structure) to compose a more context-aware
-// melody — and potentially do the same for bloom/scalar/drone's voicing and
-// timing choices, not just melodic.
-// ---------------------------------------------------------------------------
 
 const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
 const MINOR_STEPS = [0, 2, 3, 5, 7, 8, 10];
@@ -102,14 +92,12 @@ const circularDegreeDist = (a, b) => {
   return Math.min(d, 7 - d);
 };
 
-/** The present scale degree closest to a target degree, wrapping at the octave. */
 function nearestPresentDegree(target, present) {
   return present.reduce((best, d) => (
     circularDegreeDist(d, target) < circularDegreeDist(best, target) ? d : best
   ));
 }
 
-/** Which scale degree a chromatic pitch class sits closest to, by semitone. */
 function nearestDegreeBySemitone(pc, scale) {
   let best = 0;
   let bestDist = Infinity;
@@ -272,7 +260,6 @@ export class Performer {
     this.timers.push(setTimeout(() => this._emit(event), delay));
   }
 
-  /** End a finite transport pass before telling the UI that it has ended. */
   _endAt(mode, time) {
     const delay = Math.max(0, (time - this.engine.now) * 1000);
     this.timers.push(setTimeout(() => {
@@ -443,7 +430,6 @@ export class Performer {
     return this.engine.start();
   }
 
-  /** Start a held, single-body audition for Designer dragging. */
   async beginDesignerPreview(key, longitude = null) {
     const placement = this._direction(key);
     if (!placement || placement.silent) return;
@@ -477,7 +463,6 @@ export class Performer {
     this._emit({ type: 'note', key, time: t });
   }
 
-  /** Sign supplies timbre and articulation; the current house supplies gesture. */
   _designerTimbre(placement) {
     // The index deliberately participates too: each sign crossing gets a
     // fresh articulation, even when two neighbouring signs share an element
@@ -485,7 +470,6 @@ export class Performer {
     return [placement.signIndex, placement.element, placement.modality, placement.house].join(':');
   }
 
-  /** Retune the held Designer audition, changing its voice at a sign boundary. */
   updateDesignerPreview(key, next) {
     const preview = this.designerPreview;
     const placement = typeof next === 'object' ? next : this._placement(key);
@@ -519,7 +503,6 @@ export class Performer {
     preview.voice.retune({ freq, pan, time });
   }
 
-  /** Release the held Designer audition when the pointer ends or is cancelled. */
   endDesignerPreview(key = null, { fade = 0.16 } = {}) {
     const preview = this.designerPreview;
     if (!preview || (key != null && preview.key !== key)) return;
@@ -628,7 +611,6 @@ export class Performer {
       // A body's counterpart arrives almost on top of it; a new body waits.
       t += base === prevBase ? 0.2 : (gaps[base] ?? 0.6);
       prevBase = base;
-      // _voiceFor applies its own headroom as the chord thickens.
       voices.push(this._voiceFor(p, { time: t, detune: detunes[p.key] }));
       this._emitAt({ type: 'note', key: p.key }, t);
     }
@@ -762,7 +744,6 @@ export class Performer {
     const anchorKeys = new Set(anchorPlacements.map((p) => p.key));
     const floating = placements.filter((p) => !anchorKeys.has(p.key));
 
-    // How active each body is, from the aspects it makes.
     const activity = {};
     for (const p of placements) activity[p.key] = 0.25;
     for (const asp of this.chart.aspects) {

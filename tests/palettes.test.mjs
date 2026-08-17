@@ -1,6 +1,4 @@
 /**
- * Palette tests.
- *
  * Every palette has to build every combination the app can ask it for: 4
  * elements x 12 houses x 3 modalities. A missing gesture key or a material
  * field left out of a new table shows up here as a thrown error or a NaN
@@ -13,8 +11,6 @@
  *   - no AudioParam ever receives a non-finite value
  *   - no exponential ramp targets zero (the real API throws)
  *   - PeriodicWave harmonics are finite and non-empty
- *
- * Run: node tests/palettes.test.mjs
  */
 
 import { buildVoiceSpec, Voice } from '../src/audio/voices.js';
@@ -27,10 +23,6 @@ const check = (label, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  — ${detail}` : ''}`);
 };
 const head = (t) => console.log(`\n--- ${t} ---`);
-
-// ---------------------------------------------------------------------------
-// A Web Audio stub that checks its own inputs.
-// ---------------------------------------------------------------------------
 
 const problems = [];
 
@@ -116,8 +108,6 @@ function stubEngine() {
     activeVoiceCount() { return this.voices.size; },
   };
 }
-
-// ---------------------------------------------------------------------------
 
 head('Every palette is complete');
 

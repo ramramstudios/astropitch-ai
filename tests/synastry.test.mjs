@@ -1,8 +1,4 @@
 /**
- * Synastry checks.
- *
- * Run with:  node tests/synastry.test.mjs
- *
  * The claims under test are the ones the sound depends on: that a merged
  * synastry object is shaped exactly like a chart (so the wheel, the tables and
  * the performer read it without special cases), that only bodies in contact
@@ -24,7 +20,6 @@ function near(label, got, want, tol) {
   ok(label, d <= tol, `got ${got.toFixed(4)}, want ${want.toFixed(4)}, diff ${d.toFixed(4)}`);
 }
 
-/** A chart with every sounding body at an explicit longitude. */
 const chartAt = (positions) => makeChart(positions, { system: 'whole' });
 
 const spread = (offset) =>
@@ -72,7 +67,6 @@ console.log('\n--- No transposition: both charts keep one pitch space ---');
 
 console.log('\n--- Contacts are the intervals they claim to be ---');
 {
-  // Sun at 0 Aries against Sun at 120 Leo: a trine, and 120/30 = 4 semitones.
   const a = chartAt({ ...spread(0), sun: 0, asc: 0 });
   const b = chartAt({ ...spread(0), sun: 120, asc: 0 });
   const hit = crossAspects(a, b).find((c) => c.a === 'a:sun' && c.b === 'b:sun');
@@ -81,7 +75,6 @@ console.log('\n--- Contacts are the intervals they claim to be ---');
   near('interval in semitones', hit.separation / 30, 4, 1e-9);
   near('cents', hit.cents, 400, 1e-9);
 
-  // The ratio of the two sounding frequencies really is a major third.
   const f1 = frequencyFor(0, { octave: 0 });
   const f2 = frequencyFor(120, { octave: 0 });
   near('frequency ratio is 2^(4/12)', f2 / f1, 2 ** (4 / 12), 1e-9);
@@ -129,14 +122,12 @@ console.log('\n--- Density: only bodies in contact sound ---');
 console.log('\n--- Harmony score ---');
 {
   const base = spread(0);
-  // Every body conjunct its opposite number: all unisons.
   const same = makeSynastry(chartAt(base), chartAt(base));
   ok('identical charts score consonant', same.meta.harmony > 0.95,
     same.meta.harmony.toFixed(3));
   ok('and every kept contact is a conjunction',
     same.aspects.every((c) => c.name === 'Conjunction'));
 
-  // Everything 180 degrees away: all oppositions.
   const flipped = Object.fromEntries(Object.entries(base).map(([k, v]) => [k, (v + 180) % 360]));
   const opp = makeSynastry(chartAt(base), chartAt(flipped));
   ok('mirrored charts score dissonant', opp.meta.harmony < 0.3, opp.meta.harmony.toFixed(3));

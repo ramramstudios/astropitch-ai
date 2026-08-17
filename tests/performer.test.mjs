@@ -1,8 +1,4 @@
 /**
- * Arrangement checks.
- *
- * Run with:  node tests/performer.test.mjs
- *
  * These test what the Performer *schedules*, not what it sounds like — voice
  * construction is stubbed out, so this runs without an AudioContext. The
  * audible behaviour is covered by tests/audio.test.html in a browser.
@@ -34,7 +30,6 @@ const engine = {
   ctx: { currentTime: 0, sampleRate: 48000 },
 };
 
-// Record what gets scheduled instead of building audio nodes.
 const log = [];
 Performer.prototype._voiceFor = function stub(p, o = {}) {
   log.push({ key: p.key, time: o.time, detune: o.detune ?? 0 });
@@ -140,11 +135,10 @@ console.log('\n--- click-burst dedup: same key chokes the previous voice ---');
   const p = new Performer(engine2);
   p.setChart(A);
 
-  // Stub out the voice to track releases (simulate finite-duration voice behavior)
   p._voiceFor = (placement) => {
     const v = {
       key: placement.key,
-      released: true, // finite-duration voices already scheduled a future release in their constructor
+      released: true,
       release: (at, fade) => releases.push({ key: placement.key, at, fade }),
     };
     created.push(v);
@@ -172,18 +166,16 @@ console.log('\n--- click-burst dedup: retrigger releases even if already schedul
   const p = new Performer(engine2);
   p.setChart(A);
 
-  // First voice with release already scheduled
   const v1 = {
     key: 'venus',
-    released: true, // already scheduled a future release (as per finite-duration voice behavior)
-    releaseAt: 3.0, // scheduled to release at 3.0 seconds
+    released: true,
+    releaseAt: 3.0,
   };
   v1.release = function(at, fade) {
     releases.push({ at, fade, earlier: at < v1.releaseAt });
   };
   p._choked.set('p:venus', v1);
 
-  // Now retrigger before its natural release time
   const v2 = {
     key: 'venus',
     released: false,

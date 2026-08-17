@@ -1,8 +1,4 @@
 /**
- * Polyphony gain staging and voice stealing.
- *
- * Run with:  node tests/engine.test.mjs
- *
  * The engine's answer to "too many tones at once" is arithmetic, and the
  * arithmetic runs without an AudioContext: how much amplitude is scheduled to
  * sound at a given moment, what bus gain that has earned, and which voice
@@ -35,8 +31,6 @@ const engineWith = (...voices) => {
   for (const v of voices) e.voices.add(v);
   return e;
 };
-
-// ---------------------------------------------------------------------------
 
 console.log('--- a voice contributes amplitude, not presence ---');
 {
@@ -160,7 +154,6 @@ console.log('\n--- a voice that never starts asks for nothing ---');
     return calls.length === 0;
   })());
 
-  // And a dropped voice asks the staging for nothing from then on.
   const dropped = voice({ t0: 5, peak: 0.4 });
   dropped.peak = 0;
   const e = engineWith(dropped, voice({ t0: 5, peak: 0.4 }));
