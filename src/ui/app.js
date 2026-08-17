@@ -749,7 +749,7 @@ function readPlace() {
 
 function birthFormValues() {
   return Object.fromEntries(
-    ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset', 'houseSystem']
+    ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset', 'houseSystem', 'placePreset']
       .map((id) => [id, $(`#${id}`).value])
   );
 }
@@ -760,7 +760,14 @@ function restoreBirthForm() {
   for (const id of ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset', 'houseSystem']) {
     if (typeof values[id] === 'string' && values[id] !== '') $(`#${id}`).value = values[id];
   }
-  $('#placePreset').value = 'custom';
+  // A saved preset only wins if it still matches the coordinates it was saved
+  // alongside — otherwise a stale index (or one from a place list that has
+  // since changed) would silently relabel whatever lat/lon actually restored.
+  const preset = PLACES[Number(values.placePreset)];
+  const matches = preset
+    && preset.lat === Number($('#lat').value)
+    && preset.lon === Number($('#lon').value);
+  $('#placePreset').value = matches ? values.placePreset : 'custom';
 }
 
 function saveChartConfig() {

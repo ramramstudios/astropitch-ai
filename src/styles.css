@@ -862,6 +862,43 @@ html[data-mode="mobile"] .seg-btn { padding-top: 1.05rem; padding-bottom: 1.05re
 .field-row .field.narrow { flex: 0 0 5rem; }
 .field { display: flex; flex-direction: column; gap: 0.4rem; }
 
+/* In the cast/overlay forms the label sits beside its control rather than
+   above it. Every one of these labels is a single short word, so a line of
+   its own was costing the panel more height than the input it named — and
+   the panel's height is what decides whether Cast chart is above the fold.
+   Scoped to .form: the sound tab's fields label sliders and long readouts
+   ("Reference A — 432 Hz"), which have no room to share a line.
+
+   The rule moves from the control to the field so it still spans the full
+   width, underlining the label too. */
+.form .field {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.6rem;
+  border-bottom: 1px solid var(--ink);
+}
+
+/* Side-by-side fields have no width to spend on a shared label column, so
+   there each label takes only what its own word needs. */
+.form .field-row .field {
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.5rem;
+}
+
+/* Wide enough for the label and a signed fractional offset on one line. */
+.form .field-row .field.narrow { flex: 0 0 6.25rem; }
+
+.form .field > input,
+.form .field > select { border-bottom: 0; }
+
+/* The number spinners need less room than the select caret the 1.2rem was
+   sized for, and in the three-up row that difference is the margin between
+   a full coordinate fitting and being scrolled out of view. */
+.form .field > input[type="number"] { padding-right: 0.9rem; }
+
+.form .field:focus-within { border-bottom-width: 2px; }
+
 .time-stepper {
   display: flex;
   justify-content: center;
