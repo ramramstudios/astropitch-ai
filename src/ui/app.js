@@ -331,8 +331,12 @@ function buildPlaceOptions(selectId, fields, defaultIndex) {
     $(fields.utc).value = p.utc;
     saveChartConfig();
   });
-  // Typing coordinates by hand should flip the selector to Custom.
-  for (const id of [fields.lat, fields.lon, fields.utc]) {
+  // Typing coordinates by hand no longer describes any named place, so that
+  // flips the selector to Custom. The UTC offset doesn't — it's the DST-
+  // adjusted local clock, not part of "where" — so nudging it alone (the
+  // note right below this field exists for exactly that case) used to drop
+  // the place name for a location that never actually changed.
+  for (const id of [fields.lat, fields.lon]) {
     $(id).addEventListener('input', () => { select.value = 'custom'; });
   }
 }
