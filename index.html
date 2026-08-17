@@ -24,6 +24,14 @@
         ? modeOverride === 'mobile'
         : window.matchMedia('(max-width: 760px), (pointer: coarse)').matches;
       document.documentElement.dataset.mode = wantsMobile ? 'mobile' : 'desktop';
+
+      // Chart is the tab marked active in the markup below. Restoring any
+      // other tab here, before that markup paints, avoids a flash back to
+      // Chart when app.js swaps the classes over a moment later.
+      var savedTab = localStorage.getItem('astropitch.activeTab');
+      if (['placements', 'aspects', 'overlay', 'sound'].indexOf(savedTab) !== -1) {
+        document.documentElement.dataset.activeTab = savedTab;
+      }
     } catch { /* The default desktop layout still works when storage is unavailable. */ }
   </script>
   <link rel="stylesheet" href="src/styles.css">

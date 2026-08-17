@@ -747,6 +747,32 @@ html[data-mode="mobile"] .tab { padding-top: 1.1rem; padding-bottom: 1.1rem; }
 
 .tabpanel.is-active { display: block; }
 
+/* The inline bootstrap script in index.html's <head> sets data-active-tab
+   from localStorage before first paint, so a refresh restores the
+   last-viewed tab without a flash back to Chart — the HTML default, and
+   the fallback if storage or JS is unavailable. wireTabs() keeps this
+   attribute and the is-active classes above in sync from then on. */
+html[data-active-tab]:not([data-active-tab="chart"]) #tab-chart {
+  background: transparent;
+  color: var(--graphite);
+}
+html[data-active-tab]:not([data-active-tab="chart"]) #panel-chart {
+  display: none;
+}
+html[data-active-tab="placements"] #tab-placements,
+html[data-active-tab="aspects"] #tab-aspects,
+html[data-active-tab="overlay"] #tab-overlay,
+html[data-active-tab="sound"] #tab-sound {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+html[data-active-tab="placements"] #panel-placements,
+html[data-active-tab="aspects"] #panel-aspects,
+html[data-active-tab="overlay"] #panel-overlay,
+html[data-active-tab="sound"] #panel-sound {
+  display: block;
+}
+
 .tabpanel > *:not(.table-wrap) { margin-left: 1rem; margin-right: 1rem; }
 
 /* Drag handle for the mobile bottom sheet — hidden entirely on desktop,

@@ -85,6 +85,8 @@ const TUNING_KEY = 'astropitch.tuning.v1';
 const DEFAULT_TUNING = { refA: 432, temperament: 'equal' };
 const AUDIO_KEY = 'astropitch.audio.v1';
 const DEFAULT_VOLUME = 0.75;
+const ACTIVE_TAB_KEY = 'astropitch.activeTab';
+const TABS = ['chart', 'placements', 'aspects', 'overlay', 'sound'];
 
 const SOURCES = ['birth', 'signs', 'designer'];
 
@@ -199,6 +201,15 @@ function readSavedAudioPreferences() {
 
 const savedAudioPreferences = readSavedAudioPreferences();
 
+function readSavedActiveTab() {
+  try {
+    const saved = localStorage.getItem(ACTIVE_TAB_KEY);
+    return TABS.includes(saved) ? saved : 'chart';
+  } catch { return 'chart'; }
+}
+
+const savedActiveTab = readSavedActiveTab();
+
 const savedSource = SOURCES.includes(savedChartConfig?.source) ? savedChartConfig.source : 'birth';
 
 const state = {
@@ -215,7 +226,7 @@ const state = {
   // Which left-panel tab is showing. The wheel and the placements/aspects
   // tables read this to decide whether to merge in the overlay chart — see
   // render(). Matches the tab marked active in the markup at load.
-  activeTab: 'chart',
+  activeTab: savedActiveTab,
   overlaySource: 'sky',
   lockBodies: false,
   angleFocusKey: null,
@@ -718,7 +729,7 @@ function applySource(source) {
 function wireTabs() {
   const tabs = $$('.tab');
 
-  const select = (tab, focus = false) => {
+  const syncTabDOM = (tab) => {
     for (const t of tabs) {
       const on = t === tab;
       t.classList.toggle('is-active', on);
@@ -729,6 +740,14 @@ function wireTabs() {
     for (const panel of $$('.tabpanel')) {
       panel.classList.toggle('is-active', panel.dataset.panel === tab.dataset.tab);
     }
+    // Mirrors the pre-paint bootstrap script in index.html's <head>, which
+    // sets this same attribute from localStorage to avoid a flash back to
+    // Chart before this module has taken over.
+    document.documentElement.dataset.activeTab = tab.dataset.tab;
+  };
+
+  const select = (tab, focus = false) => {
+    syncTabDOM(tab);
     if (focus) tab.focus();
     // A tab picked from the collapsed "peek" sheet would otherwise show
     // nothing — its content is below the fold until the sheet opens further.
@@ -739,9 +758,15 @@ function wireTabs() {
     // not just stop refreshing it, or a stale merge lingers on the wheel.
     if (state.activeTab !== tab.dataset.tab) {
       state.activeTab = tab.dataset.tab;
+      try { localStorage.setItem(ACTIVE_TAB_KEY, state.activeTab); } catch { /* session-only fallback */ }
       render();
     }
   };
+
+  // The markup always marks Chart active by default; reconcile it with
+  // whichever tab was showing at last refresh before anything else wires up.
+  const restoredTab = tabs.find((t) => t.dataset.tab === state.activeTab);
+  if (restoredTab) syncTabDOM(restoredTab);
 
   for (const [i, tab] of tabs.entries()) {
     tab.addEventListener('click', () => select(tab));
