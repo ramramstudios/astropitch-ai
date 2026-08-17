@@ -761,10 +761,14 @@ function wireForms() {
   for (const id of ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset']) {
     $(`#${id}`).addEventListener('input', () => {
       formTouchedSinceCast = true;
+      updateRevertAvailability();
       saveChartConfig();
     });
   }
-  $('#placePreset').addEventListener('change', () => { formTouchedSinceCast = true; });
+  $('#placePreset').addEventListener('change', () => {
+    formTouchedSinceCast = true;
+    updateRevertAvailability();
+  });
 
   $('#nowBtn').addEventListener('click', () => {
     // "The sky right now" means the sky over your place, not wherever Random
@@ -789,6 +793,7 @@ function wireForms() {
     $('#utcOffset').value = utcOffset;
     syncPlacePresetSelect($('#placePreset').value);
     formTouchedSinceCast = false;
+    updateRevertAvailability();
     setSubject(chart, makeChartDescriptor('sky', chart, 'primary'));
     saveChartConfig();
   });
@@ -913,6 +918,7 @@ function castFromBirthForm(kind = 'birth') {
   setSubject(chart, descriptor);
   if (kind === 'birth') captureYourChart(chart, descriptor);
   formTouchedSinceCast = false;
+  updateRevertAvailability();
   saveChartConfig();
 }
 
@@ -935,6 +941,7 @@ function restoreYourChart() {
     if (el && typeof value === 'string') el.value = value;
   }
   formTouchedSinceCast = false;
+  updateRevertAvailability();
   setSubject(state.yourChart, state.yourChartDescriptor);
   saveChartConfig();
 }
@@ -966,10 +973,13 @@ function revertDesignerToYourChart() {
 }
 
 /** Keep the Input submit button's label and the Basic revert button's
- *  disabled state in sync with whether there is a typed chart to go back to. */
+ *  disabled state in sync with whether there is a typed chart to go back to
+ *  and whether the fields still match it — editing lat/lon/date/etc. doesn't
+ *  update the chart until this button is clicked, so once that's true the
+ *  label has to say so instead of implying there's nothing left to do. */
 function updateRevertAvailability() {
   const castBtn = $('#castBtn');
-  if (castBtn) castBtn.textContent = state.yourChart ? 'Your chart' : 'Cast chart';
+  if (castBtn) castBtn.textContent = state.yourChart && !formTouchedSinceCast ? 'Your chart' : 'Cast chart';
   const revertBtn = $('#signsRevertBtn');
   if (revertBtn) revertBtn.disabled = !state.yourChart;
 }
