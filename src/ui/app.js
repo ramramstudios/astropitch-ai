@@ -251,7 +251,7 @@ function boot() {
   wheel = new Wheel($('#wheelHolder'));
   starfield = new Starfield($('#stars'));
 
-  buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 6);
+  buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 'custom');
   buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 10);
   restoreBirthForm();
   // Pure computation from saved strings, no DOM fields touched — whichever
@@ -297,7 +297,16 @@ function boot() {
   performer.onEvent(onPerformerEvent);
   performer.setTempo(120);
 
-  if (state.baseSource === 'birth') castFromBirthForm(state.savedCastKind);
+  if (!savedChartConfig) {
+    // First-ever visit: no localStorage, nothing typed yet — a blank wheel and
+    // blank form, not somebody else's sample birth data pre-filled in. Same
+    // "nothing cast" state the Clear button produces.
+    state.subject = makeEmptyChart();
+    state.subjectDescriptor = { kind: 'cleared' };
+    render();
+    clearReadout();
+    updateRevertAvailability();
+  } else if (state.baseSource === 'birth') castFromBirthForm(state.savedCastKind);
   else {
     const chart = chartFromSelectedSigns();
     const kind = state.savedCastKind === 'random-signs' ? 'random-signs' : 'signs';
