@@ -132,20 +132,21 @@
             </select>
           </label>
 
-          <div class="form-actions">
-            <button type="submit" class="primary">Cast chart</button>
-            <button type="button" class="ghost" id="nowBtn">Sky right now</button>
-            <button type="button" class="ghost" id="randomBtn">Random</button>
+          <div class="seg chart-source-seg" role="group" aria-label="Chart to display">
+            <button type="submit" class="seg-btn is-active" id="castBtn">Cast chart</button>
+            <button type="button" class="seg-btn" id="nowBtn">Sky right now</button>
+            <button type="button" class="seg-btn" id="randomBtn">Random</button>
+            <button type="button" class="seg-btn" id="clearChartBtn">Clear</button>
           </div>
         </form>
 
         <form id="signsForm" class="form is-hidden">
           <div id="signPickers" class="sign-pickers"></div>
-          <div class="form-actions">
-            <button type="submit" class="primary" id="signsRevertBtn">Revert chart</button>
-            <button type="button" class="ghost" id="randomSignsBtn">Random</button>
-            <button type="button" class="ghost" id="signsAllOffBtn">All off</button>
-            <button type="button" class="ghost" id="signsAllOnBtn">All on</button>
+          <div class="seg" role="group" aria-label="Basic chart actions">
+            <button type="submit" class="seg-btn" id="signsRevertBtn">Revert chart</button>
+            <button type="button" class="seg-btn" id="randomSignsBtn">Random</button>
+            <button type="button" class="seg-btn" id="signsAllOffBtn">All off</button>
+            <button type="button" class="seg-btn" id="signsAllOnBtn">All on</button>
           </div>
         </form>
 
@@ -160,11 +161,11 @@
             <small>Rotate planets with the sky</small>
           </label>
           <div id="designerList" class="designer-list"></div>
-          <div class="form-actions">
-            <button type="button" class="primary" id="designerResetBtn">Revert chart</button>
-            <button type="button" class="ghost" id="designerRandomBtn">Random</button>
-            <button type="button" class="ghost" id="designerAllOffBtn">All off</button>
-            <button type="button" class="ghost" id="designerAllOnBtn">All on</button>
+          <div class="seg" role="group" aria-label="Designer chart actions">
+            <button type="button" class="seg-btn" id="designerResetBtn">Revert chart</button>
+            <button type="button" class="seg-btn" id="designerRandomBtn">Random</button>
+            <button type="button" class="seg-btn" id="designerAllOffBtn">All off</button>
+            <button type="button" class="seg-btn" id="designerAllOnBtn">All on</button>
           </div>
         </form>
 

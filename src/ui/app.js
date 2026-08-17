@@ -113,6 +113,27 @@ const savedChartConfig = readSavedChartConfig();
 
 const CAST_KINDS = ['birth', 'sky', 'random', 'signs', 'random-signs'];
 
+/** A valid, chart-shaped nothing — same fields `makeChart` returns, all
+ *  empty. Lets Clear reuse the normal render()/wheel/table pipeline instead
+ *  of every consumer needing its own null-chart special case, and lets
+ *  Designer's `designChart` sit on top of it without crashing. A fresh
+ *  object each call, since nothing here is meant to be shared/mutated. */
+function makeEmptyChart() {
+  return {
+    placements: [],
+    byKey: {},
+    aspects: [],
+    anglePoints: {},
+    angleAspects: [],
+    cusps: null,
+    system: 'whole',
+    balance: { fire: 0, earth: 0, air: 0, water: 0 },
+    modal: { cardinal: 0, fixed: 0, mutable: 0 },
+    meta: {},
+    ascSignIndex: 0,
+  };
+}
+
 function savedSignSelections(raw) {
   const selections = { ...DEFAULT_MAJOR_SIGN_SELECTIONS };
   for (const key of SOUNDING_BODIES) {
@@ -441,8 +462,18 @@ function buildDesignerList() {
 function syncDesignerList(chart) {
   for (const key of DESIGNABLE_BODIES) {
     const ref = designerRows[key];
+    if (!ref) continue;
     const p = chart.byKey[key];
-    if (!ref || !p) continue;
+    // Every real chart has all of BODIES in byKey — this only happens for
+    // the empty chart Clear leaves behind, so show the row as off instead
+    // of leaving it stuck on whatever it last displayed.
+    if (!p) {
+      ref.box.checked = false;
+      ref.row.classList.add('is-off');
+      ref.pos.textContent = '—';
+      ref.pitch.textContent = '—';
+      continue;
+    }
     ref.box.checked = !p.silent;
     ref.row.classList.toggle('is-off', !!p.silent);
     ref.glyph.style.color = ELEMENTS[p.element].color;
@@ -747,10 +778,15 @@ function wireForms() {
     }
     const place = readPlace();
     const chart = chartForNow(place, $('#houseSystem').value);
-    const now = new Date();
+    // The instant itself doesn't care what UTC offset it's labelled with —
+    // chartForNow already computes it in true UTC — so this only changes how
+    // "now" is displayed: in Your chart's timezone rather than always UTC+0,
+    // the way a local clock at that place would actually read right now.
+    const utcOffset = Number(state.yourChartForm?.utcOffset) || 0;
+    const now = new Date(Date.now() + utcOffset * 3600000);
     $('#birthDate').value = now.toISOString().slice(0, 10);
     $('#birthTime').value = now.toISOString().slice(11, 16);
-    $('#utcOffset').value = 0;
+    $('#utcOffset').value = utcOffset;
     syncPlacePresetSelect($('#placePreset').value);
     formTouchedSinceCast = false;
     setSubject(chart, makeChartDescriptor('sky', chart, 'primary'));
@@ -772,6 +808,20 @@ function wireForms() {
     $('#utcOffset').value = place.utc;
     $('#placePreset').value = String(PLACES.indexOf(place));
     castFromBirthForm('random');
+  });
+
+  $('#clearChartBtn').addEventListener('click', () => {
+    // Only the displayed chart empties out — the typed one underneath it
+    // is untouched and still one click away via Your chart. The design
+    // overrides are dropped too, or Designer would resurrect old hand-edits
+    // on top of what's supposed to be nothing.
+    state.subject = makeEmptyChart();
+    state.subjectDescriptor = { kind: 'cleared' };
+    state.design = {};
+    saveDesign();
+    render();
+    clearReadout();
+    saveChartConfig();
   });
 
   $('#randomSignsBtn').addEventListener('click', () => {
@@ -918,10 +968,25 @@ function revertDesignerToYourChart() {
 /** Keep the Input submit button's label and the Basic revert button's
  *  disabled state in sync with whether there is a typed chart to go back to. */
 function updateRevertAvailability() {
-  const castBtn = $('#birthForm button[type="submit"]');
+  const castBtn = $('#castBtn');
   if (castBtn) castBtn.textContent = state.yourChart ? 'Your chart' : 'Cast chart';
   const revertBtn = $('#signsRevertBtn');
   if (revertBtn) revertBtn.disabled = !state.yourChart;
+}
+
+/** Highlight whichever of Your chart / Sky / Random / Clear produced what's
+ *  currently on the wheel, the same "one dark segment" language as the
+ *  Input/Basic/Designer row above it. */
+function updateChartSourceButtons() {
+  const active = {
+    birth: '#castBtn',
+    sky: '#nowBtn',
+    random: '#randomBtn',
+    cleared: '#clearChartBtn',
+  }[state.subjectDescriptor?.kind];
+  for (const btn of $$('.chart-source-seg .seg-btn')) {
+    btn.classList.toggle('is-active', $(active) === btn);
+  }
 }
 
 /** Rebuild the remembered typed chart from what was saved last session,
@@ -1705,6 +1770,7 @@ function descriptorName(kind) {
 
 function descriptorDetails(descriptor, { compact = false } = {}) {
   if (!descriptor) return 'Chart';
+  if (descriptor.kind === 'cleared') return 'No chart';
   if (descriptor.kind === 'signs' || descriptor.kind === 'random-signs') {
     const name = descriptorName(descriptor.kind);
     return compact ? name : `${name} · ${descriptor.placements} placements`;
@@ -1718,7 +1784,7 @@ function descriptorDetails(descriptor, { compact = false } = {}) {
 function descriptorTitle(descriptor) {
   if (!descriptor) return 'Chart';
   const details = descriptorDetails(descriptor);
-  if (descriptor.kind === 'signs' || descriptor.kind === 'random-signs') return details;
+  if (descriptor.kind === 'cleared' || descriptor.kind === 'signs' || descriptor.kind === 'random-signs') return details;
   return `${details} · ${descriptor.coordinates} · ${descriptor.houseSystem} houses`;
 }
 
@@ -1764,6 +1830,7 @@ function render() {
     : subject;
 
   renderChartLabel();
+  updateChartSourceButtons();
   performer.stop();
   performer.setChart(state.chart);
   performer.setTuning(state.tuning);

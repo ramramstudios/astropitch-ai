@@ -848,6 +848,25 @@ html[data-mode="mobile"] .tabpanel { overflow-y: auto; }
 .seg-btn:last-child { border-right: 0; }
 .seg-btn.is-active { background: var(--ink); color: var(--on-ink); }
 
+/* Same reasoning as button.primary/.ghost's disabled state above — without
+   this, a disabled seg-btn (e.g. Basic's Revert with nothing to revert to)
+   looks exactly as clickable as an enabled one. */
+.seg-btn:disabled {
+  color: var(--graphite);
+  cursor: not-allowed;
+}
+
+/* The action rows inside the three chart-source forms run four equal-width
+   segments in the same space three used to have (or that a two-word label
+   like "Revert chart" used to get on its own) — tighter than the Input/Basic
+   Designer picker and the Overlay toggle above them, which only ever hold
+   one short word per segment and can keep the room. */
+.form .seg-btn {
+  padding: 0.62rem 0.3rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+}
+
 html[data-mode="mobile"] .seg-btn { padding-top: 1.05rem; padding-bottom: 1.05rem; }
 
 
