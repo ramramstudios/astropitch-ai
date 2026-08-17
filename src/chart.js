@@ -6,6 +6,14 @@ import {
 import { computeSky, centuriesSinceJ2000, julianDayFromBirth, deltaT, isRetrograde } from './ephemeris.js';
 import { frequencyFor, pitchLabel, centsOffset } from './audio/tuning.js';
 
+// How much each body counts toward the element/modality balance: 4 for the
+// Big Three (Sun, Moon, Ascendant), 2 for the traditional planets, 1 for the
+// outer/generational ones — weight falls off with how personal the body is.
+const BALANCE_WEIGHT = {
+  sun: 4, moon: 4, asc: 4,
+  mercury: 2, venus: 2, mars: 2, jupiter: 2, saturn: 2,
+};
+
 /**
  * Opposite directions turn a trine into a sextile (and vice versa). Keep their
  * tolerance symmetric so a valid MC–Mercury trine does not disappear merely
@@ -103,7 +111,7 @@ export function makeChart(positions, { cusps = null, system = 'whole', retrograd
   const modal = { cardinal: 0, fixed: 0, mutable: 0 };
   for (const p of placements) {
     if (p.silent) continue;
-    const weight = p.key === 'sun' || p.key === 'moon' || p.key === 'asc' ? 2 : 1;
+    const weight = BALANCE_WEIGHT[p.key] ?? 1;
     balance[p.element] += weight;
     modal[p.modality] += weight;
   }
