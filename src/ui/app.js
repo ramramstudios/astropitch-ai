@@ -163,6 +163,10 @@ const state = {
     ? (savedChartConfig?.baseSource === 'signs' ? 'signs' : 'birth')
     : savedSource,
   design: readSavedDesign(),
+  // Which left-panel tab is showing. The wheel and the placements/aspects
+  // tables read this to decide whether to merge in the overlay chart — see
+  // render(). Matches the tab marked active in the markup at load.
+  activeTab: 'chart',
   overlaySource: 'sky',
   lockBodies: false,
   angleFocusKey: null,
@@ -633,6 +637,14 @@ function wireTabs() {
     // A tab picked from the collapsed "peek" sheet would otherwise show
     // nothing — its content is below the fold until the sheet opens further.
     expandSheetIfPeeking();
+
+    // The overlay chart is only ever merged into the wheel while its own tab
+    // is showing — see render(). Leaving the tab has to drop it immediately,
+    // not just stop refreshing it, or a stale merge lingers on the wheel.
+    if (state.activeTab !== tab.dataset.tab) {
+      state.activeTab = tab.dataset.tab;
+      render();
+    }
   };
 
   for (const [i, tab] of tabs.entries()) {
@@ -656,12 +668,7 @@ function wireForms() {
       saveChartConfig();
       // Entering or leaving the designer changes the chart on the wheel without
       // anything being cast, so it has to redraw now rather than on submit.
-      if (was !== state.source && (was === 'designer' || state.source === 'designer')) {
-        // Synastry puts two of everything on the wheel and cuts the density by
-        // contact; designing is one chart at a time.
-        if (state.source === 'designer' && state.partner) setPartner(null);
-        else render();
-      }
+      if (was !== state.source && (was === 'designer' || state.source === 'designer')) render();
     });
   }
 
@@ -1545,12 +1552,12 @@ function renderChartLabel() {
 
   let text = descriptorDetails(subject);
   let title = descriptorTitle(subject);
-  if (state.source === 'designer') {
-    text = `Designer · ${descriptorDetails(subject, { compact: true })}`;
-    title = `Designer chart based on ${descriptorTitle(subject)}`;
-  } else if (state.partner && partner) {
+  if (state.showingOverlay && partner) {
     text = `${descriptorDetails(subject, { compact: true })} × ${descriptorDetails(partner, { compact: true })}`;
     title = `${descriptorTitle(subject)} × ${descriptorTitle(partner)}`;
+  } else if (state.source === 'designer') {
+    text = `Designer · ${descriptorDetails(subject, { compact: true })}`;
+    title = `Designer chart based on ${descriptorTitle(subject)}`;
   }
 
   label.textContent = text;
@@ -1561,14 +1568,20 @@ function renderChartLabel() {
 /**
  * One chart or two. `makeSynastry` returns a chart-shaped object, so
  * everything downstream — the wheel, the tables, the performer — reads it
- * without knowing which it has.
+ * without knowing which it has. But it re-keys every placement with an "a:"/
+ * "b:" prefix (see makeSynastry in chart.js), which the designer's dragging
+ * and its placements list both address by the subject's plain key — so the
+ * merge is only made while the Overlay tab is the one actually showing it.
+ * Every other tab, including the designer's own, always reads the subject
+ * alone, however many charts have been overlaid.
  */
 function render() {
   if (!state.subject) return;
   const designing = state.source === 'designer';
   // A designed chart is chart-shaped, so it drops into the same pipeline.
   const subject = designing ? designChart(state.subject, state.design) : state.subject;
-  state.chart = state.partner && !designing
+  state.showingOverlay = state.activeTab === 'overlay' && !!state.partner;
+  state.chart = state.showingOverlay
     ? makeSynastry(subject, state.partner)
     : subject;
 
@@ -1576,14 +1589,14 @@ function render() {
   performer.stop();
   performer.setChart(state.chart);
   performer.setTuning(state.tuning);
-  wheel.setDesignerMode(designing);
+  wheel.setDesignerMode(designing && !state.showingOverlay);
   wheel.render(state.chart);
   wheel.resizeScope();
   renderPlacements();
   renderAspects();
   renderBalance();
   renderOverlay();
-  if (designing) syncDesignerList(state.chart);
+  if (designing && !state.showingOverlay) syncDesignerList(state.chart);
 }
 
 function renderPlacements() {
@@ -1755,18 +1768,7 @@ function renderOverlay() {
   const holder = $('#verdict');
   const tbody = $('#contactsTable tbody');
   const meta = state.chart?.meta;
-  const designing = state.source === 'designer';
   $('#clearOverlayBtn').disabled = !state.partner;
-  for (const btn of $$('#skyForm button, #partnerForm button, #bRandomBtn')) btn.disabled = designing;
-
-  if (designing) {
-    const hint = document.createElement('p');
-    hint.className = 'note';
-    hint.textContent = 'The designer works on one chart at a time. Leave it to overlay again.';
-    holder.replaceChildren(hint);
-    tbody.replaceChildren();
-    return;
-  }
 
   if (!meta?.synastry) {
     const hint = document.createElement('p');
