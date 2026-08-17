@@ -2,9 +2,9 @@
  * The zodiac is a chromatic octave: the centre of Aries is A, and every 30
  * degrees is one semitone. That makes the mapping continuous, so a planet at
  * 14 degrees 22 minutes of Aries is not "an A" but an A just below centre.
- * Equal
- * temperament preserves that continuity; the historical temperaments quantise
- * to the sign, which is a different and audible claim about what a sign is.
+ * Equal temperament preserves that continuity; the historical temperaments
+ * quantise to the sign, which is a different and audible claim about what a
+ * sign is.
  */
 
 export const TEMPERAMENTS = {
