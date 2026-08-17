@@ -180,11 +180,25 @@ const state = {
   savedCastKind: CAST_KINDS.includes(savedChartConfig?.castKind) ? savedChartConfig.castKind : 'birth',
   subjectDescriptor: null,
   partnerDescriptor: null,
+  // The chart last cast by hand in Input, kept separately from `subject` so
+  // Sky/Random can take over the wheel without losing it — see
+  // captureYourChart, restoreYourChart, and the Basic/Designer revert
+  // buttons, which all point back at this rather than at `subject`.
+  yourChart: null,
+  yourChartDescriptor: null,
+  yourChartForm: null,
 };
 
 const performer = new Performer(engine);
 let wheel;
 let starfield;
+// True once the user has edited a birth-form field by hand since the last
+// cast. Distinguishes "submit is asking to go back to Your chart" (fields
+// are exactly whatever Sky/Random left them, untouched) from "submit is
+// asking to cast what I just typed" (fields have changed since) — both are
+// the same click on the same button, so this is the only way to tell them
+// apart. Reset on every cast and on restoreYourChart, set by direct edits.
+let formTouchedSinceCast = false;
 let muted = false;
 let lastTransportMode = 'bloom';
 let angleDrag = null;
@@ -219,6 +233,10 @@ function boot() {
   buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 6);
   buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 10);
   restoreBirthForm();
+  // Pure computation from saved strings, no DOM fields touched — whichever
+  // chart actually belongs on screen (typed, sky, or random) still comes from
+  // the cast below, unaffected by this.
+  restoreYourChartMemory();
   buildSignPickers();
   buildDesignerList();
   buildTemperamentOptions();
@@ -514,12 +532,7 @@ function wireDesigner() {
     state.lockBodies = lockBodies.checked;
     try { localStorage.setItem(LOCK_BODIES_KEY, state.lockBodies ? '1' : '0'); } catch { /* session-only preference */ }
   });
-  $('#designerResetBtn').addEventListener('click', () => {
-    state.design = {};
-    saveDesign();
-    render();
-    clearReadout();
-  });
+  $('#designerResetBtn').addEventListener('click', revertDesignerToYourChart);
 
   $('#designerRandomBtn').addEventListener('click', () => {
     for (const key of DESIGNABLE_BODIES) {
@@ -674,6 +687,17 @@ function wireForms() {
 
   $('#birthForm').addEventListener('submit', (e) => {
     e.preventDefault();
+    // Once a typed chart exists, this button doubles as the way back to it —
+    // see captureYourChart. Sky/Random overwrite the visible fields, so if
+    // they're what's showing, submitting has to restore the remembered
+    // fields rather than re-cast whatever is currently sitting in them —
+    // but only when nothing's actually been typed since, or a fresh edit
+    // made right after Sky/Random (pick a new place, then hit cast) would
+    // get silently thrown away in favor of the old memory.
+    if (state.yourChart && state.subjectDescriptor?.kind !== 'birth' && !formTouchedSinceCast) {
+      restoreYourChart();
+      return;
+    }
     castFromBirthForm();
   });
 
@@ -684,26 +708,51 @@ function wireForms() {
 
   $('#signsForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    castSelectedSigns('signs');
+    // Every checkbox/select already casts on change, so this button doing the
+    // same thing again is a no-op — repurposed as the way back to whatever
+    // was last typed into Input, same as the Designer's revert.
+    revertBasicToYourChart();
   });
 
   $('#houseSystem').addEventListener('change', () => {
-    if (state.source === 'birth') castFromBirthForm();
-    else saveChartConfig();
+    // Keep whatever's currently showing (typed/sky/random) rather than always
+    // relabelling it 'birth' — otherwise tweaking the house system while
+    // viewing Sky or Random would quietly overwrite the remembered typed
+    // chart with whatever happens to be sitting in the form.
+    if (state.source === 'birth') {
+      const kind = ['birth', 'sky', 'random'].includes(state.subjectDescriptor?.kind)
+        ? state.subjectDescriptor.kind
+        : 'birth';
+      castFromBirthForm(kind);
+    } else saveChartConfig();
   });
 
   for (const id of ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset']) {
-    $(`#${id}`).addEventListener('input', saveChartConfig);
+    $(`#${id}`).addEventListener('input', () => {
+      formTouchedSinceCast = true;
+      saveChartConfig();
+    });
   }
+  $('#placePreset').addEventListener('change', () => { formTouchedSinceCast = true; });
 
   $('#nowBtn').addEventListener('click', () => {
+    // "The sky right now" means the sky over your place, not wherever Random
+    // last landed — anchor to Your chart's coordinates when one exists,
+    // overwriting whatever Sky/Random left in the fields, rather than reading
+    // them as-is the way the date/time fields do.
+    if (state.yourChartForm) {
+      $('#lat').value = state.yourChartForm.lat;
+      $('#lon').value = state.yourChartForm.lon;
+      $('#placePreset').value = state.yourChartForm.placePreset ?? 'custom';
+    }
     const place = readPlace();
     const chart = chartForNow(place, $('#houseSystem').value);
     const now = new Date();
     $('#birthDate').value = now.toISOString().slice(0, 10);
     $('#birthTime').value = now.toISOString().slice(11, 16);
     $('#utcOffset').value = 0;
-    $('#placePreset').value = 'custom';
+    syncPlacePresetSelect($('#placePreset').value);
+    formTouchedSinceCast = false;
     setSubject(chart, makeChartDescriptor('sky', chart, 'primary'));
     saveChartConfig();
   });
@@ -761,20 +810,27 @@ function birthFormValues() {
   );
 }
 
+/** Show the known place name instead of "Custom coordinates" whenever the
+ *  form's current lat/lon match one — a preset only wins over another entry
+ *  with the same coordinates when it's the `preferredIndex` passed in, so a
+ *  restored or already-selected preset doesn't silently swap for an earlier
+ *  list entry that happens to share its coordinates. */
+function syncPlacePresetSelect(preferredIndex) {
+  const lat = Number($('#lat').value);
+  const lon = Number($('#lon').value);
+  const matches = (p) => p && p.lat === lat && p.lon === lon;
+  const preferred = PLACES[Number(preferredIndex)];
+  const index = matches(preferred) ? Number(preferredIndex) : PLACES.findIndex(matches);
+  $('#placePreset').value = index >= 0 ? String(index) : 'custom';
+}
+
 function restoreBirthForm() {
   const values = state.savedBirthForm;
   if (!values || typeof values !== 'object') return;
   for (const id of ['birthDate', 'birthTime', 'lat', 'lon', 'utcOffset', 'houseSystem']) {
     if (typeof values[id] === 'string' && values[id] !== '') $(`#${id}`).value = values[id];
   }
-  // A saved preset only wins if it still matches the coordinates it was saved
-  // alongside — otherwise a stale index (or one from a place list that has
-  // since changed) would silently relabel whatever lat/lon actually restored.
-  const preset = PLACES[Number(values.placePreset)];
-  const matches = preset
-    && preset.lat === Number($('#lat').value)
-    && preset.lon === Number($('#lon').value);
-  $('#placePreset').value = matches ? values.placePreset : 'custom';
+  syncPlacePresetSelect(values.placePreset);
 }
 
 function saveChartConfig() {
@@ -786,6 +842,7 @@ function saveChartConfig() {
       signSelections: state.signSelections,
       signEnabled: state.signEnabled,
       birthForm: birthFormValues(),
+      yourChartForm: state.yourChartForm,
     }));
   } catch { /* private mode and disabled storage still receive the first-load chord */ }
 }
@@ -802,8 +859,109 @@ function castFromBirthForm(kind = 'birth') {
     utcOffset: Number($('#utcOffset').value) || 0,
   };
   const chart = chartFromBirth(birth, readPlace(), $('#houseSystem').value);
-  setSubject(chart, makeChartDescriptor(kind, chart, 'primary'));
+  const descriptor = makeChartDescriptor(kind, chart, 'primary');
+  setSubject(chart, descriptor);
+  if (kind === 'birth') captureYourChart(chart, descriptor);
+  formTouchedSinceCast = false;
   saveChartConfig();
+}
+
+/** Remember the chart just typed into Input, independent of `subject` —
+ *  Sky/Random are free to take over the wheel without losing it. */
+function captureYourChart(chart, descriptor) {
+  state.yourChart = chart;
+  state.yourChartDescriptor = descriptor;
+  state.yourChartForm = birthFormValues();
+  updateRevertAvailability();
+}
+
+/** Bring the typed chart back: restores the form fields it was cast from
+ *  (Sky/Random overwrite them) and re-shows the exact chart, not a re-cast
+ *  of whatever the fields currently hold. */
+function restoreYourChart() {
+  if (!state.yourChart || !state.yourChartForm) return;
+  for (const [id, value] of Object.entries(state.yourChartForm)) {
+    const el = $(`#${id}`);
+    if (el && typeof value === 'string') el.value = value;
+  }
+  formTouchedSinceCast = false;
+  setSubject(state.yourChart, state.yourChartDescriptor);
+  saveChartConfig();
+}
+
+/** Basic works sign-by-sign, so it can only approximate the typed chart's
+ *  degrees — but its checkboxes/selects can at least start from the same
+ *  signs and on/off state, which is what "revert" means for this tab. */
+function revertBasicToYourChart() {
+  if (!state.yourChart) return;
+  syncSignSelectionsFromChart(state.yourChart);
+  castSelectedSigns('signs');
+}
+
+/** Designer sits directly on `subject`, so unlike Basic it can revert to the
+ *  typed chart at full precision — snap back to it, then drop the hand edits
+ *  on top of it. Falls back to just dropping the hand edits when nothing was
+ *  ever typed, which is what this button did before it could do the former. */
+function revertDesignerToYourChart() {
+  if (state.yourChart) {
+    state.subject = state.yourChart;
+    state.subjectDescriptor = state.yourChartDescriptor;
+    state.baseSource = 'birth';
+  }
+  state.design = {};
+  saveDesign();
+  saveChartConfig();
+  render();
+  clearReadout();
+}
+
+/** Keep the Input submit button's label and the Basic revert button's
+ *  disabled state in sync with whether there is a typed chart to go back to. */
+function updateRevertAvailability() {
+  const castBtn = $('#birthForm button[type="submit"]');
+  if (castBtn) castBtn.textContent = state.yourChart ? 'Your chart' : 'Cast chart';
+  const revertBtn = $('#signsRevertBtn');
+  if (revertBtn) revertBtn.disabled = !state.yourChart;
+}
+
+/** Rebuild the remembered typed chart from what was saved last session,
+ *  without touching the visible form — whichever chart is actually meant to
+ *  be showing (typed, sky, or random) is applied right after this, by the
+ *  same restoreBirthForm()+cast path that already runs at boot. */
+function restoreYourChartMemory() {
+  const saved = savedChartConfig?.yourChartForm;
+  if (!saved || typeof saved !== 'object' || !saved.birthDate || !saved.birthTime) return;
+  const [year, month, day] = String(saved.birthDate).split('-').map(Number);
+  const [hour, minute] = String(saved.birthTime).split(':').map(Number);
+  if (!year || !month || !day) return;
+
+  const lat = Number(saved.lat) || 0;
+  const lon = Number(saved.lon) || 0;
+  const utcOffset = Number(saved.utcOffset) || 0;
+  const houseSystem = saved.houseSystem || 'whole';
+  const chart = chartFromBirth(
+    { year, month, day, hour: hour || 0, minute: minute || 0, utcOffset },
+    { latitude: lat, longitude: lon },
+    houseSystem
+  );
+  const selectedPlace = PLACES[Number(saved.placePreset)];
+  const place = selectedPlace?.name ?? formatCoordinates(lat, lon);
+  const birth = chart?.meta?.birth;
+  const descriptor = {
+    kind: 'birth',
+    date: birth ? formatChartDate(birth) : null,
+    time: birth ? formatChartTime(birth) : null,
+    utcOffset: birth?.utcOffset ?? utcOffset,
+    place,
+    coordinates: formatCoordinates(lat, lon),
+    houseSystem: chart?.meta?.requestedSystem ?? houseSystem,
+    placements: chart?.placements.filter((p) => p.key !== 'mc').length ?? 0,
+  };
+
+  state.yourChart = chart;
+  state.yourChartDescriptor = descriptor;
+  state.yourChartForm = saved;
+  updateRevertAvailability();
 }
 
 /** Move the birth-date input without letting JavaScript's local timezone shift it. */

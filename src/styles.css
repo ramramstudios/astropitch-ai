@@ -1041,6 +1041,18 @@ button.primary:hover { background: #333; }
 button.ghost { margin-left: -1px; }
 button.ghost:hover { background: var(--hover); }
 
+/* Nothing else here marks a disabled state, so a disabled primary/ghost
+   button reads as fully clickable and doing nothing looks like a bug. */
+button.primary:disabled,
+button.ghost:disabled {
+  border-color: var(--hairline);
+  color: var(--graphite);
+  background: transparent;
+  cursor: not-allowed;
+}
+button.primary:disabled:hover,
+button.ghost:disabled:hover { background: transparent; }
+
 html[data-mode="mobile"] button.primary,
 html[data-mode="mobile"] button.ghost { min-height: 44px; padding-top: 0.75rem; padding-bottom: 0.75rem; }
 
