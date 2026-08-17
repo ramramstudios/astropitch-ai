@@ -1462,7 +1462,27 @@ function wireKeyboard() {
 function setSubject(chart, descriptor = null) {
   state.subject = chart;
   state.subjectDescriptor = descriptor ?? makeChartDescriptor('birth', chart, 'primary');
+  // A chart cast from the birth form is the one true position for every body,
+  // so Basic and the Designer should both start from it rather than from
+  // whatever the Basic pickers last happened to hold. Basic's own casts
+  // already are that state, so they skip back over it.
+  if (!['signs', 'random-signs'].includes(state.subjectDescriptor.kind)) {
+    syncSignSelectionsFromChart(chart);
+  }
   render();
+}
+
+/** Point the Basic tab's per-body sign/on-off pickers at a cast chart, so
+ *  switching to Basic (or Designer, which sits on top of the same subject)
+ *  picks up exactly what is already sounding instead of stale selections. */
+function syncSignSelectionsFromChart(chart) {
+  for (const key of SOUNDING_BODIES) {
+    const p = chart.byKey[key];
+    if (!p) continue;
+    state.signSelections[key] = p.signIndex;
+    state.signEnabled[key] = !p.silent;
+  }
+  buildSignPickers();
 }
 
 function setPartner(chart, descriptor = null) {
