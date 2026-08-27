@@ -17,8 +17,12 @@ Thin host for the static web app. Audio runs entirely in JS.
 
 Native → JS: `window.__astropitchNative.dispatch({ type: 'background'|'foreground'|'interrupt' })`
 
-JS → native: `AstroPitchShell.setPlaying(boolean)` only — no other native APIs
-are exposed to page content.
+JS → native:
+- `AstroPitchShell.setPlaying(boolean)` — mediaPlayback FGS
+- `AstroPitchShell.ota(json)` — apply / rollback web bundles
+
+No other native APIs are exposed to page content. OTA requires the `INTERNET`
+permission (declared in the manifest) and HTTPS hosts (`usesCleartextTraffic=false`).
 
 ## Store note
 

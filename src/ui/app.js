@@ -11,6 +11,7 @@ import { Performer } from '../audio/performer.js';
 import { MODES, DEFAULT_MODE_ID, modeButtonId } from '../audio/modes.js';
 import { AudioLifecycle } from '../audio/lifecycle.js';
 import { attachNativeBridge } from '../audio/native-bridge.js';
+import { startOtaCheck } from '../ota/client.js';
 import { Wheel } from './wheel.js';
 import { Starfield } from './starfield.js';
 
@@ -344,6 +345,8 @@ function boot() {
   wireLayoutMode();
   wireKeyboard();
   wireAudioLifecycle();
+  // Phase 5: native shells only — PWA keeps the service worker as sole owner.
+  startOtaCheck({ window }).catch(() => { /* offline / no updateUrl is fine */ });
   applySource(state.source);
 
   window.addEventListener('resize', onResize);
@@ -1413,6 +1416,7 @@ function setActiveTransportMode(mode = null) {
  *
  * Phase 4 native shells post the same events through attachNativeBridge so
  * iOS AVAudioSession interruptions and Android process lifecycle share one path.
+ * Phase 5 OTA is started separately via startOtaCheck (native shells only).
  */
 function wireAudioLifecycle() {
   lifecycle.onEvent((event) => {

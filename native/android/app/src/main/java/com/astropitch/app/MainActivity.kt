@@ -15,15 +15,17 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
+import java.io.File
 
 /**
  * Thin System WebView host. Audio stays in JS (`src/audio/`).
- * This activity only configures playback flags and forwards lifecycle events
- * into the shared bridge (`window.__astropitchNative.dispatch`).
+ * This activity only configures playback flags, forwards lifecycle events,
+ * and applies Phase 5 OTA web-bundle swaps.
  *
- * The only JavascriptInterface method is [AstroPitchJsBridge.setPlaying] —
- * a boolean notify for the mediaPlayback foreground service. It does not
- * expose Android APIs to page content (Play's dynamic-code concern).
+ * JavascriptInterface surface:
+ *   - [AstroPitchJsBridge.setPlaying] — mediaPlayback FGS notify
+ *   - [AstroPitchJsBridge.ota] — apply / rollback web bundles
+ * Neither exposes arbitrary Android APIs to page content.
  */
 class MainActivity : ComponentActivity() {
   private lateinit var webView: WebView
@@ -71,7 +73,7 @@ class MainActivity : ComponentActivity() {
     }
 
     webView.addJavascriptInterface(AstroPitchJsBridge(), "AstroPitchShell")
-    webView.loadUrl("file:///android_asset/www/index.html")
+    loadActiveApp()
   }
 
   override fun onPause() {
@@ -91,6 +93,25 @@ class MainActivity : ComponentActivity() {
     }
     webView.destroy()
     super.onDestroy()
+  }
+
+  private fun loadActiveApp() {
+    val ota = OtaUpdater.activeWwwDirectory(this)
+    if (ota != null) {
+      webView.loadUrl(File(ota, "index.html").toURI().toString())
+    } else {
+      webView.loadUrl(EMBEDDED_URL)
+    }
+  }
+
+  private fun reloadFromOta(dir: File?) {
+    runOnUiThread {
+      if (dir != null && File(dir, "index.html").isFile) {
+        webView.loadUrl(File(dir, "index.html").toURI().toString())
+      } else {
+        webView.loadUrl(EMBEDDED_URL)
+      }
+    }
   }
 
   private fun postNativeEvent(type: String) {
@@ -152,11 +173,18 @@ class MainActivity : ComponentActivity() {
     fun setPlaying(playing: Boolean) {
       runOnUiThread { updatePlaybackService(playing) }
     }
+
+    @JavascriptInterface
+    fun ota(raw: String) {
+      OtaUpdater.handleMessage(this@MainActivity, raw) { dir -> reloadFromOta(dir) }
+    }
   }
 
   companion object {
+    private const val EMBEDDED_URL = "file:///android_asset/www/index.html"
     private const val BOOTSTRAP_JS =
       "window.__astropitchNativeShell = true;" +
+        "window.__astropitchShellVersion = ${OtaUpdater.SHELL_VERSION};" +
         "window.__astropitchNative = window.__astropitchNative || {};"
   }
 }

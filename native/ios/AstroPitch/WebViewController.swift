@@ -3,11 +3,12 @@ import WebKit
 import AVFoundation
 
 /// Thin WKWebView host. Audio stays in JS; this controller only loads the
-/// local bundle, marks the page as a native shell, and forwards lifecycle
-/// events into `window.__astropitchNative.dispatch(...)`.
+/// local (embedded or OTA) bundle, marks the page as a native shell, and
+/// forwards lifecycle / OTA messages through the shared bridge.
 final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate {
   private var webView: WKWebView!
   private var interruptionObserver: NSObjectProtocol?
+  private var embeddedWww: URL?
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -20,13 +21,14 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
     let bootstrap = WKUserScript(
       source: """
         window.__astropitchNativeShell = true;
+        window.__astropitchShellVersion = \(OtaUpdater.shellVersion);
         window.__astropitchNative = window.__astropitchNative || {};
         """,
       injectionTime: .atDocumentStart,
       forMainFrameOnly: true
     )
     config.userContentController.addUserScript(bootstrap)
-    // JS → native: playing state only. Does not expose AVFoundation to the page.
+    // JS → native: playing + OTA. Does not expose AVFoundation / filesystem APIs.
     config.userContentController.add(self, name: "astropitch")
 
     let webView = WKWebView(frame: view.bounds, configuration: config)
@@ -38,7 +40,8 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
     view.addSubview(webView)
     self.webView = webView
 
-    loadBundledApp()
+    embeddedWww = resolveEmbeddedWww()
+    loadActiveApp()
     observeAudioInterruptions()
   }
 
@@ -49,14 +52,24 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
     webView?.configuration.userContentController.removeScriptMessageHandler(forName: "astropitch")
   }
 
-  private func loadBundledApp() {
-    guard let www = Bundle.main.url(forResource: "www/index", withExtension: "html")
-            ?? Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "www")
-    else {
+  private func resolveEmbeddedWww() -> URL? {
+    if let www = Bundle.main.url(forResource: "www/index", withExtension: "html") {
+      return www.deletingLastPathComponent()
+    }
+    if let www = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "www") {
+      return www.deletingLastPathComponent()
+    }
+    return nil
+  }
+
+  private func loadActiveApp() {
+    guard let embedded = embeddedWww else {
       NSLog("AstroPitch: www/index.html missing — run native/sync-www.sh")
       return
     }
-    webView.loadFileURL(www, allowingReadAccessTo: www.deletingLastPathComponent())
+    let www = OtaUpdater.activeWwwDirectory(embedded: embedded)
+    let index = www.appendingPathComponent("index.html")
+    webView.loadFileURL(index, allowingReadAccessTo: www)
   }
 
   private func observeAudioInterruptions() {
@@ -96,9 +109,14 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
     didReceive message: WKScriptMessage
   ) {
     guard message.name == "astropitch" else { return }
-    // Playing-state ack only; reserved for future Now Playing / session work.
-    // The ~27 s WKWebView freeze still applies — Phase 2 rebuild-on-resume
-    // is the real answer for background survival.
+    if let dict = message.body as? [String: Any], dict["ota"] != nil {
+      OtaUpdater.handleMessage(message.body, embedded: embeddedWww) { [weak self] dir in
+        let index = dir.appendingPathComponent("index.html")
+        self?.webView.loadFileURL(index, allowingReadAccessTo: dir)
+      }
+      return
+    }
+    // Playing-state ack; reserved for future Now Playing / session work.
     _ = message.body
   }
 

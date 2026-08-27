@@ -1,10 +1,11 @@
 /**
- * Shared JS ↔ native shell bridge for Phase 4.
+ * Shared JS ↔ native shell bridge for Phase 4 + Phase 5 OTA.
  *
  * Both shells (iOS WKWebView, Android System WebView) stay thin — all audio
  * still runs in this JS engine. Native code only:
  *   1. Configures the platform audio session / WebView playback flags
  *   2. Posts lifecycle events into this module
+ *   3. Downloads / verifies / swaps versioned web bundles (OTA)
  *
  * Event shape (identical on both platforms):
  *   { type: 'background' | 'foreground' | 'interrupt' }
@@ -12,11 +13,17 @@
  * Native injects events by evaluating:
  *   window.__astropitchNative.dispatch({ type: 'background' })
  *
- * Optional JS → native (playing state only — never exposes native APIs):
- *   iOS:     window.webkit.messageHandlers.astropitch.postMessage({ playing: true })
+ * Optional JS → native (never exposes device APIs to the page):
+ *   iOS:     window.webkit.messageHandlers.astropitch.postMessage(...)
  *   Android: window.AstroPitchShell.setPlaying(true)
+ *            window.AstroPitchShell.ota(JSON.stringify(msg))
  *
- * See research/audio-implementation-plan.md Phase 4.
+ * Message shapes:
+ *   { playing: boolean }
+ *   { ota: 'apply', manifest: object }
+ *   { ota: 'rollback' }
+ *
+ * See research/audio-implementation-plan.md Phases 4–5.
  */
 
 export const NATIVE_EVENT = 'astropitch:native';
@@ -80,18 +87,48 @@ export function dispatchNativeToLifecycle(lifecycle, raw) {
  * No-ops in the browser PWA.
  */
 export function notifyNativePlaying(playing, win = typeof window !== 'undefined' ? window : null) {
-  if (!win) return false;
-  const flag = !!playing;
+  return postToNative({ playing: !!playing }, win);
+}
+
+/**
+ * Ask the shell to download, hash-verify, and atomically swap to a new web
+ * bundle described by `manifest`. No-ops outside a native shell.
+ */
+export function requestNativeOtaApply(manifest, win = typeof window !== 'undefined' ? window : null) {
+  if (!manifest) return false;
+  return postToNative({ ota: 'apply', manifest }, win);
+}
+
+/** Ask the shell to revert to the previous (or embedded) web bundle and reload. */
+export function requestNativeOtaRollback(win = typeof window !== 'undefined' ? window : null) {
+  return postToNative({ ota: 'rollback' }, win);
+}
+
+/**
+ * Deliver a structured message to the native shell.
+ * Android prefers a dedicated `ota(string)` entry for large manifests so the
+ * playing-state channel stays a simple boolean.
+ */
+function postToNative(payload, win) {
+  if (!win || !payload || typeof payload !== 'object') return false;
   try {
-    if (win.AstroPitchShell && typeof win.AstroPitchShell.setPlaying === 'function') {
-      win.AstroPitchShell.setPlaying(flag);
+    if (payload.ota != null
+        && win.AstroPitchShell
+        && typeof win.AstroPitchShell.ota === 'function') {
+      win.AstroPitchShell.ota(JSON.stringify(payload));
+      return true;
+    }
+    if (payload.playing != null
+        && win.AstroPitchShell
+        && typeof win.AstroPitchShell.setPlaying === 'function') {
+      win.AstroPitchShell.setPlaying(!!payload.playing);
       return true;
     }
   } catch { /* shell gone */ }
   try {
     const handler = win.webkit?.messageHandlers?.astropitch;
     if (handler && typeof handler.postMessage === 'function') {
-      handler.postMessage({ playing: flag });
+      handler.postMessage(payload);
       return true;
     }
   } catch { /* shell gone */ }
