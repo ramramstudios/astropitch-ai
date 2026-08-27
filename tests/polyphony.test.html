@@ -78,18 +78,23 @@ function saturationCurveAt(drive, headroom, n = 4096) {
 /**
  * Render the real melodic() or drone() for `seconds`.
  *
- * Both modes drive their repeats from setInterval, and a wall-clock timer is
- * no use inside an offline render: it fires while the render is computing, at
- * a rate set by how fast this machine happens to be, so the same test would
- * schedule different music every run. So the timer functions are swapped for a
- * queue keyed to ctx.currentTime and drained from suspend(), which advances
- * the context to a known point and hands control back. The mode code is
- * untouched and unaware — it is the genuine implementation, on the audio clock
- * instead of the wall clock, and deterministic.
+ * Both modes are driven by a 25 ms lookahead ticker on the audio clock (see
+ * src/audio/scheduler.js). A wall-clock timer is no use inside an offline
+ * render: it fires while the render is computing, at a rate set by how fast
+ * this machine happens to be, so the same test would schedule different music
+ * every run. So the timer functions are swapped for a queue keyed to
+ * ctx.currentTime and drained from suspend(), which advances the context to a
+ * known point and hands control back. The mode code is untouched and unaware
+ * — it is the genuine implementation, on the audio clock instead of the wall
+ * clock, and deterministic.
  *
- * Scheduling a whole run up front is *not* equivalent: every voice would be
- * pending at once, blow past maxVoices, and what got measured would be the
- * slot-reclaim path rather than the steady state.
+ * PERIOD below must stay < LOOKAHEAD (0.15 s). Lowering LOOKAHEAD without
+ * shrinking PERIOD would silently change what this suite measures: Voice
+ * clamps onsets in the past to currentTime, and the thing measured would be
+ * that bunching rather than the line as written. Scheduling a whole run up
+ * front is *not* equivalent either: every voice would be pending at once,
+ * blow past maxVoices, and what got measured would be the slot-reclaim path
+ * rather than the steady state.
  */
 async function renderMode(seconds, mode, { tap = false, trim = 1, config = {}, drive = null } = {}) {
   seedRandom();
@@ -147,17 +152,25 @@ async function renderMode(seconds, mode, { tap = false, trim = 1, config = {}, d
   performer.setChart(CHART);
   try { await performer[mode](); } finally { restore(); }
 
-  const PERIOD = 0.25;
+  const PERIOD = 0.1; // must stay < LOOKAHEAD (0.15) in src/audio/scheduler.js
   const pending = [];
   for (let k = 1; k * PERIOD < seconds - 3; k++) {
     const at = k * PERIOD;
     pending.push(ctx.suspend(at).then(() => {
       shim();
       try {
-        for (const [id, t] of [...queue].sort((a, b) => a[1].due - b[1].due)) {
-          if (t.due > at) continue;
-          if (t.every == null) queue.delete(id); else t.due += t.every;
-          t.fn();
+        // A 25 ms interval can come due several times in one suspend. Drain
+        // until the queue is ahead of the audio clock; extra ticks are no-ops
+        // once the horizon has caught up to now + lookAhead.
+        for (;;) {
+          let fired = false;
+          for (const [id, t] of [...queue].sort((a, b) => a[1].due - b[1].due)) {
+            if (t.due > at) continue;
+            fired = true;
+            if (t.every == null) queue.delete(id); else t.due += t.every;
+            t.fn();
+          }
+          if (!fired) break;
         }
       } catch (e) {
         // A throw here would leave resume() uncalled and the render would

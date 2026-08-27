@@ -24,6 +24,7 @@ import { buildVoiceSpec, Voice } from './voices.js';
 import { DEFAULT_PALETTE } from './palettes.js';
 import { frequencyFor } from './tuning.js';
 import { SIGNS } from '../ontology.js';
+import { AudioScheduler } from './scheduler.js';
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const CHOKE_FADE = 0.05;
@@ -230,8 +231,139 @@ function buildMelody(present, chromatic, scale, byDegree, scalar) {
   return notes;
 }
 
+// Drone and melodic used to arm their own wall-clock intervals. Those are
+// the timers mobile WebViews throttle, so the looping modes now answer a
+// single audio-clock question — "what sounds between t0 and t1?" — and a
+// lookahead ticker (see scheduler.js) is the only setInterval left.
+
+export const DRONE_CYCLE = 24;
+export const DRONE_STAGGER = 0.9;
+export const DRONE_FIRST_LEAD = 0.08;
+export const DRONE_REFRESH_LEAD = 0.5;
+export const DRONE_RELEASE_LAG = 2.2;
+export const DRONE_SHIMMER = 2.6;
+export const DRONE_SHIMMER_LEAD = 0.05;
+export const DRONE_FIRST_SHIMMER = 3.0;
+export const MELODIC_LEAD = 0.08;
+
+/**
+ * Onsets of a repeating phrase whose start is `origin` and whose notes each
+ * carry a beat value. Half-open in `[t0, t1)`, so adjacent windows neither
+ * skip nor double a note.
+ */
+export function melodicOnsets(t0, t1, { origin, notes, beat }) {
+  const period = notes.reduce((sum, n) => sum + n.beats, 0) * beat;
+  if (!(period > 0) || !(t1 > t0) || notes.length === 0) return [];
+  const out = [];
+  let offset = 0;
+  for (let i = 0; i < notes.length; i++) {
+    const first = origin + offset;
+    const startN = Math.max(0, Math.ceil((t0 - first) / period - 1e-12));
+    for (let n = startN; ; n++) {
+      const time = first + n * period;
+      if (time >= t1) break;
+      if (time >= t0) {
+        out.push({
+          index: i, time, phrase: n, pc: notes[i].pc, beats: notes[i].beats,
+        });
+      }
+    }
+    offset += notes[i].beats * beat;
+  }
+  out.sort((a, b) => a.time - b.time || a.index - b.index);
+  return out;
+}
+
+/**
+ * Which body voices this pitch class this time: walk the phrase in order,
+ * cycling through the chart's bodies that share the class. Deterministic in
+ * `(index, phrase)`, so a late tick that asks about the same window names
+ * the same body.
+ */
+export function placementForNote(notes, index, phrase, byPc) {
+  const pc = notes[index].pc;
+  const list = byPc.get(pc);
+  let before = 0;
+  let perPhrase = 0;
+  for (let j = 0; j < notes.length; j++) {
+    if (notes[j].pc !== pc) continue;
+    perPhrase++;
+    if (j < index) before++;
+  }
+  return list[(phrase * perPhrase + before) % list.length];
+}
+
+/**
+ * Anchor onsets, bed releases, and shimmer onsets for the drone in `[t0, t1)`.
+ *
+ * Times match the old interval layout: first bed at origin+80ms, a refresh
+ * every 24s whose new bed starts 0.5s after the tick and whose old bed
+ * releases 2.2s after it, a shimmer every 2.6s, and one extra shimmer at 3s.
+ */
+export function droneEvents(t0, t1, { origin, nAnchors, shimmer = true }) {
+  if (!(t1 > t0)) return [];
+  const events = [];
+  const lastVoiceOffset = Math.max(0, nAnchors - 1) * DRONE_STAGGER;
+  // Last event of cycle n>=1 is the later of its last staggered voice and
+  // the bed release. Walk forward from the first cycle that can still land
+  // in this window — starting at 0 every tick would grow with session length.
+  const cycleTail = Math.max(DRONE_REFRESH_LEAD + lastVoiceOffset, DRONE_RELEASE_LAG);
+  const cycle0Last = origin + DRONE_FIRST_LEAD + lastVoiceOffset;
+  let minN = 0;
+  if (nAnchors > 0 && cycle0Last < t0) {
+    minN = Math.max(1, Math.ceil((t0 - origin - cycleTail) / DRONE_CYCLE - 1e-12));
+  }
+  const maxN = Math.max(
+    minN,
+    Math.ceil((t1 - origin - DRONE_FIRST_LEAD + lastVoiceOffset) / DRONE_CYCLE) + 1,
+  );
+
+  for (let n = minN; n <= maxN; n++) {
+    if (nAnchors > 0) {
+      const at = n === 0
+        ? origin + DRONE_FIRST_LEAD
+        : origin + n * DRONE_CYCLE + DRONE_REFRESH_LEAD;
+      for (let i = 0; i < nAnchors; i++) {
+        const time = at + i * DRONE_STAGGER;
+        if (time >= t1) break;
+        if (time >= t0) events.push({ type: 'anchor', time, cycle: n, index: i });
+      }
+    }
+    if (nAnchors > 0 && n >= 1) {
+      const releaseAt = origin + n * DRONE_CYCLE + DRONE_RELEASE_LAG;
+      if (releaseAt >= t0 && releaseAt < t1) {
+        events.push({ type: 'releaseBed', time: releaseAt, cycle: n });
+      }
+    }
+  }
+
+  if (shimmer) {
+    const startK = Math.max(1, Math.ceil((t0 - origin - DRONE_SHIMMER_LEAD) / DRONE_SHIMMER - 1e-12));
+    for (let k = startK; ; k++) {
+      const time = origin + k * DRONE_SHIMMER + DRONE_SHIMMER_LEAD;
+      if (time >= t1) break;
+      if (time >= t0) events.push({ type: 'shimmer', time, k });
+    }
+    const extra = origin + DRONE_FIRST_SHIMMER + DRONE_SHIMMER_LEAD;
+    if (extra >= t0 && extra < t1) events.push({ type: 'shimmer', time: extra, k: 'extra' });
+  }
+
+  events.sort((a, b) => a.time - b.time);
+  return events;
+}
+
+function pickWeighted(items, weights) {
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return items[i];
+  }
+  return items[0];
+}
+
 export class Performer {
-  constructor(engine) {
+  constructor(engine, { scheduler } = {}) {
     this.engine = engine;
     this.chart = null;
     this.tuning = { refA: 432, temperament: 'equal', microtones: false };
@@ -240,7 +372,7 @@ export class Performer {
     this.mode = null;
     this.active = [];
     this.timers = [];
-    this.loopHandle = null;
+    this.scheduler = scheduler ?? new AudioScheduler({ now: () => this.engine.now });
     this.listeners = new Set();
     this.designerPreview = null;
     this._choked = new Map();
@@ -680,46 +812,31 @@ export class Performer {
       notes.push(...buildMelody(present, chromatic, scale, byDegree, earthy >= fiery));
     }
 
+    if (!notes.length) return;
+
     // A single sustained register, like a lead line rather than the ensemble's
     // full spread of registers — each body keeps its own timbre, just not its
     // own octave.
     const REGISTER = 0;
     const beat = 60 / this.tempo;
-    const rotation = new Map();
-    const nextPlacement = (pc) => {
-      const list = byPc.get(pc);
-      const i = rotation.get(pc) ?? 0;
-      rotation.set(pc, (i + 1) % list.length);
-      return list[i];
-    };
+    const origin = this.engine.now + MELODIC_LEAD;
 
-    const playPhrase = (startTime) => {
-      let t = startTime;
-      for (const note of notes) {
-        const placement = nextPlacement(note.pc);
-        const dur = note.beats * beat;
+    this.scheduler.start((t0, t1) => {
+      if (this.mode !== 'melodic') return;
+      for (const ev of melodicOnsets(t0, t1, { origin, notes, beat })) {
+        const placement = placementForNote(notes, ev.index, ev.phrase, byPc);
+        const dur = ev.beats * beat;
         this._voiceFor(placement, {
-          time: t,
+          time: ev.time,
           duration: dur * 0.9,
           // Quiet outer bodies are atmosphere in a chord; as the sole voice of
           // a melodic line they need to be heard as clearly as the Sun is.
           gainMul: Math.min(1.8, 1 / placement.gain),
           octaveShift: REGISTER - placement.octave,
         });
-        this._emitAt({ type: 'note', key: placement.key }, t);
-        t += dur;
+        this._emitAt({ type: 'note', key: placement.key }, ev.time);
       }
-      return t;
-    };
-
-    const phraseBeats = notes.reduce((sum, n) => sum + n.beats, 0);
-    playPhrase(this.engine.now + 0.08);
-    if (phraseBeats > 0) {
-      this.loopHandle = setInterval(() => {
-        if (this.mode !== 'melodic') return;
-        playPhrase(this.engine.now + 0.05);
-      }, phraseBeats * beat * 1000);
-    }
+    });
   }
 
   /**
@@ -751,51 +868,49 @@ export class Performer {
       activity[asp.b] = (activity[asp.b] ?? 0) + asp.exactness;
     }
 
-    const startAnchors = (at) => {
-      const voices = [];
-      anchorPlacements.forEach((p, i) => {
-        const v = this._voiceFor(p, {
-          time: at + i * 0.9,
-          gainMul: 0.85 / Math.sqrt(anchorPlacements.length * 0.5),
-          detune: detunes[p.key],
-        });
-        voices.push(v);
-        this._emitAt({ type: 'note', key: p.key }, at + i * 0.9);
-      });
-      return voices;
-    };
+    const origin = this.engine.now;
+    const beds = new Map();
+    const gainMul = 0.85 / Math.sqrt(anchorPlacements.length * 0.5);
+    const weights = floating.map((p) => activity[p.key] ?? 0.25);
 
-    let bed = startAnchors(this.engine.now + 0.08);
-    // Refresh the bed periodically: envelopes are finite and drift accumulates.
-    const CYCLE = 24;
-
-    const tick = () => {
+    this.scheduler.start((t0, t1) => {
       if (this.mode !== 'drone') return;
-      const now = this.engine.now;
-      const next = startAnchors(now + 0.5);
-      for (const v of bed) v.release(now + 2.2);
-      bed = next;
-    };
-
-    const shimmer = () => {
-      if (this.mode !== 'drone' || floating.length === 0) return;
-      const weights = floating.map((p) => activity[p.key] ?? 0.25);
-      const total = weights.reduce((a, b) => a + b, 0);
-      let r = Math.random() * total;
-      let pick = floating[0];
-      for (let i = 0; i < floating.length; i++) {
-        r -= weights[i];
-        if (r <= 0) { pick = floating[i]; break; }
+      for (const ev of droneEvents(t0, t1, {
+        origin,
+        nAnchors: anchorPlacements.length,
+        shimmer: floating.length > 0,
+      })) {
+        if (ev.type === 'anchor') {
+          const p = anchorPlacements[ev.index];
+          const v = this._voiceFor(p, {
+            time: ev.time,
+            gainMul,
+            detune: detunes[p.key],
+          });
+          const cycle = beds.get(ev.cycle) ?? [];
+          cycle.push(v);
+          beds.set(ev.cycle, cycle);
+          this._emitAt({ type: 'note', key: p.key }, ev.time);
+        } else if (ev.type === 'releaseBed') {
+          const prev = beds.get(ev.cycle - 1);
+          if (prev) {
+            for (const v of prev) v.release(ev.time);
+            beds.delete(ev.cycle - 1);
+          }
+        } else if (ev.type === 'shimmer') {
+          const pick = pickWeighted(floating, weights);
+          const octaveShift = Math.random() < 0.25 ? 1 : 0;
+          this._voiceFor(pick, {
+            time: ev.time,
+            duration: 2 + Math.random() * 4,
+            gainMul: 0.75,
+            detune: detunes[pick.key],
+            octaveShift,
+          });
+          this._emitAt({ type: 'note', key: pick.key }, ev.time);
+        }
       }
-      const t = this.engine.now + 0.05;
-      const octaveShift = Math.random() < 0.25 ? 1 : 0;
-      this._voiceFor(pick, { time: t, duration: 2 + Math.random() * 4, gainMul: 0.75, detune: detunes[pick.key], octaveShift });
-      this._emitAt({ type: 'note', key: pick.key }, t);
-    };
-
-    this.loopHandle = setInterval(tick, CYCLE * 1000);
-    this.shimmerHandle = setInterval(shimmer, 2600);
-    setTimeout(shimmer, 3000);
+    });
   }
 
   async _begin(mode) {
@@ -814,10 +929,7 @@ export class Performer {
     this.designerPreview = null;
     for (const t of this.timers) clearTimeout(t);
     this.timers.length = 0;
-    if (this.loopHandle) clearInterval(this.loopHandle);
-    if (this.shimmerHandle) clearInterval(this.shimmerHandle);
-    this.loopHandle = null;
-    this.shimmerHandle = null;
+    this.scheduler.stop();
 
     const now = this.engine.now;
     for (const v of this.active) {
