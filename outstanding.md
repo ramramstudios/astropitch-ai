@@ -53,9 +53,21 @@ Realtime `AudioContext` page at `tests/stability.test.html`, worklet frame count
 
 ## Remaining phases
 
-### Phase 4 — Four missing offline metrics — **not started**
+### Phase 4 — Four missing offline metrics — **done** (this commit)
 
-Per-stage residual, compressor GR telemetry (skip if unavailable), band energy report, true-peak assert below FS.
+**Completed**
+
+- Per-stage 128-sample residual after glue, saturator (post-makeup), limiter, and output. Reporting only.
+- Compressor `reduction` sampled on the audio clock during an offline render; skip if constant. On this Chrome it varies (instrument present).
+- Band energy for <120 Hz, 120–400 Hz, 400 Hz–4 kHz, >4 kHz. Reporting only. The three numbers the plan named are logged explicitly.
+- 4× cubic true-peak estimate; asserted below full scale.
+
+**Measured** (dense(16) × 8 s): glue −59.7 dB, saturator −51.1 dB, limiter −50.9 dB, output −50.7 dB; true peak 0.900; bands 2.6% / 81.0% / 16.3% / 0.08%.
+
+**Waived**
+
+- Haiku review.
+- Full `tests/audio.test.html` (the ~460-scene matrix). The new section was measured with a dedicated probe that uses the same helpers and fixture. The 144×palette loop was not re-run.
 
 ### Phase 5 — Calibrate the load model — **not started**
 

@@ -373,13 +373,14 @@ async function renderPreMaster(seconds, build, config = {}, rate = RATE) {
   return analyse(await ctx.startRendering());
 }
 
-async function renderSeeded(seconds, build, trim = 1, config = {}, rate = RATE) {
+async function renderSeeded(seconds, build, trim = 1, config = {}, rate = RATE, tap = null) {
   const ctx = seeded(() => {
     const c = offline(seconds, { rate });
     const engine = new AudioEngine({ context: c });
     Object.assign(engine, config);
     build(engine);
     engine.master.gain.value *= trim;
+    if (tap) tap(engine, c);
     return c;
   });
   return await ctx.startRendering();
@@ -508,6 +509,31 @@ function bandEnergy(buffer, edges = [120, 400, 4000]) {
 
 function dbRatio(a, b) {
   return 20 * Math.log10(a / b);
+}
+
+/**
+ * Cubic (Catmull-Rom) 4× true-peak estimate. Sample peak misses intersample
+ * peaks; a converter does not. Not a full ITU-R BS.1770 oversampler — an
+ * estimate, which is what this phase asked for.
+ */
+function truePeak(buffer) {
+  const hermite = (y0, y1, y2, y3, mu) => {
+    const a0 = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
+    const a1 = y0 - 2.5 * y1 + 2 * y2 - 0.5 * y3;
+    const a2 = -0.5 * y0 + 0.5 * y2;
+    return ((a0 * mu + a1) * mu + a2) * mu + y1;
+  };
+  let peak = 0;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const d = buffer.getChannelData(ch);
+    for (let i = 1; i < d.length - 2; i++) {
+      peak = Math.max(peak, Math.abs(d[i]));
+      for (const mu of [0.25, 0.5, 0.75]) {
+        peak = Math.max(peak, Math.abs(hermite(d[i - 1], d[i], d[i + 1], d[i + 2], mu)));
+      }
+    }
+  }
+  return peak;
 }
 
 const DENSE_SPECS = [
@@ -706,6 +732,101 @@ head('Polyphony: the gain staging is what is keeping the chain clean');
   check(`waveform distortion stays under ${(10 ** (DISTORTION_LIMIT / 20) * 100).toFixed(1)}% at every density`,
     worst < DISTORTION_LIMIT,
     `worst ${worst.toFixed(1)} dB = ${(10 ** (worst / 20) * 100).toFixed(1)}% of signal`);
+}
+
+/**
+ * The four offline metrics the previous instrumentation never had.
+ *
+ * Only true-peak is an assertion in this phase. Per-stage residual, compressor
+ * gain reduction, and band energy are reported so a later complaint can name
+ * a stage and a band instead of "it sounds dirty". Turning a first reading
+ * into a threshold without knowing the range is how a suite acquires a flake.
+ *
+ * Measured 2026-08-27, dense(16) × 8 s, 128-sample residual:
+ *     glue       -59.7 dB
+ *     saturator  -51.1 dB
+ *     limiter    -50.9 dB
+ *     output     -50.7 dB
+ *     bands      <120 2.6%  120–400 81.0%  400–4k 16.3%  >4k 0.08%
+ *     true peak  0.900
+ *     glue.reduction    min -0.45  (varies; instrument present)
+ *     limiter.reduction min -1.03  (varies; instrument present)
+ */
+const TAPS = {
+  glue: (engine, ctx) => {
+    engine.stages.glue.disconnect();
+    engine.stages.glue.connect(ctx.destination);
+  },
+  saturator: (engine, ctx) => {
+    engine.stages.satMakeup.disconnect();
+    engine.stages.satMakeup.connect(ctx.destination);
+  },
+  limiter: (engine, ctx) => {
+    engine.stages.limiter.disconnect();
+    engine.stages.limiter.connect(ctx.destination);
+  },
+};
+
+head('Missing offline metrics: per-stage residual, GR, bands, true peak');
+{
+  const fixture = dense(16);
+  const seconds = 8;
+
+  const residuals = {};
+  for (const [name, tap] of Object.entries(TAPS)) {
+    const loud = await renderSeeded(seconds, fixture, 1, {}, RATE, tap);
+    const quiet = await renderSeeded(seconds, fixture, 1 / 8, {}, RATE, tap);
+    residuals[name] = distortionDb(loud, quiet, 8, 128);
+  }
+  const outLoud = await renderSeeded(seconds, fixture, 1);
+  const outQuiet = await renderSeeded(seconds, fixture, 1 / 8);
+  residuals.output = distortionDb(outLoud, outQuiet, 8, 128);
+
+  log('info', '      128-sample residual after each stage (reporting only):');
+  for (const name of ['glue', 'saturator', 'limiter', 'output']) {
+    log('info', `      ${name.padEnd(10)}  ${residuals[name].toFixed(1)} dB`);
+  }
+
+  const bands = bandEnergy(outLoud);
+  const bandNames = ['<120 Hz', '120–400 Hz', '400 Hz–4 kHz', '>4 kHz'];
+  log('info', `      band energy  ${bandNames.map((n, i) => `${n} ${(bands[i] * 100).toFixed(1)}%`).join('   ')}`);
+  log('info', `      (Phase 4's three numbers: <120 ${(bands[0] * 100).toFixed(1)}%  120–400 ${(bands[1] * 100).toFixed(1)}%  >4 kHz ${(bands[3] * 100).toFixed(1)}%)`);
+
+  const tp = truePeak(outLoud);
+  const samplePeak = analyse(outLoud).peak;
+  log('info', `      sample peak ${samplePeak.toFixed(4)}  true-peak estimate ${tp.toFixed(4)}`);
+  check('true peak stays below full scale', tp < 1.0, `true peak ${tp.toFixed(4)}`);
+
+  // Glue and limiter reduction, sampled on the audio clock during one render.
+  // reduction readback is not uniformly reliable; if it sits on a constant
+  // the instrument is absent and this reports a skip rather than a failure.
+  const gr = { glue: [], limiter: [] };
+  const grCtx = seeded(() => {
+    const c = offline(seconds);
+    const engine = new AudioEngine({ context: c });
+    fixture(engine);
+    for (const t of [1, 2, 3, 4, 5, 6]) {
+      c.suspend(t).then(() => {
+        gr.glue.push(engine.stages.glue.reduction);
+        gr.limiter.push(engine.stages.limiter.reduction);
+        c.resume();
+      });
+    }
+    return c;
+  });
+  await grCtx.startRendering();
+  const summariseGr = (samples, name) => {
+    if (!samples.length || samples.every((x) => x === samples[0])) {
+      log('info', `      ${name}.reduction unavailable or constant (${samples[0] ?? 'n/a'}); skip`);
+      return;
+    }
+    const min = Math.min(...samples);
+    const max = Math.max(...samples);
+    const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
+    log('info', `      ${name}.reduction  min ${min.toFixed(2)}  mean ${mean.toFixed(2)}  max ${max.toFixed(2)}  n=${samples.length}`);
+  };
+  summariseGr(gr.glue, 'glue');
+  summariseGr(gr.limiter, 'limiter');
 }
 
 head('Polyphony: reaching the cap fades voices instead of cutting them');
