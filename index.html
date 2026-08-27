@@ -569,7 +569,9 @@
     // Everything AstroPitch does is local computation, so the app shell
     // works fully offline once cached — registered after load so it never
     // competes with the page's own resources for bandwidth.
-    if ('serviceWorker' in navigator) {
+    // Native shells (Phase 4) set __astropitchNativeShell and own the bundle;
+    // a service worker there would fight an OTA updater (Phase 5).
+    if ('serviceWorker' in navigator && !window.__astropitchNativeShell) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is a bonus, not a requirement */ });
       });

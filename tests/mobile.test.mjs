@@ -17,6 +17,15 @@ import { dirname, join } from 'node:path';
 import { nextPinchView, clampPanView, VIEW_MIN_SCALE, VIEW_MAX_SCALE } from '../src/ui/wheel.js';
 import { nextSheetState, nearestSheetState } from '../src/ui/app.js';
 import { lifecycleStep, LIFECYCLE_STATES, AudioLifecycle } from '../src/audio/lifecycle.js';
+import {
+  parseNativeEvent,
+  dispatchNativeToLifecycle,
+  attachNativeBridge,
+  notifyNativePlaying,
+  isNativeShell,
+  NATIVE_EVENT,
+  NATIVE_EVENT_TYPES,
+} from '../src/audio/native-bridge.js';
 import { MODES, modeButtonId } from '../src/audio/modes.js';
 
 let fails = 0;
@@ -287,6 +296,97 @@ async function testLifecycleCoordinator() {
 }
 
 await testLifecycleCoordinator();
+
+console.log('\n--- native bridge: shared event shape maps onto Phase 2 lifecycle ---');
+{
+  ok('parses bare string types', parseNativeEvent('background') === NATIVE_EVENT_TYPES.background);
+  ok('parses { type } payloads', parseNativeEvent({ type: 'interrupt' }) === NATIVE_EVENT_TYPES.interrupt);
+  ok('parses CustomEvent-style detail',
+    parseNativeEvent({ detail: { type: 'foreground' } }) === NATIVE_EVENT_TYPES.foreground);
+  ok('rejects unknown types', parseNativeEvent({ type: 'explode' }) === null);
+  ok('rejects empty payloads', parseNativeEvent(null) === null);
+}
+
+console.log('\n--- native bridge: dispatch forwards to lifecycle handlers ---');
+async function testNativeBridgeDispatch() {
+  const calls = [];
+  const fakeLife = {
+    handleBackground: async () => { calls.push('background'); },
+    handleForeground: async () => { calls.push('foreground'); },
+    handleInterruption: async () => { calls.push('interrupt'); },
+  };
+  await dispatchNativeToLifecycle(fakeLife, { type: 'background' });
+  await dispatchNativeToLifecycle(fakeLife, { type: 'foreground' });
+  await dispatchNativeToLifecycle(fakeLife, { type: 'interrupt' });
+  ok('background/foreground/interrupt each hit the matching handler',
+    calls.join(',') === 'background,foreground,interrupt', calls.join(','));
+  ok('unknown events are ignored', dispatchNativeToLifecycle(fakeLife, { type: 'nope' }) === null);
+}
+await testNativeBridgeDispatch();
+
+console.log('\n--- native bridge: attach installs dispatch + playing notify ---');
+async function testNativeBridgeAttach() {
+  const calls = [];
+  const fakeLife = {
+    handleBackground: async () => { calls.push('bg'); },
+    handleForeground: async () => { calls.push('fg'); },
+    handleInterruption: async () => { calls.push('int'); },
+  };
+  const listeners = new Map();
+  const performerListeners = new Set();
+  let shellPlaying = null;
+  const fakeWin = {
+    __astropitchNativeShell: true,
+    AstroPitchShell: { setPlaying: (v) => { shellPlaying = v; } },
+    addEventListener: (type, fn) => {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener: (type, fn) => listeners.get(type)?.delete(fn),
+  };
+  const fakePerformer = {
+    onEvent: (fn) => {
+      performerListeners.add(fn);
+      return () => performerListeners.delete(fn);
+    },
+  };
+
+  ok('isNativeShell sees the injected mark', isNativeShell(fakeWin));
+
+  const detach = attachNativeBridge(fakeLife, { window: fakeWin, performer: fakePerformer });
+  ok('installs window.__astropitchNative.dispatch', typeof fakeWin.__astropitchNative?.dispatch === 'function');
+
+  await fakeWin.__astropitchNative.dispatch({ type: 'background' });
+  ok('native dispatch reaches handleBackground', calls.includes('bg'));
+
+  for (const fn of listeners.get(NATIVE_EVENT) || []) {
+    await fn({ detail: { type: 'interrupt' } });
+  }
+  ok('CustomEvent path reaches handleInterruption', calls.includes('int'));
+
+  for (const fn of performerListeners) fn({ type: 'start', mode: 'drone' });
+  ok('performer start notifies the shell', shellPlaying === true);
+  for (const fn of performerListeners) fn({ type: 'stop' });
+  ok('performer stop clears the shell playing flag', shellPlaying === false);
+
+  ok('notifyNativePlaying hits AstroPitchShell.setPlaying',
+    notifyNativePlaying(true, fakeWin) === true && shellPlaying === true);
+
+  detach();
+  ok('detach removes dispatch', fakeWin.__astropitchNative.dispatch == null);
+}
+await testNativeBridgeAttach();
+
+console.log('\n--- native bridge: app.js and index.html stay wired ---');
+{
+  const appSrc = readFileSync(join(__dirname, '../src/ui/app.js'), 'utf8');
+  const htmlSrc = readFileSync(join(__dirname, '../index.html'), 'utf8');
+  ok('app.js imports attachNativeBridge', appSrc.includes("from '../audio/native-bridge.js'"));
+  ok('wireAudioLifecycle attaches the native bridge',
+    appSrc.includes('attachNativeBridge(lifecycle'));
+  ok('index.html skips the service worker inside a native shell',
+    htmlSrc.includes('!window.__astropitchNativeShell'));
+}
 
 console.log(`\n${fails === 0 ? 'All mobile-mode checks passed.' : `${fails} FAILURE(S).`}`);
 process.exit(fails ? 1 : 0);

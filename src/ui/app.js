@@ -10,6 +10,7 @@ import { engine } from '../audio/engine.js';
 import { Performer } from '../audio/performer.js';
 import { MODES, DEFAULT_MODE_ID, modeButtonId } from '../audio/modes.js';
 import { AudioLifecycle } from '../audio/lifecycle.js';
+import { attachNativeBridge } from '../audio/native-bridge.js';
 import { Wheel } from './wheel.js';
 import { Starfield } from './starfield.js';
 
@@ -1409,6 +1410,9 @@ function setActiveTransportMode(mode = null) {
  * Visibility / interrupt handling for the shared AudioContext. Without this
  * the transport UI keeps showing "playing" over a frozen or suspended graph.
  * See research/audio-implementation-plan.md Phase 2.
+ *
+ * Phase 4 native shells post the same events through attachNativeBridge so
+ * iOS AVAudioSession interruptions and Android process lifecycle share one path.
  */
 function wireAudioLifecycle() {
   lifecycle.onEvent((event) => {
@@ -1416,6 +1420,7 @@ function wireAudioLifecycle() {
     else if (event.type === 'resumed') setActiveTransportMode(event.mode);
   });
   lifecycle.attach(window);
+  attachNativeBridge(lifecycle, { window, performer });
 }
 
 function wireWheel() {

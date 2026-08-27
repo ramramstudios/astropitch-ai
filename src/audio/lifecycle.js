@@ -10,8 +10,9 @@
  * be tested without a document or an AudioContext. `AudioLifecycle` is the
  * thin coordinator that applies those actions to the engine and performer.
  *
- * Native shells (Phase 4) should call `handleBackground` / `handleForeground`
- * / `handleInterruption` rather than inventing a second path.
+ * Native shells (Phase 4) call `handleBackground` / `handleForeground`
+ * / `handleInterruption` through `src/audio/native-bridge.js` rather than
+ * inventing a second path.
  */
 
 export const SUSPEND_FADE = 0.08;
