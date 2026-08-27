@@ -122,6 +122,47 @@ function ceilingCurve(n = 8192, knee = 0.82, ceiling = 0.995, headroom = 1) {
 
 /** Summed voice amplitude that still passes at unity gain. */
 const LOAD_REF = 0.34;
+/**
+ * Load-model calibration, Phase 5 of research/audio-stability-plan.md.
+ *
+ * voice.peak is the VCA envelope, not the acoustic peak. Sub, unison octaves
+ * and noise all sum into oscMix but are invisible to peak; summing peaks
+ * also assumes every voice adds in phase. Those errors point opposite ways.
+ *
+ * Measured 2026-08-27. Solo true-peak (dry, staging defeated, 4× cubic) over
+ * voice.peak, gain 0.35, house 1, 3 s, palettes × elements × modalities:
+ *
+ *     palette      element  modality   true/peak
+ *     astropitch   fire     all        0.38
+ *     astropitch   earth    0.47–0.49
+ *     astropitch   air      0.42–0.44
+ *     astropitch   water    0.44–0.50
+ *     harmonic     fire     0.45
+ *     harmonic     earth    0.41–0.44
+ *     harmonic     air      0.30–0.31
+ *     harmonic     water    0.45–0.47
+ *     unison 3oct fire      0.38   (same as the one-octave fire — layering
+ *                                  did not under-count at the true peak)
+ *     earth sub             0.47
+ *
+ *     min 0.30  median 0.44  max 0.50
+ *
+ * The model is loud vs the ear on every construction: actual peak is about
+ * half of peak. n voices of air/fixed, same conditions:
+ *
+ *     n     true   n×peak  √n×peak  true/(n×)  true/(√n×)
+ *     1     0.120  0.214   0.214    0.56       0.56
+ *     4     0.281  0.857   0.429    0.33       0.66
+ *     8     0.491  1.715   0.606    0.29       0.81
+ *     16    0.465  3.430   0.857    0.14       0.54
+ *
+ * Coherence over-count is real and large. Layering under-count did not show
+ * up in true peak. Correcting only the second would over-duck. Correcting
+ * only the first (trusting true/peak ≈ 0.44) would raise the mix. Neither
+ * error is large enough in the direction that caused the original complaint
+ * (too hot) to justify touching LOAD_REF. Measured, within tolerance, no
+ * change.
+ */
 /** How the buses give way above it: the sum grows as load ** (1 - LOAD_EXP). */
 const LOAD_EXP = 0.65;
 /** Hard cap on the projected sum, whatever the curve above asks for. */

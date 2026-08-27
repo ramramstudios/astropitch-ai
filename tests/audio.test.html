@@ -829,6 +829,82 @@ head('Missing offline metrics: per-stage residual, GR, bands, true peak');
   summariseGr(gr.limiter, 'limiter');
 }
 
+head('Load model: solo true-peak vs voice.peak, and coherent vs incoherent sum');
+{
+  // Calibration, not a retune. The table lives next to LOAD_REF in engine.js.
+  const ELEMENTS = ['fire', 'earth', 'air', 'water'];
+  const MODALITIES = ['cardinal', 'fixed', 'mutable'];
+  const GAIN = 0.35;
+  const rows = [];
+
+  const renderCal = async (build) => {
+    const ctx = seeded(() => {
+      const c = offline(3);
+      const engine = new AudioEngine({ context: c });
+      engine.loadRef = Infinity;
+      engine.reverbReturn.gain.value = 0;
+      engine.delayReturn.gain.value = 0;
+      engine.master.disconnect();
+      engine.master.connect(c.destination);
+      const voices = build(engine);
+      return { c, voices };
+    });
+    const buffer = await ctx.c.startRendering();
+    return { tp: truePeak(buffer), peaks: ctx.voices.map((v) => v.peak) };
+  };
+
+  for (const palette of PALETTE_IDS) {
+    for (const element of ELEMENTS) {
+      for (const modality of MODALITIES) {
+        const { tp, peaks } = await renderCal((engine) => {
+          const spec = buildVoiceSpec({ element, house: 1, modality, palette });
+          return [new Voice(engine, spec, { freq: 220, time: 0.05, duration: 1.5, gain: GAIN, pan: 0 })];
+        });
+        rows.push({ palette, element, modality, ratio: tp / peaks[0], tp, model: peaks[0] });
+      }
+    }
+  }
+
+  const ratios = rows.map((r) => r.ratio);
+  const minR = Math.min(...ratios);
+  const maxR = Math.max(...ratios);
+  log('info', `      ${rows.length} solos  true/peak min ${minR.toFixed(2)}  max ${maxR.toFixed(2)}`);
+  for (const r of rows) {
+    log('info', `      ${r.palette} ${r.element} ${r.modality}  ${r.ratio.toFixed(2)}  (true ${r.tp.toFixed(3)} / peak ${r.model.toFixed(3)})`);
+  }
+
+  const unison = await renderCal((engine) => {
+    const spec = buildVoiceSpec({ element: 'fire', house: 1, modality: 'fixed', palette: 'astropitch' });
+    return [new Voice(engine, spec, { freq: 110, time: 0.05, duration: 1.5, gain: GAIN, pan: 0, unisonOctaves: [-1, 0, 1] })];
+  });
+  const unisonRatio = unison.tp / unison.peaks[0];
+  log('info', `      unison 3oct  ${unisonRatio.toFixed(2)}`);
+
+  check('no construction is louder than the load model claims',
+    maxR < 1 && unisonRatio < 1,
+    `max solo ${maxR.toFixed(2)}, unison ${unisonRatio.toFixed(2)}`);
+  check('the model is not an empty overestimate either',
+    minR > 0.2,
+    `min ${minR.toFixed(2)}`);
+
+  const sums = [];
+  for (const n of [1, 4, 8, 16]) {
+    const { tp, peaks } = await renderCal((engine) => {
+      const spec = buildVoiceSpec({ element: 'air', house: 3, modality: 'fixed', palette: 'astropitch' });
+      return Array.from({ length: n }, (_, i) => new Voice(engine, spec, {
+        freq: 220 * 2 ** (i / 17), time: 0.05, duration: 1.5, gain: 0.2, pan: (i % 2) ? 0.4 : -0.4,
+      }));
+    });
+    const mean = peaks.reduce((a, b) => a + b, 0) / peaks.length;
+    sums.push({ n, tp, coherent: n * mean });
+    log('info', `      n=${n}  true ${tp.toFixed(3)}  n×peak ${(n * mean).toFixed(3)}  true/(n×) ${(tp / (n * mean)).toFixed(2)}`);
+  }
+  const at16 = sums.find((s) => s.n === 16);
+  check('sixteen voices do not add in phase the way the model assumes',
+    at16.tp < at16.coherent * 0.5,
+    `true ${at16.tp.toFixed(3)} vs n× ${at16.coherent.toFixed(3)}`);
+}
+
 head('Polyphony: reaching the cap fades voices instead of cutting them');
 {
   // Far past maxVoices, so slots have to be reclaimed from voices that are

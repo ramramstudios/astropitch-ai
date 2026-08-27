@@ -69,9 +69,20 @@ Realtime `AudioContext` page at `tests/stability.test.html`, worklet frame count
 - Haiku review.
 - Full `tests/audio.test.html` (the ~460-scene matrix). The new section was measured with a dedicated probe that uses the same helpers and fixture. The 144×palette loop was not re-run.
 
-### Phase 5 — Calibrate the load model — **not started**
+### Phase 5 — Calibrate the load model — **done** (this commit)
 
-Solo peak vs `voice.peak` table; coherent vs incoherent sum. Model change only if the error is large enough; "measured, no change" is a valid close.
+**Completed**
+
+- Solo true-peak vs `voice.peak` for every palette × element × modality, plus a 3-octave unison and an earth-sub construction.
+- n = 1, 4, 8, 16 summing vs n×peak and √n×peak.
+- Table committed next to `LOAD_REF`. Guard tests: no construction louder than the model claims; sixteen voices do not add in phase.
+
+**Result:** measured, within tolerance, **no model change**. Solos run at 0.30–0.50 of `voice.peak` (model loud vs the ear). Unison did not under-count at the true peak. Coherence over-count is large (n=16 true/(n×) = 0.14). Fixing only one error would over-duck or raise the mix.
+
+**Waived**
+
+- Haiku review.
+- Re-running `tests/polyphony.test.html` after a model change — there was no model change.
 
 ### Phase 6 — Stop rule — **not started**
 
