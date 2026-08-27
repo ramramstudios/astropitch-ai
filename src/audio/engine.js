@@ -153,12 +153,37 @@ const FADE_RESOLUTION = 0.4;
 const FADE_SAMPLES_MAX = 8;
 
 /**
+ * Unit-interval noise from a tick and a salt, independent of call order.
+ *
+ * The IR and the voice noise buffer used to draw Math.random once per sample.
+ * At 44.1 kHz that is fewer draws than at 48 kHz, so a seeded comparison of
+ * two rates was comparing two different rooms. Hashing the physical time
+ * (and channel) gives the same noise field at any rate; each context just
+ * samples it at its own resolution.
+ */
+function unitNoise(tick, salt) {
+  let x = Math.imul((tick + 1) | 0, 0x9E3779B1) ^ Math.imul((salt + 1) | 0, 0x85EBCA77);
+  x = Math.imul(x ^ (x >>> 16), 0x7FEB352D);
+  x = Math.imul(x ^ (x >>> 15), 0x846CA68B);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Canonical rate of the noise field the IR samples. */
+const IR_NOISE_RATE = 48000;
+
+/**
  * A synthetic stereo impulse response.
  *
  * Sparse early reflections, then a noise tail whose brightness falls as it
  * decays (real rooms absorb highs faster than lows). The two channels are
  * generated independently, which is what makes the tail sound wide rather than
  * like a mono blob in the middle of your head.
+ *
+ * Duration is `floor(rate * seconds) / rate`, so the tail lasts the same time
+ * at 44.1 kHz as at 48 kHz — only the resolution changes. The parity check in
+ * tests/audio.test.html asserts that. The one-pole coeff is per-sample rather
+ * than per-second, which is the other rate-exposed spot: a future edit that
+ * forgets to go through `t = i / rate` will show up as a brightness shift.
  */
 function createImpulseResponse(ctx, { seconds = 3.6, decay = 1.9, damping = 0.86 } = {}) {
   const rate = ctx.sampleRate;
@@ -175,7 +200,7 @@ function createImpulseResponse(ctx, { seconds = 3.6, decay = 1.9, damping = 0.86
       // Density build-up: a room takes a few milliseconds to go diffuse.
       const build = Math.min(1, t / 0.028);
       const env = build * Math.exp(-decay * t) * (1 - progress) ** 1.7;
-      const white = Math.random() * 2 - 1;
+      const white = unitNoise(Math.floor(t * IR_NOISE_RATE), ch) * 2 - 1;
       // One-pole lowpass whose coefficient shrinks over time -> darkening tail.
       const coeff = 0.06 + damping * (1 - progress) ** 1.4;
       lp += (white - lp) * coeff;
@@ -188,7 +213,8 @@ function createImpulseResponse(ctx, { seconds = 3.6, decay = 1.9, damping = 0.86
       const t = 0.005 + (k / taps) ** 1.5 * 0.075 + (ch ? 0.0031 : 0);
       const idx = Math.floor(t * rate);
       if (idx < length) {
-        data[idx] += (Math.random() < 0.5 ? -1 : 1) * 0.55 * (1 - k / taps) ** 1.2;
+        const sign = unitNoise(k, ch + 2) < 0.5 ? -1 : 1;
+        data[idx] += sign * 0.55 * (1 - k / taps) ** 1.2;
       }
     }
   }
@@ -447,6 +473,7 @@ export class AudioEngine {
     reverbReturn.connect(mixBus);
     this.reverbSend = reverbSend;
     this.reverbReturn = reverbReturn;
+    this.stages.convolver = convolver;
 
     const delaySend = ctx.createGain();
     delaySend.gain.value = 1;

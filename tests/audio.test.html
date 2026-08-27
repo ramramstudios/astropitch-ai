@@ -24,6 +24,23 @@ import { SIGNS } from '../src/ontology.js';
 const out = document.getElementById('out');
 let failures = 0;
 
+/**
+ * Default rate for the existing suite. Real devices are not this tidy — 44.1 kHz
+ * is common, and a Bluetooth route can force something else. Helpers below take
+ * a rate so a parity check can render the same fixture at more than one, and so
+ * an assertion here cannot quietly depend on 48 kHz by using a literal that
+ * only matches this default.
+ */
+const RATE = 48000;
+
+function offline(seconds, { channels = 2, rate = RATE } = {}) {
+  return new OfflineAudioContext({
+    numberOfChannels: channels,
+    length: Math.ceil(rate * seconds),
+    sampleRate: rate,
+  });
+}
+
 const log = (cls, msg) => {
   const pre = document.createElement('pre');
   pre.className = cls;
@@ -37,13 +54,13 @@ const check = (label, ok, detail = '') => {
 };
 
 /**
- * Deterministic renders. The impulse response and the noise buffer are both
- * built from Math.random, so without this every run gets a different room and
- * a different noise floor. Every render helper below goes through it: a paired
- * comparison is only a comparison if both passes got the same room, and a
- * reported figure that moves between runs is not a tripwire. renderPreMaster
- * was left unseeded once, and the staging section's numbers moved by 3 dB
- * between two runs of the same code.
+ * Deterministic renders. Gesture onsets in the burst scene still draw
+ * Math.random, so without this a paired comparison of two passes is not a
+ * comparison. The impulse response and the voice noise buffer are hashed from
+ * time rather than drawn from Math.random, so they match across sample rates
+ * on their own; the seed is for everything else. renderPreMaster was left
+ * unseeded once, and the staging section's numbers moved by 3 dB between two
+ * runs of the same code.
  *
  * Declared here, above the helpers, because the scenes start rendering part
  * way down this file and a const referenced before its declaration runs is a
@@ -56,9 +73,9 @@ function seeded(fn) {
   try { return fn(); } finally { Math.random = realRandom; }
 }
 
-async function render(seconds, build) {
+async function render(seconds, build, rate = RATE) {
   const ctx = seeded(() => {
-    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const c = offline(seconds, { rate });
     build(new AudioEngine({ context: c }));
     return c;
   });
@@ -163,18 +180,19 @@ for (const paletteId of PALETTE_IDS) {
 
 head('Envelope endpoints: attack from silence, release to silence');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 6, sampleRate: 48000 });
+  const ctx = offline(6);
   const engine = new AudioEngine({ context: ctx });
   const spec = buildVoiceSpec({ element: 'fire', house: 1, modality: 'cardinal' });
   new Voice(engine, spec, { freq: 440, time: 0.5, duration: 1.5, gain: 0.5, pan: 0 });
   const buffer = await ctx.startRendering();
   const d = buffer.getChannelData(0);
+  const rate = buffer.sampleRate;
 
-  const at = (t) => Math.abs(d[Math.floor(t * 48000)]);
+  const at = (t) => Math.abs(d[Math.floor(t * rate)]);
   let preOnset = 0;
-  for (let i = 0; i < 0.45 * 48000; i++) preOnset = Math.max(preOnset, Math.abs(d[i]));
+  for (let i = 0; i < 0.45 * rate; i++) preOnset = Math.max(preOnset, Math.abs(d[i]));
   let tail = 0;
-  for (let i = Math.floor(5.5 * 48000); i < d.length; i++) tail = Math.max(tail, Math.abs(d[i]));
+  for (let i = Math.floor(5.5 * rate); i < d.length; i++) tail = Math.max(tail, Math.abs(d[i]));
 
   check('silent before the scheduled onset', preOnset < 1e-3, `peak ${preOnset.toExponential(1)}`);
   check('sounding during the note', at(1.0) > 1e-3, `level ${at(1.0).toFixed(4)}`);
@@ -209,7 +227,7 @@ head('A full chart bloom stays within headroom');
 
 head('Voice teardown: nodes are released, not leaked');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 4, sampleRate: 48000 });
+  const ctx = offline(4);
   const engine = new AudioEngine({ context: ctx });
   // A short release, so the teardown deadline lands inside the test's patience.
   const spec = buildVoiceSpec({ element: 'fire', house: 2, modality: 'cardinal' });
@@ -230,7 +248,7 @@ head('Voice teardown: nodes are released, not leaked');
 
 head('Voice stealing caps scheduled polyphony');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 3, sampleRate: 48000 });
+  const ctx = offline(3);
   const engine = new AudioEngine({ context: ctx });
   const spec = buildVoiceSpec({ element: 'air', house: 3, modality: 'fixed' });
   for (let i = 0; i < 90; i++) {
@@ -255,7 +273,7 @@ head('Voice stealing caps scheduled polyphony');
 
 head('Polyphony cap vs. legitimate synastry bloom');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 10, sampleRate: 48000 });
+  const ctx = offline(10);
   const engine = new AudioEngine({ context: ctx });
   const specs = [
     { element: 'air', house: 1, modality: 'cardinal' },
@@ -326,9 +344,9 @@ head('Click-burst dynamics: staggered burst is not squashed flat');
  * dominated by the wash and reads an intended reduction in reverb as the mix
  * falling apart.
  */
-async function renderPath(seconds, build, path) {
+async function renderPath(seconds, build, path, rate = RATE) {
   const ctx = seeded(() => {
-    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const c = offline(seconds, { rate });
     const engine = new AudioEngine({ context: c });
     if (path === 'dry') {
       engine.reverbReturn.gain.value = 0;
@@ -342,9 +360,9 @@ async function renderPath(seconds, build, path) {
   return analyse(await ctx.startRendering());
 }
 
-async function renderPreMaster(seconds, build, config = {}) {
+async function renderPreMaster(seconds, build, config = {}, rate = RATE) {
   const ctx = seeded(() => {
-    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const c = offline(seconds, { rate });
     const engine = new AudioEngine({ context: c });
     Object.assign(engine, config);
     build(engine);
@@ -355,9 +373,9 @@ async function renderPreMaster(seconds, build, config = {}) {
   return analyse(await ctx.startRendering());
 }
 
-async function renderSeeded(seconds, build, trim = 1, config = {}) {
+async function renderSeeded(seconds, build, trim = 1, config = {}, rate = RATE) {
   const ctx = seeded(() => {
-    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const c = offline(seconds, { rate });
     const engine = new AudioEngine({ context: c });
     Object.assign(engine, config);
     build(engine);
@@ -411,6 +429,87 @@ function distortionDb(loud, quiet, scale, block = 128) {
   return signal > 0 ? 10 * Math.log10(residual / signal) : -Infinity;
 }
 
+/** In-place radix-2 FFT. N must be a power of two. */
+function fftRadix2(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i]; re[i] = re[j]; re[j] = tr;
+      const ti = im[i]; im[i] = im[j]; im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wlenRe = Math.cos(ang);
+    const wlenIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let wRe = 1;
+      let wIm = 0;
+      for (let j = 0; j < len / 2; j++) {
+        const uRe = re[i + j];
+        const uIm = im[i + j];
+        const vRe = re[i + j + len / 2] * wRe - im[i + j + len / 2] * wIm;
+        const vIm = re[i + j + len / 2] * wIm + im[i + j + len / 2] * wRe;
+        re[i + j] = uRe + vRe;
+        im[i + j] = uIm + vIm;
+        re[i + j + len / 2] = uRe - vRe;
+        im[i + j + len / 2] = uIm - vIm;
+        const nwRe = wRe * wlenRe - wIm * wlenIm;
+        wIm = wRe * wlenIm + wIm * wlenRe;
+        wRe = nwRe;
+      }
+    }
+  }
+}
+
+/**
+ * Fraction of windowed energy below 120 Hz, between 120 and 400 Hz, and
+ * above 4 kHz. Fractions rather than absolute energy, so a 48 kHz buffer
+ * being longer than a 44.1 kHz one of the same duration does not look like
+ * a brighter mix. The band edges are the ones Phase 4 will report; using
+ * them here means a rate-dependent brightness shift in the IR or the
+ * oversampled shapers shows up as a moved fraction rather than a moved peak.
+ */
+function bandEnergy(buffer, edges = [120, 400, 4000]) {
+  const N = 2048;
+  const hop = 1024;
+  const rate = buffer.sampleRate;
+  const nBands = edges.length + 1;
+  const acc = new Float64Array(nBands);
+  let total = 0;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  const win = new Float64Array(N);
+  for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (N - 1));
+
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const d = buffer.getChannelData(ch);
+    for (let start = 0; start + N <= d.length; start += hop) {
+      im.fill(0);
+      for (let i = 0; i < N; i++) re[i] = d[start + i] * win[i];
+      fftRadix2(re, im);
+      for (let k = 1; k < N / 2; k++) {
+        const e = re[k] * re[k] + im[k] * im[k];
+        const hz = k * rate / N;
+        let b = nBands - 1;
+        for (let i = 0; i < edges.length; i++) {
+          if (hz < edges[i]) { b = i; break; }
+        }
+        acc[b] += e;
+        total += e;
+      }
+    }
+  }
+  return Array.from(acc, (x) => x / (total || 1));
+}
+
+function dbRatio(a, b) {
+  return 20 * Math.log10(a / b);
+}
+
 const DENSE_SPECS = [
   { element: 'air', house: 1, modality: 'cardinal' },
   { element: 'water', house: 8, modality: 'fixed' },
@@ -438,6 +537,85 @@ const dense = (n, gain = 0.2) => (engine) => {
     });
   }
 };
+
+/**
+ * Sample-rate parity. The rest of this page defaults to 48 kHz because that is
+ * what OfflineAudioContext gives if you ask for nothing in particular, and
+ * because the numbers already in comments were measured there. Real output
+ * runs at whatever the device gives. The two places with real exposure are
+ * createImpulseResponse (tail length is floor(rate * seconds), brightness
+ * follows the one-pole coeff per sample) and WaveShaper.oversample, which
+ * resamples relative to the context rate.
+ *
+ * The same 16-voice dense fixture is rendered at 44100 and 48000. Small
+ * differences are expected; these bounds are what the first honest run
+ * measured, plus room so ordinary variation does not fail the suite. A future
+ * change that makes the IR a different *length* or the saturator a different
+ * *brightness* at one rate will blow past them.
+ *
+ * Measured 2026-08-27, dense(16) × 8 s, hashed IR/noise:
+ *     44100  peak 0.905  rms 0.0632  residual -49.7 dB  bands 0.026 0.799 0.175 0.001
+ *     48000  peak 0.900  rms 0.0672  residual -50.7 dB  bands 0.026 0.810 0.163 0.001
+ *     Δ      peak 0.05 dB  rms 0.54 dB  residual 1.05 dB  band max 0.011
+ */
+const PARITY_RATES = [44100, 48000];
+const PARITY_PEAK_DB = 0.4;
+const PARITY_RMS_DB = 1.0;
+const PARITY_RESIDUAL_DB = 2.0;
+const PARITY_BAND = 0.04;
+const PARITY_IR_SECONDS = 0.01;
+
+head('Sample-rate parity: 44.1 kHz and 48 kHz stay close');
+{
+  const irDurations = PARITY_RATES.map((rate) => seeded(() => {
+    const c = offline(0.05, { channels: 1, rate });
+    return new AudioEngine({ context: c }).stages.convolver.buffer.duration;
+  }));
+  log('info', `      IR duration  ${PARITY_RATES.map((r, i) => `${r} Hz ${irDurations[i].toFixed(3)}s`).join('   ')}`);
+  check('the impulse response lasts the same time at both rates',
+    Math.abs(irDurations[0] - irDurations[1]) < PARITY_IR_SECONDS,
+    `Δ ${(irDurations[0] - irDurations[1]).toFixed(4)}s`);
+  check('and that time is the 3.6 s tail, not a sample-count accident',
+    irDurations.every((d) => Math.abs(d - 3.6) < 0.01),
+    irDurations.map((d) => d.toFixed(4)).join(', '));
+
+  const at = {};
+  for (const rate of PARITY_RATES) {
+    const loud = await renderSeeded(8, dense(16), 1, {}, rate);
+    const quiet = await renderSeeded(8, dense(16), 1 / 8, {}, rate);
+    const stats = analyse(loud);
+    at[rate] = {
+      peak: stats.peak,
+      rms: stats.rms,
+      residual: distortionDb(loud, quiet, 8, 128),
+      bands: bandEnergy(loud),
+    };
+  }
+  const a = at[44100];
+  const b = at[48000];
+  const peakDb = Math.abs(dbRatio(a.peak, b.peak));
+  const rmsDb = Math.abs(dbRatio(a.rms, b.rms));
+  const residDb = Math.abs(a.residual - b.residual);
+  const bandDelta = a.bands.map((x, i) => Math.abs(x - b.bands[i]));
+  const bandNames = ['<120', '120-400', '400-4k', '>4k'];
+
+  log('info', `      44100  peak ${a.peak.toFixed(3)}  rms ${a.rms.toFixed(4)}  residual ${a.residual.toFixed(1)} dB` +
+    `  bands ${a.bands.map((x) => x.toFixed(3)).join(' ')}`);
+  log('info', `      48000  peak ${b.peak.toFixed(3)}  rms ${b.rms.toFixed(4)}  residual ${b.residual.toFixed(1)} dB` +
+    `  bands ${b.bands.map((x) => x.toFixed(3)).join(' ')}`);
+  log('info', `      Δ peak ${peakDb.toFixed(2)} dB  rms ${rmsDb.toFixed(2)} dB  residual ${residDb.toFixed(2)} dB` +
+    `  bands ${bandNames.map((n, i) => `${n} ${bandDelta[i].toFixed(3)}`).join('  ')}`);
+
+  check('peak within a tight tolerance across rates', peakDb < PARITY_PEAK_DB,
+    `${peakDb.toFixed(2)} dB of ${PARITY_PEAK_DB}`);
+  check('RMS within a tight tolerance across rates', rmsDb < PARITY_RMS_DB,
+    `${rmsDb.toFixed(2)} dB of ${PARITY_RMS_DB}`);
+  check('128-sample residual stays within a recorded bound across rates', residDb < PARITY_RESIDUAL_DB,
+    `${residDb.toFixed(2)} dB of ${PARITY_RESIDUAL_DB}`);
+  check('band energy does not migrate when the rate changes',
+    Math.max(...bandDelta) < PARITY_BAND,
+    bandNames.map((n, i) => `${n} ${bandDelta[i].toFixed(3)}`).join('  '));
+}
 
 head('Polyphony: the master chain is never driven past what it can take');
 {
@@ -551,7 +729,7 @@ head('Polyphony: reaching the cap fades voices instead of cutting them');
 
 head('Polyphony: a voice stolen before it starts never sounds at all');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 1, length: 48000 * 4, sampleRate: 48000 });
+  const ctx = offline(4, { channels: 1 });
   const engine = new AudioEngine({ context: ctx });
   // The fastest attack any gesture has is 2 ms, and release() cannot put its
   // ramp earlier than t0 + 0.01 — so releasing a pending voice rather than
@@ -568,7 +746,7 @@ head('Polyphony: a voice stolen before it starts never sounds at all');
 
 head('Polyphony: the bus follows a release down rather than holding it under');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 1, length: 48000 * 12, sampleRate: 48000 });
+  const ctx = offline(12, { channels: 1 });
   const engine = new AudioEngine({ context: ctx });
   const spec = buildVoiceSpec({ element: 'water', house: 8, modality: 'fixed' });
   for (let i = 0; i < 4; i++) {

@@ -50,15 +50,20 @@ const check = (label, ok, detail = '') => {
   log(ok ? 'pass' : 'fail', `${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
 };
 
+/**
+ * Default rate for this suite. Helpers take `sampleRate` so a check can render
+ * at 44.1 kHz without rewriting every call; windowing uses the buffer's own
+ * rate, so an assertion here cannot quietly depend on this being 48000.
+ */
 const RATE = 48000;
 const spread = (offset) => Object.fromEntries(SOUNDING_BODIES.map((k, i) => [k, (i * 33 + offset) % 360]));
 const CHART = makeChart(spread(0), { system: 'whole' });
 
 /**
- * Deterministic renders: the impulse response, the noise buffer and drone's
- * choice of which body surfaces next all come from Math.random, and a paired
- * comparison of two renders is only a comparison if both got the same room,
- * the same noise and the same notes.
+ * Deterministic renders: drone's choice of which body surfaces next still
+ * comes from Math.random, and a paired comparison of two renders is only a
+ * comparison if both got the same notes. The impulse response and the noise
+ * buffer are hashed from time, so they no longer consume the seed.
  */
 const realRandom = Math.random;
 const seedRandom = () => {
@@ -96,10 +101,10 @@ function saturationCurveAt(drive, headroom, n = 4096) {
  * blow past maxVoices, and what got measured would be the slot-reclaim path
  * rather than the steady state.
  */
-async function renderMode(seconds, mode, { tap = false, trim = 1, config = {}, drive = null } = {}) {
+async function renderMode(seconds, mode, { tap = false, trim = 1, config = {}, drive = null, sampleRate = RATE } = {}) {
   seedRandom();
   const ctx = new OfflineAudioContext({
-    numberOfChannels: 2, length: Math.ceil(RATE * seconds), sampleRate: RATE,
+    numberOfChannels: 2, length: Math.ceil(sampleRate * seconds), sampleRate,
   });
   const engine = new AudioEngine({ context: ctx });
   engine.start = async () => ctx;
@@ -189,12 +194,13 @@ async function renderMode(seconds, mode, { tap = false, trim = 1, config = {}, d
 }
 
 function peakPerWindow(buffer, size) {
+  const hop = Math.floor(size * buffer.sampleRate);
   const peaks = [];
-  for (let start = 0; start + size * RATE <= buffer.length; start += size * RATE) {
+  for (let start = 0; start + hop <= buffer.length; start += hop) {
     let peak = 0;
     for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
       const d = buffer.getChannelData(ch);
-      for (let i = start; i < start + size * RATE; i++) peak = Math.max(peak, Math.abs(d[i]));
+      for (let i = start; i < start + hop; i++) peak = Math.max(peak, Math.abs(d[i]));
     }
     peaks.push(peak);
   }
