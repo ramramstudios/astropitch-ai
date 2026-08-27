@@ -69,6 +69,9 @@ const cdpPort = 9300 + Math.floor(Math.random() * 400);
 const profile = path.join(process.env.TMPDIR ?? '/tmp', `astropitch-chrome-${process.pid}-${cdpPort}`);
 const chrome = spawn(binary, [
   '--headless=new', '--disable-gpu', '--no-sandbox', '--mute-audio',
+  // Realtime AudioContext (tests/stability.test.html) starts suspended
+  // without this. Offline renders do not care.
+  '--autoplay-policy=no-user-gesture-required',
   '--no-first-run', '--no-default-browser-check', '--disable-dev-shm-usage',
   `--user-data-dir=${profile}`, `--remote-debugging-port=${cdpPort}`,
   'about:blank',

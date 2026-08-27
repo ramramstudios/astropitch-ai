@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AstroPitch — realtime stability tests</title>
+  <style>
+    body { font: 13px ui-monospace, Menlo, monospace; background: #0b0819; color: #ddd; padding: 2rem; }
+    .pass { color: #8fbf6a; } .fail { color: #ff6a5d; } .info { color: #8d8fae; }
+    h2 { font-size: 14px; color: #e9cd93; margin: 1.6rem 0 0.5rem; font-weight: 400; }
+    pre { margin: 0.15rem 0; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<h1 style="font-size:16px;font-weight:400">Realtime stability tests</h1>
+<div id="out"></div>
+
+<script type="module">
+/**
+ * Does the graph keep delivering on a clock it can fall behind?
+ *
+ * Every other audio suite in this repo renders through OfflineAudioContext,
+ * which cannot underrun by construction. This page is the one that runs a
+ * live AudioContext against wall-clock time, at the polyphony cap, with the
+ * sends live, and asks whether the audio thread kept its deadline.
+ *
+ * Honest limit: headless Chrome drives a null audio sink at a timer-driven
+ * realtime cadence. That catches CPU overload, graph stalls, and
+ * main-thread-induced starvation. It does not reproduce a specific device's
+ * driver behaviour, and it never will. Device dropouts remain a manual-QA
+ * item, like the listening checks CLAUDE.md already requires.
+ *
+ * Unknown #1 in research/audio-stability-plan.md is settled for this
+ * environment: the null sink does not underrun so much as run slow, and
+ * `renderCapacity` is gone from Chrome. Single-quantum skips are noisy.
+ * Realtime ratio, multi-quantum stalls, and a drop budget above the noise
+ * are the regression signal. The measured table sits next to those
+ * constants, the same way the saturator drive table sits in engine.js.
+ */
+import { AudioEngine } from '../src/audio/engine.js';
+import { Performer, MODES } from '../src/audio/performer.js';
+import { makeChart } from '../src/chart.js';
+import { SOUNDING_BODIES } from '../src/ontology.js';
+
+const out = document.getElementById('out');
+let failures = 0;
+
+const log = (cls, msg) => {
+  const pre = document.createElement('pre');
+  pre.className = cls;
+  pre.textContent = msg;
+  out.appendChild(pre);
+};
+const head = (t) => { const h = document.createElement('h2'); h.textContent = t; out.appendChild(h); };
+const check = (label, ok, detail = '') => {
+  if (!ok) failures++;
+  log(ok ? 'pass' : 'fail', `${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
+};
+
+const spread = (offset) => Object.fromEntries(SOUNDING_BODIES.map((k, i) => [k, (i * 33 + offset) % 360]));
+const CHART = makeChart(spread(0), { system: 'whole' });
+
+/** Wall-clock stretch each mode (and the stressor) is left running. */
+const RUN = 10;
+/**
+ * Bright palette, unison stacks, doubled gestures: the construction the
+ * densest chart voices actually use, not a lighter stand-in.
+ */
+const PALETTE = 'astropitch';
+const MODE_IDS = MODES.map((m) => m.id);
+/** Bloom holds the whole chart as a chord — the densest texture. */
+const DENSEST = 'bloom';
+
+/**
+ * Headless Chrome's null sink does not drop quanta when the render thread
+ * falls behind: it just advances `currentTime` more slowly than the wall
+ * clock. `AudioContext.renderCapacity` is gone from Chrome (removed from
+ * the spec in 2025). Single-quantum skips also show up non-deterministically
+ * (unknown #1 in research/audio-stability-plan.md — the count is too noisy
+ * here to trip on zero). So the regression signal this page can actually
+ * keep is:
+ *
+ *   - realtime ratio (audioSec / wallSec), which is load
+ *   - a multi-quantum jump, which is a stall rather than a hiccup
+ *   - a drop count well above the noise, which is a graph that is actually
+ *     falling apart
+ *
+ * First honest runs on this machine, 10 s wall, cap 24, palette astropitch,
+ * 44100 Hz null sink:
+ *
+ *              ratio                  drops
+ *     bloom    0.88 / 0.72 / 0.76 / 1.00     0 / 0 / 0 / 0
+ *     scalar   0.96 / 0.88 / 0.91 / 1.00     0 / 0 / 1 / 0
+ *     drone    0.72 / 0.53 / 0.67 / 1.00     0 / 0 / 1 / 1
+ *     melodic  0.84 / 0.62 / 0.73 / 1.00     1 / 4 / 3 / 5
+ *     stress   0.82 / 0.82 / 0.92 / 1.00     0 / 0 / 0 / 0
+ *
+ * Floors are 0.75 × the worst ratio. Drop budgets are the worst count plus
+ * room (melodic's 5 → 8), so ordinary null-sink hiccups do not fail the suite.
+ * Melodic is the mode that builds a new voice graph on the main thread for
+ * every note while already at the cap; the others hold.
+ */
+const REALTIME_RATIO_FLOOR = {
+  bloom: 0.54, scalar: 0.66, drone: 0.40, melodic: 0.46, stress: 0.61,
+};
+const DROP_BUDGET = {
+  bloom: 2, scalar: 3, drone: 3, melodic: 8, stress: 2,
+};
+/** A jump larger than one 128-sample quantum is a stall, not a hiccup. */
+const STALL_FRAMES = 128;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function until(pred, timeoutMs, step = 50) {
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    if (pred()) return true;
+    await sleep(step);
+  }
+  return pred();
+}
+
+/**
+ * Pad the engine to maxVoices with sustaining chart voices so the run is
+ * actually at the cap. Reverb and delay sends come from the voice specs
+ * themselves — they are live because the voices are real, not because a
+ * send gain was forced.
+ */
+function fillToCap(performer) {
+  const { engine } = performer;
+  const placements = performer._sounding();
+  if (!placements.length) return;
+  let i = 0;
+  while (engine.activeVoiceCount() < engine.maxVoices) {
+    const p = placements[i % placements.length];
+    performer._voiceFor(p, {
+      time: engine.now,
+      gainMul: 0.45,
+      octaveShift: (i % 3) - 1,
+    });
+    i++;
+  }
+}
+
+async function attachWatch(ctx) {
+  await ctx.audioWorklet.addModule(new URL('./stability-worklet.js', import.meta.url).href);
+  const node = new AudioWorkletNode(ctx, 'quantum-watch', {
+    numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+  });
+  const mute = ctx.createGain();
+  mute.gain.value = 0;
+  // Tap the destination path so process() is called every quantum without
+  // contributing signal. A disconnected worklet is not rendered at all.
+  const probe = ctx.createConstantSource();
+  probe.offset.value = 0;
+  probe.connect(node);
+  node.connect(mute);
+  mute.connect(ctx.destination);
+  probe.start();
+
+  const drops = [];
+  node.port.onmessage = (e) => {
+    if (e.data?.type === 'drop') drops.push(e.data);
+  };
+  const reset = () => new Promise((resolve, reject) => {
+    drops.length = 0;
+    const t = setTimeout(() => reject(new Error('quantum-watch did not reset')), 2000);
+    const onmsg = (e) => {
+      if (e.data?.type !== 'reset-ack') return;
+      clearTimeout(t);
+      node.port.removeEventListener('message', onmsg);
+      resolve();
+    };
+    node.port.addEventListener('message', onmsg);
+    node.port.postMessage({ type: 'reset' });
+  });
+  const flush = () => new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('quantum-watch did not answer')), 2000);
+    const onmsg = (e) => {
+      if (e.data?.type !== 'report') return;
+      clearTimeout(t);
+      node.port.removeEventListener('message', onmsg);
+      resolve(e.data);
+    };
+    node.port.addEventListener('message', onmsg);
+    node.port.postMessage({ type: 'flush' });
+  });
+  return { drops, reset, flush };
+}
+
+function attachCapacity(ctx) {
+  const cap = ctx.renderCapacity;
+  const samples = [];
+  let available = false;
+  if (cap && typeof cap.start === 'function') {
+    available = true;
+    cap.onupdate = (e) => {
+      samples.push({
+        timestamp: e.timestamp,
+        averageLoad: e.averageLoad,
+        peakLoad: e.peakLoad,
+        underrunRatio: e.underrunRatio,
+      });
+    };
+    try { cap.start({ updateInterval: 0.5 }); }
+    catch { available = false; }
+  }
+  const stop = () => {
+    try { cap?.stop?.(); } catch { /* not running */ }
+    cap && (cap.onupdate = null);
+  };
+  return { available, samples, stop };
+}
+
+function summariseCapacity(samples) {
+  if (!samples.length) {
+    return { peakLoad: null, averageLoad: null, underrunRatio: null };
+  }
+  return {
+    peakLoad: Math.max(...samples.map((s) => s.peakLoad)),
+    averageLoad: Math.max(...samples.map((s) => s.averageLoad)),
+    underrunRatio: Math.max(...samples.map((s) => s.underrunRatio)),
+  };
+}
+
+/**
+ * Burn the main thread in ~80 ms slices with a zero-delay yield between
+ * them. Long enough to miss several 25 ms scheduler ticks (and several
+ * animation frames); short enough that CDP can still poll __testDone.
+ * A fully blocked main thread would look like a hung test rather than a
+ * janky UI.
+ */
+async function stressMainThread(seconds) {
+  const end = performance.now() + seconds * 1000;
+  while (performance.now() < end) {
+    const slice = Math.min(end, performance.now() + 80);
+    let x = 0;
+    while (performance.now() < slice) x += Math.sqrt(x + 1.0001);
+    await sleep(0);
+  }
+}
+
+async function runStretch({ mode, stress = false }) {
+  const engine = new AudioEngine();
+  const ctx = await engine.start();
+  if (ctx.state === 'suspended') await ctx.resume();
+
+  const watch = await attachWatch(ctx);
+  const capacity = attachCapacity(ctx);
+
+  const performer = new Performer(engine);
+  performer.setChart(CHART);
+  performer.setPalette(PALETTE);
+
+  await performer.play(mode);
+  fillToCap(performer);
+
+  // Voice construction is a main-thread allocation spike. Measuring through
+  // it counts the harness, not the graph: a first run that refilled to the
+  // cap every 250 ms produced a single dropped quantum on every looping
+  // mode and none on bloom (which never needed a refill). Warm up, then
+  // leave the voice set alone for the window.
+  await sleep(500);
+  await watch.reset();
+  // One more quantum after the ack so lastFrame is set on a healthy
+  // callback; a jump spanning the reset itself is not a dropout.
+  await sleep(50);
+  capacity.samples.length = 0;
+
+  const wall0 = performance.now();
+  const audio0 = ctx.currentTime;
+  let peakActive = engine.activeVoiceCount();
+  let minActive = peakActive;
+
+  const sampleVoices = () => {
+    const n = engine.activeVoiceCount();
+    peakActive = Math.max(peakActive, n);
+    minActive = Math.min(minActive, n);
+  };
+
+  if (stress) {
+    const end = performance.now() + RUN * 1000;
+    while (performance.now() < end) {
+      await stressMainThread(0.4);
+      sampleVoices();
+    }
+  } else {
+    const end = performance.now() + RUN * 1000;
+    while (performance.now() < end) {
+      await sleep(250);
+      sampleVoices();
+    }
+  }
+
+  const wall1 = performance.now();
+  const audio1 = ctx.currentTime;
+  const sampleRate = ctx.sampleRate;
+  const maxVoices = engine.maxVoices;
+  const report = await watch.flush().catch((e) => ({ error: e.message, calls: 0, drops: watch.drops, skippedFrames: 0 }));
+  capacity.stop();
+
+  performer.stop({ fade: 0.05, emit: false });
+  engine.releaseAll(0.05);
+  await until(() => engine.voices.size === 0, 2500);
+  try { await ctx.close(); } catch { /* already closed */ }
+
+  const wallSec = (wall1 - wall0) / 1000;
+  const audioSec = audio1 - audio0;
+  const cap = summariseCapacity(capacity.samples);
+  const dropped = report.drops?.length ?? watch.drops.length;
+
+  return {
+    mode, stress,
+    wallSec, audioSec,
+    driftMs: (audioSec - wallSec) * 1000,
+    realtimeRatio: wallSec > 0 ? audioSec / wallSec : 0,
+    peakActive,
+    minActive,
+    maxVoices,
+    sampleRate,
+    worklet: {
+      error: report.error ?? null,
+      calls: report.calls ?? 0,
+      dropped,
+      skippedFrames: report.skippedFrames ?? 0,
+      drops: report.drops ?? watch.drops,
+    },
+    capacity: { available: capacity.available, ...cap, samples: capacity.samples.length },
+  };
+}
+
+function fmtLoad(n) {
+  return n == null ? 'n/a' : n.toFixed(3);
+}
+
+function reportRun(r) {
+  const cap = r.capacity.available
+    ? `load peak ${fmtLoad(r.capacity.peakLoad)} avg ${fmtLoad(r.capacity.averageLoad)}  underrun ${fmtLoad(r.capacity.underrunRatio)}`
+    : 'renderCapacity unavailable';
+  log('info',
+    `      ${r.wallSec.toFixed(2)}s wall / ${r.audioSec.toFixed(2)}s audio  ` +
+    `ratio ${r.realtimeRatio.toFixed(3)}  drift ${r.driftMs.toFixed(1)} ms   ` +
+    `${r.minActive}–${r.peakActive}/${r.maxVoices} voices   ${r.sampleRate} Hz`);
+  log('info',
+    `      quanta ${r.worklet.calls}  dropped ${r.worklet.dropped}  skipped frames ${r.worklet.skippedFrames}   ${cap}`);
+  if (r.worklet.error) log('fail', `      worklet: ${r.worklet.error}`);
+  for (const d of (r.worklet.drops ?? []).slice(0, 8)) {
+    log('info', `      drop at t=${d.currentTime.toFixed(3)}s  skipped ${d.skippedFrames} frames`);
+  }
+  if ((r.worklet.drops?.length ?? 0) > 8) {
+    log('info', `      … ${r.worklet.drops.length - 8} more`);
+  }
+}
+
+function expectedQuanta(r) {
+  // 128-sample quantum. 50% slack: a late start, a yield, or a slightly
+  // short wall window must not fail a run that was clearly rendering.
+  return (r.audioSec * r.sampleRate) / 128 * 0.5;
+}
+
+function assertDrops(r, key) {
+  const budget = DROP_BUDGET[key];
+  const stall = (r.worklet.drops ?? []).find((d) => d.skippedFrames > STALL_FRAMES);
+  check('no multi-quantum stall', !stall,
+    stall ? `skipped ${stall.skippedFrames} frames at t=${stall.currentTime.toFixed(3)}s` : '');
+  check(`dropped quanta within the recorded ${key} budget (${budget})`,
+    r.worklet.dropped <= budget,
+    `${r.worklet.dropped} drops, ${r.worklet.skippedFrames} frames skipped`);
+}
+
+function assertRealtimeRatio(r, key) {
+  const floor = REALTIME_RATIO_FLOOR[key];
+  check(`realtime ratio stays at or above the recorded floor (${floor})`,
+    r.realtimeRatio >= floor,
+    `${r.realtimeRatio.toFixed(3)} of ${floor}`);
+}
+
+function assertUnloaded(r) {
+  check('audio thread rendered', r.worklet.calls > expectedQuanta(r),
+    `${r.worklet.calls} process() calls over ${r.audioSec.toFixed(2)}s`);
+  check('audio clock advanced', r.audioSec > 1,
+    `${r.audioSec.toFixed(2)}s of ${RUN}s wall`);
+  check('ran at the polyphony cap', r.peakActive >= r.maxVoices,
+    `${r.peakActive} of ${r.maxVoices}`);
+  if (r.capacity.available) {
+    check('underrunRatio == 0', r.capacity.underrunRatio === 0,
+      `underrunRatio ${fmtLoad(r.capacity.underrunRatio)}`);
+  } else {
+    log('info', '      renderCapacity not present; realtime ratio is the load signal');
+  }
+  assertDrops(r, r.mode);
+  assertRealtimeRatio(r, r.mode);
+}
+
+function assertStressed(r) {
+  check('audio thread rendered under main-thread stress', r.worklet.calls > expectedQuanta(r) * 0.5,
+    `${r.worklet.calls} process() calls over ${r.audioSec.toFixed(2)}s`);
+  check('audio clock advanced under stress', r.audioSec > 1,
+    `${r.audioSec.toFixed(2)}s of ${RUN}s wall`);
+  check('stayed at the polyphony cap under stress', r.peakActive >= r.maxVoices,
+    `${r.peakActive} of ${r.maxVoices}`);
+  if (r.capacity.available) {
+    check('underrunRatio reported under stress', true,
+      `underrunRatio ${fmtLoad(r.capacity.underrunRatio)}`);
+  }
+  assertDrops(r, 'stress');
+  assertRealtimeRatio(r, 'stress');
+}
+
+const resultsByMode = {};
+
+head(`Each transport mode at the polyphony cap for ${RUN}s`);
+log('info', `      palette ${PALETTE}  cap ${new AudioEngine().maxVoices}  modes ${MODE_IDS.join(', ')}`);
+
+for (const mode of MODE_IDS) {
+  head(`${mode}() at the cap, unloaded main thread`);
+  try {
+    const r = await runStretch({ mode });
+    resultsByMode[mode] = r;
+    reportRun(r);
+    assertUnloaded(r);
+  } catch (e) {
+    failures++;
+    log('fail', `FAIL  ${mode}() threw: ${e && e.message}`);
+    log('info', e && e.stack ? e.stack : '');
+  }
+}
+
+head(`${DENSEST}() at the cap, main-thread stressor`);
+log('info', '      80 ms busy-loop slices with a zero-delay yield between them');
+try {
+  const r = await runStretch({ mode: DENSEST, stress: true });
+  resultsByMode.stress = r;
+  reportRun(r);
+  assertStressed(r);
+} catch (e) {
+  failures++;
+  log('fail', `FAIL  stressed ${DENSEST}() threw: ${e && e.message}`);
+  log('info', e && e.stack ? e.stack : '');
+}
+
+head('Load per mode (realtime ratio; peakLoad where renderCapacity exists)');
+for (const key of [...MODE_IDS, 'stress']) {
+  const r = resultsByMode[key];
+  if (!r) continue;
+  log('info', `      ${key.padEnd(8)}  ratio ${r.realtimeRatio.toFixed(3)}  drops ${r.worklet.dropped}  peakLoad ${fmtLoad(r.capacity.peakLoad)}`);
+}
+
+const summary = document.createElement('h2');
+summary.textContent = failures === 0 ? 'ALL REALTIME STABILITY TESTS PASSED' : `${failures} REALTIME STABILITY TEST(S) FAILED`;
+summary.style.color = failures === 0 ? '#8fbf6a' : '#ff6a5d';
+out.appendChild(summary);
+window.__testFailures = failures;
+window.__testDone = true;
+</script>
+</body>
+</html>

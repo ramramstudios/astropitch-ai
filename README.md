@@ -246,6 +246,7 @@ Everything else needs a real `AudioContext` or DOM, and runs headless in Chrome:
 ```sh
 node tests/run-browser.mjs tests/audio.test.html      # every sign x house x palette, OfflineAudioContext
 node tests/run-browser.mjs tests/polyphony.test.html  # the same chain with a transport left running
+node tests/run-browser.mjs tests/stability.test.html 180  # realtime AudioContext: underruns, dropped quanta, clock drift
 node tests/run-browser.mjs tests/overlay.test.html
 node tests/run-browser.mjs tests/audio-preferences.test.html
 ```
