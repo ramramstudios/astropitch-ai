@@ -811,6 +811,10 @@ function wireForms() {
 
   $('#monthBackBtn').addEventListener('click', () => stepBirthDate({ months: -1 }));
   $('#dayBackBtn').addEventListener('click', () => stepBirthDate({ days: -1 }));
+  $('#hourBackBtn').addEventListener('click', () => stepBirthDate({ hours: -1 }));
+  $('#minuteBackBtn').addEventListener('click', () => stepBirthDate({ minutes: -1 }));
+  $('#minuteForwardBtn').addEventListener('click', () => stepBirthDate({ minutes: 1 }));
+  $('#hourForwardBtn').addEventListener('click', () => stepBirthDate({ hours: 1 }));
   $('#dayForwardBtn').addEventListener('click', () => stepBirthDate({ days: 1 }));
   $('#monthForwardBtn').addEventListener('click', () => stepBirthDate({ months: 1 }));
 
@@ -1119,12 +1123,13 @@ function restoreYourChartMemory() {
   updateRevertAvailability();
 }
 
-/** Move the birth-date input without letting JavaScript's local timezone shift it. */
-function stepBirthDate({ days = 0, months = 0 }) {
+/** Move the birth date/time without letting JavaScript's local timezone shift it. */
+function stepBirthDate({ days = 0, months = 0, hours = 0, minutes = 0 }) {
   const [year, month, day] = $('#birthDate').value.split('-').map(Number);
   if (!year || !month || !day) return;
+  const [hour = 0, minute = 0] = $('#birthTime').value.split(':').map(Number);
 
-  const date = new Date(Date.UTC(year, month - 1, day));
+  const date = new Date(Date.UTC(year, month - 1, day, hour || 0, minute || 0));
   if (months) {
     // Set the day to one before moving months, then clamp it — e.g. Jan 31
     // becomes Feb 28/29 rather than spilling into March.
@@ -1134,12 +1139,18 @@ function stepBirthDate({ days = 0, months = 0 }) {
     date.setUTCDate(Math.min(day, lastDay));
   }
   if (days) date.setUTCDate(date.getUTCDate() + days);
+  if (hours) date.setUTCHours(date.getUTCHours() + hours);
+  if (minutes) date.setUTCMinutes(date.getUTCMinutes() + minutes);
 
   $('#birthDate').value = [
     date.getUTCFullYear(),
     String(date.getUTCMonth() + 1).padStart(2, '0'),
     String(date.getUTCDate()).padStart(2, '0'),
   ].join('-');
+  $('#birthTime').value = [
+    String(date.getUTCHours()).padStart(2, '0'),
+    String(date.getUTCMinutes()).padStart(2, '0'),
+  ].join(':');
   castFromBirthForm();
 }
 

@@ -99,11 +99,15 @@
             </label>
           </div>
 
-          <div class="time-stepper" role="group" aria-label="Change chart date">
-            <button type="button" id="monthBackBtn" title="Previous month" aria-label="Previous month">«</button>
-            <button type="button" id="dayBackBtn" title="Previous day" aria-label="Previous day">‹</button>
-            <button type="button" id="dayForwardBtn" title="Next day" aria-label="Next day">›</button>
-            <button type="button" id="monthForwardBtn" title="Next month" aria-label="Next month">»</button>
+          <div class="time-stepper" role="group" aria-label="Change chart date and time">
+            <button type="button" class="step-month" id="monthBackBtn" title="Previous month" aria-label="Previous month">««</button>
+            <button type="button" class="step-day" id="dayBackBtn" title="Previous day" aria-label="Previous day">‹‹‹</button>
+            <button type="button" class="step-hour" id="hourBackBtn" title="Previous hour" aria-label="Previous hour">«</button>
+            <button type="button" class="step-minute" id="minuteBackBtn" title="Previous minute" aria-label="Previous minute">‹</button>
+            <button type="button" class="step-minute" id="minuteForwardBtn" title="Next minute" aria-label="Next minute">›</button>
+            <button type="button" class="step-hour" id="hourForwardBtn" title="Next hour" aria-label="Next hour">»</button>
+            <button type="button" class="step-day" id="dayForwardBtn" title="Next day" aria-label="Next day">›››</button>
+            <button type="button" class="step-month" id="monthForwardBtn" title="Next month" aria-label="Next month">»»</button>
           </div>
 
           <label class="field">
