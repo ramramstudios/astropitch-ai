@@ -573,21 +573,33 @@ const dense = (n, gain = 0.2) => (engine) => {
  * follows the one-pole coeff per sample) and WaveShaper.oversample, which
  * resamples relative to the context rate.
  *
- * The same 16-voice dense fixture is rendered at 44100 and 48000. Small
- * differences are expected; these bounds are what the first honest run
- * measured, plus room so ordinary variation does not fail the suite. A future
- * change that makes the IR a different *length* or the saturator a different
- * *brightness* at one rate will blow past them.
+ * The same 16-voice dense fixture is rendered at 44100 and 48000. Peak, RMS,
+ * and band energy are bit-stable across repeat runs and get a tight bound.
+ * The 128-sample residual is not: four back-to-back full-suite runs (same
+ * deterministic graph, same seed, same machine) gave each rate independently
+ * one of two outcomes, uncorrelated with which rate it was —
  *
- * Measured 2026-08-27, dense(16) × 8 s, hashed IR/noise:
- *     44100  peak 0.905  rms 0.0632  residual -49.7 dB  bands 0.026 0.799 0.175 0.001
- *     48000  peak 0.900  rms 0.0672  residual -50.7 dB  bands 0.026 0.810 0.163 0.001
- *     Δ      peak 0.05 dB  rms 0.54 dB  residual 1.05 dB  band max 0.011
+ *     run 1  44100 -49.7 dB   48000 -50.7 dB   Δ 1.06 dB
+ *     run 2  44100 -37.8 dB   48000 -50.7 dB   Δ 12.91 dB
+ *     run 3  44100 -37.7 dB   48000 -38.6 dB   Δ 0.88 dB
+ *     run 4  44100 -49.7 dB   48000 -50.7 dB   Δ 1.06 dB
+ *
+ * i.e. this is per-render engine jitter, not a rate effect: both -50 dB and
+ * -38 dB showed up at both rates. Peak and RMS are single-render statistics
+ * and do not see it; the residual differences two separate startRendering()
+ * calls at a 128-sample block, and a compressor/limiter is a feedback system —
+ * a sub-ULP difference in float summation order (plausible from the
+ * convolver's FFT) has room to compound over 8s of gain-reduction history
+ * into a macroscopically different envelope. The bound below covers the
+ * worst gap actually observed, with margin; it is not tight enough to catch
+ * a small rate-dependent regression in this metric, but nothing tighter would
+ * survive a re-run. A future change that makes the IR a different *length*,
+ * or moves both attractors together, still blows past it.
  */
 const PARITY_RATES = [44100, 48000];
 const PARITY_PEAK_DB = 0.4;
 const PARITY_RMS_DB = 1.0;
-const PARITY_RESIDUAL_DB = 2.0;
+const PARITY_RESIDUAL_DB = 15.0;
 const PARITY_BAND = 0.04;
 const PARITY_IR_SECONDS = 0.01;
 
@@ -1020,7 +1032,8 @@ head('Tuning');
   check('the centre of Aries is A 440', Math.abs(a440 - 440) < 1e-9, `${a440}`);
   // 360 degrees IS 0 degrees; the octave is carried by the octave parameter.
   check('the circle closes on itself', Math.abs(frequencyFor(360, { octave: 0 }) - frequencyFor(0, { octave: 0 })) < 1e-9);
-  check('one octave up is a doubling', Math.abs(frequencyFor(15, { octave: 1 }) - 880) < 1e-9);
+  check('one octave up is a doubling',
+    Math.abs(frequencyFor(15, { octave: 1 }) - frequencyFor(15, { octave: 0 }) * 2) < 1e-9);
   check('359.99 degrees is just under the upper Aries cusp',
     Math.abs(frequencyFor(359.99, { octave: 0 }) - 432 * 2 ** ((359.99 - 15) / 360)) < 1e-9,
     `${frequencyFor(359.99, { octave: 0 }).toFixed(3)}`);
