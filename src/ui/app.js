@@ -8,6 +8,7 @@ import { TEMPERAMENTS, frequencyFor } from '../audio/tuning.js';
 import { PALETTES, PALETTE_IDS, DEFAULT_PALETTE } from '../audio/palettes.js';
 import { engine } from '../audio/engine.js';
 import { Performer } from '../audio/performer.js';
+import { MODES, DEFAULT_MODE_ID, modeButtonId } from '../audio/modes.js';
 import { AudioLifecycle } from '../audio/lifecycle.js';
 import { Wheel } from './wheel.js';
 import { Starfield } from './starfield.js';
@@ -261,12 +262,7 @@ const performer = new Performer(engine);
 const lifecycle = new AudioLifecycle({
   engine,
   performer,
-  reenter: (mode) => ({
-    bloom: () => performer.bloom(),
-    scalar: () => performer.scalar(),
-    drone: () => performer.drone(),
-    melodic: () => performer.melodic(),
-  }[mode] ?? (() => performer.bloom()))(),
+  reenter: (mode) => performer.play(mode),
 });
 let wheel;
 let starfield;
@@ -282,7 +278,7 @@ let partnerFormTouchedSinceCast = false;
 // Mute is session-only. Restoring a silent session makes a later visit look
 // broken; only the user's chosen volume level survives reload.
 let muted = false;
-let lastTransportMode = 'bloom';
+let lastTransportMode = DEFAULT_MODE_ID;
 let angleDrag = null;
 
 function applyVolume() {
@@ -308,12 +304,7 @@ function saveAudioPreferences() {
 }
 
 function playLastTransportMode() {
-  ({
-    bloom: () => performer.bloom(),
-    scalar: () => performer.scalar(),
-    drone: () => performer.drone(),
-    melodic: () => performer.melodic(),
-  }[lastTransportMode] ?? (() => performer.bloom()))();
+  performer.play(lastTransportMode);
 }
 
 function boot() {
@@ -332,6 +323,7 @@ function boot() {
   buildTemperamentOptions();
   buildLegends();
   buildAspectKey();
+  buildTransportModes();
 
   wireSheet();
   wireTabs();
@@ -1336,13 +1328,44 @@ function wireSoundControls() {
   $('#volumeToggle').addEventListener('click', () => setMuted(!muted));
 }
 
+/**
+ * Mode buttons and the keyboard-help line both come from MODES — the same
+ * registry the performer dispatches on. A new mode is one object in modes.js.
+ */
+function buildTransportModes() {
+  const holder = $('#transportModes');
+  holder.replaceChildren(...MODES.map((mode) => {
+    const btn = document.createElement('button');
+    btn.className = 'play';
+    btn.id = modeButtonId(mode);
+    btn.type = 'button';
+    btn.setAttribute('aria-pressed', 'false');
+    btn.title = mode.title;
+
+    const name = document.createElement('span');
+    name.className = 'play-name';
+    name.textContent = mode.label;
+    const sub = document.createElement('span');
+    sub.className = 'play-sub';
+    sub.textContent = mode.sub;
+    btn.append(name, sub);
+    return btn;
+  }));
+
+  const help = $('#modeKeysHelp');
+  if (help) {
+    help.replaceChildren(...MODES.flatMap((mode, i) => {
+      const nodes = [];
+      if (i > 0) nodes.push(document.createTextNode(' · '));
+      const kbd = document.createElement('kbd');
+      kbd.textContent = mode.key.toUpperCase();
+      nodes.push(kbd, document.createTextNode(` ${mode.id}`));
+      return nodes;
+    }));
+  }
+}
+
 function wireTransport() {
-  const modes = {
-    '#bloomBtn': () => performer.bloom(),
-    '#scalarBtn': () => performer.scalar(),
-    '#droneBtn': () => performer.drone(),
-    '#melodicBtn': () => performer.melodic(),
-  };
   let requestedMode = null;
 
   // Keep this in step with keyboard shortcuts and transport passes that end on
@@ -1352,10 +1375,10 @@ function wireTransport() {
     else if (event.type === 'stop' || event.type === 'end') requestedMode = null;
   });
 
-  for (const [sel, fn] of Object.entries(modes)) {
-    const mode = sel.slice(1).replace('Btn', '');
-    $(sel).addEventListener('click', async () => {
-      if (requestedMode === mode || performer.mode === mode) {
+  for (const mode of MODES) {
+    const id = mode.id;
+    $(`#${modeButtonId(mode)}`).addEventListener('click', async () => {
+      if (requestedMode === id || performer.mode === id) {
         requestedMode = null;
         performer.stop();
         return;
@@ -1363,21 +1386,22 @@ function wireTransport() {
 
       // Highlight first: a mode only starts in response to its visible toggle,
       // and a later click can cancel this request while Web Audio is waking.
-      requestedMode = mode;
-      setActiveTransportMode(mode);
+      requestedMode = id;
+      setActiveTransportMode(id);
       await engine.start();
-      if (requestedMode !== mode) return;
+      if (requestedMode !== id) return;
       applyVolume();
-      await fn();
+      await performer.play(id);
     });
   }
 }
 
 function setActiveTransportMode(mode = null) {
-  for (const [sel, name] of [['#bloomBtn', 'bloom'], ['#scalarBtn', 'scalar'], ['#droneBtn', 'drone'], ['#melodicBtn', 'melodic']]) {
-    const active = name === mode;
-    $(sel).classList.toggle('is-active', active);
-    $(sel).setAttribute('aria-pressed', String(active));
+  for (const m of MODES) {
+    const btn = $(`#${modeButtonId(m)}`);
+    const active = m.id === mode;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-pressed', String(active));
   }
 }
 
@@ -1872,10 +1896,8 @@ function wireKeyboard() {
       toggleTransport();
       return;
     }
-    if (e.key.toLowerCase() === 'b') performer.bloom();
-    else if (e.key.toLowerCase() === 's') performer.scalar();
-    else if (e.key.toLowerCase() === 'd') performer.drone();
-    else if (e.key.toLowerCase() === 'm') performer.melodic();
+    const mode = MODES.find((m) => m.key === e.key.toLowerCase());
+    if (mode) performer.play(mode.id);
   });
 }
 

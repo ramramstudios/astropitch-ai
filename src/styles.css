@@ -1332,6 +1332,10 @@ html[data-mode="mobile"] table.data td { padding-top: 0.9rem; padding-bottom: 0.
 
 .transport-main { display: flex; align-items: stretch; }
 
+/* Children participate in the parent flex/grid (mobile uses a 6-column grid
+   of brand + modes + hide). Without contents, a wrapper would break that. */
+.transport-modes { display: contents; }
+
 .transport-brand {
   position: absolute;
   top: 0;

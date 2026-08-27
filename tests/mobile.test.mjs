@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { nextPinchView, clampPanView, VIEW_MIN_SCALE, VIEW_MAX_SCALE } from '../src/ui/wheel.js';
 import { nextSheetState, nearestSheetState } from '../src/ui/app.js';
 import { lifecycleStep, LIFECYCLE_STATES, AudioLifecycle } from '../src/audio/lifecycle.js';
+import { MODES, modeButtonId } from '../src/audio/modes.js';
 
 let fails = 0;
 const ok = (label, cond, detail = '') => {
@@ -115,6 +116,44 @@ console.log('\n--- mode-detection query stays identical between app.js and its i
   if (appMatch && htmlMatch) {
     ok('the two query strings are identical', appMatch[1] === htmlMatch[1],
       `app.js: "${appMatch[1]}" vs index.html: "${htmlMatch[1]}"`);
+  }
+}
+
+console.log('\n--- MODES registry is the single source for buttons, keys, and help ---');
+{
+  // Buttons and the keyboard-help line are rendered from MODES at boot. The
+  // HTML only holds the containers; if a mode is missing fields or the UI
+  // stops iterating MODES, a new sound feature becomes a seven-file edit
+  // again — see research/audio-implementation-plan.md Phase 3.
+  const appSrc = readFileSync(join(__dirname, '../src/ui/app.js'), 'utf8');
+  const htmlSrc = readFileSync(join(__dirname, '../index.html'), 'utf8');
+  const cssSrc = readFileSync(join(__dirname, '../src/styles.css'), 'utf8');
+
+  ok('index.html has a transportModes container, not hand-written mode buttons',
+    htmlSrc.includes('id="transportModes"') && !htmlSrc.includes('id="bloomBtn"'));
+  ok('index.html has a modeKeysHelp slot filled from MODES',
+    htmlSrc.includes('id="modeKeysHelp"') && !/<kbd>B<\/kbd>\s*bloom/.test(htmlSrc));
+
+  ok('app.js builds buttons from MODES', appSrc.includes('buildTransportModes')
+    && /for \(const mode of MODES\)/.test(appSrc));
+  ok('app.js binds keys by iterating MODES',
+    /MODES\.find\(\(m\) => m\.key === e\.key\.toLowerCase\(\)\)/.test(appSrc));
+  ok('app.js syncs aria-pressed from MODES',
+    /for \(const m of MODES\)/.test(appSrc) && appSrc.includes('aria-pressed'));
+
+  const keys = new Set();
+  const ids = new Set();
+  for (const mode of MODES) {
+    ok(`${mode.id}: has label, key, title, sub, and schedule`,
+      !!mode.label && !!mode.key && !!mode.title && !!mode.sub
+      && typeof mode.schedule === 'function');
+    ok(`${mode.id}: key is a single lowercase letter`, /^[a-z]$/.test(mode.key));
+    ok(`${mode.id}: id is unique`, !ids.has(mode.id));
+    ok(`${mode.id}: key is unique`, !keys.has(mode.key));
+    ids.add(mode.id);
+    keys.add(mode.key);
+    ok(`styles.css keeps a glyph rule for #${modeButtonId(mode)}`,
+      cssSrc.includes(`#${modeButtonId(mode)}`));
   }
 }
 
