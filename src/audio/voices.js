@@ -244,7 +244,10 @@ export class Voice {
       ds.connect(this.engine.delaySend);
       this.nodes.push(ds);
     }
-    this.nodes.push(panner, dryGain);
+    // The VCA has to be on `nodes`. dispose() only disconnects what is listed,
+    // and leaving this connected to the panner leaked one GainNode per voice —
+    // the census in tests/stability.test.html is what caught it.
+    this.nodes.push(panner, dryGain, vca);
 
     let chainHead = vca;
     if (this.spec.drive > 0.02) {

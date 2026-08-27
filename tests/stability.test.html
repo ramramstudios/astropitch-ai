@@ -40,6 +40,7 @@ import { AudioEngine } from '../src/audio/engine.js';
 import { Performer, MODES } from '../src/audio/performer.js';
 import { makeChart } from '../src/chart.js';
 import { SOUNDING_BODIES } from '../src/ontology.js';
+import { AudioLifecycle, lifecycleStep } from '../src/audio/lifecycle.js';
 
 const out = document.getElementById('out');
 let failures = 0;
@@ -443,6 +444,266 @@ for (const key of [...MODE_IDS, 'stress']) {
   const r = resultsByMode[key];
   if (!r) continue;
   log('info', `      ${key.padEnd(8)}  ratio ${r.realtimeRatio.toFixed(3)}  drops ${r.worklet.dropped}  peakLoad ${fmtLoad(r.capacity.peakLoad)}`);
+}
+
+/**
+ * Node/voice census. Offline renders cannot observe this: teardown timers
+ * do not run against a real clock, and an OfflineAudioContext has no
+ * background/foreground. The wrap is harness-only — production create*
+ * factories are untouched.
+ *
+ * disconnect() with no arguments is how Voice.dispose tears a node down.
+ * A partial disconnect (one destination) still leaves the node in the live
+ * set, which is the conservative leak signal. Nodes whose context has been
+ * closed (the rebuild path) are dropped from the count: closing the context
+ * is how rebuild reclaims them, and counting them as live would be a
+ * harness false positive.
+ */
+const CENSUS_ENTER_EXIT = 20;
+const CENSUS_LIFECYCLE = 5;
+/** Live nodes may jitter by a keep-alive; they must not climb per cycle.
+ *
+ * Measured 2026-08-27: enter/exit rest 26 every cycle. After the first
+ * hide/show, ensureKeepAlive adds two nodes and rest sits at 28. Slack is
+ * those two plus room, not a licence to leak a voice's worth of graph.
+ */
+const NODE_SLACK = 8;
+
+function installCensus() {
+  // createGain / createOscillator live on BaseAudioContext, not AudioContext.
+  // Wrapping only AudioContext.prototype sees zero factories and reports a
+  // flat live count of 0, which is a silent no-op rather than a census.
+  const proto = (window.BaseAudioContext || window.AudioContext || window.webkitAudioContext).prototype;
+  const originals = [];
+  const live = new Set();
+  let created = 0;
+
+  const wrapDisconnect = (node) => {
+    if (!node || typeof node.disconnect !== 'function' || node.__censusWrapped) return;
+    node.__censusWrapped = true;
+    const orig = node.disconnect.bind(node);
+    node.disconnect = (...args) => {
+      if (args.length === 0) live.delete(node);
+      return orig(...args);
+    };
+  };
+
+  for (const name of Object.getOwnPropertyNames(proto)) {
+    if (!name.startsWith('create') || typeof proto[name] !== 'function') continue;
+    const orig = proto[name];
+    originals.push([name, orig]);
+    proto[name] = function (...args) {
+      const node = orig.apply(this, args);
+      if (node && typeof node.disconnect === 'function') {
+        created++;
+        live.add(node);
+        wrapDisconnect(node);
+      }
+      return node;
+    };
+  }
+
+  const liveCount = () => {
+    for (const n of [...live]) {
+      try {
+        if (n.context && n.context.state === 'closed') live.delete(n);
+      } catch { /* node already gone */ }
+    }
+    return live.size;
+  };
+
+  return {
+    liveCount,
+    get created() { return created; },
+    uninstall() {
+      for (const [name, orig] of originals) proto[name] = orig;
+    },
+  };
+}
+
+/**
+ * Stop the transport and wait until every voice has actually torn down.
+ *
+ * release() is idempotent and the earliest call wins, so a bloom voice that
+ * already scheduled a multi-second tail at construction cannot be shortened
+ * by releaseAll. The census has to wait that tail out — that is the hazard
+ * this phase exists to observe.
+ */
+async function drainVoices(engine, performer, timeoutMs = 12000) {
+  performer.stop({ fade: 0.05, emit: false });
+  engine.releaseAll(0.05);
+  return waitForEmptyVoices(engine, timeoutMs);
+}
+
+async function waitForEmptyVoices(engine, timeoutMs = 12000) {
+  const now = engine.now;
+  let latest = now;
+  for (const v of engine.voices) {
+    if (v.fadeUntil != null && v.fadeUntil > latest) latest = v.fadeUntil;
+  }
+  const wait = Math.min(timeoutMs, Math.max(800, (latest - now) * 1000 + 600));
+  return until(() => engine.voices.size === 0, wait);
+}
+
+async function enterBloom(performer) {
+  await performer.play('bloom');
+  fillToCap(performer);
+}
+
+head(`Voice and node census: ${CENSUS_ENTER_EXIT} enter/exit cycles`);
+{
+  const census = installCensus();
+  try {
+    const engine = new AudioEngine();
+    const ctx = await engine.start();
+    if (ctx.state === 'suspended') await ctx.resume();
+    const performer = new Performer(engine);
+    performer.setChart(CHART);
+    performer.setPalette(PALETTE);
+
+    let peakActive = 0;
+    let restLive = null;
+    const restSamples = [];
+
+    for (let i = 0; i < CENSUS_ENTER_EXIT; i++) {
+      await enterBloom(performer);
+      peakActive = Math.max(peakActive, engine.activeVoiceCount());
+      await sleep(150);
+      const drained = await drainVoices(engine, performer);
+      if (!drained) {
+        check(`cycle ${i + 1}: live voices return to zero after stop`, false,
+          `${engine.voices.size} still registered`);
+        break;
+      }
+      const live = census.liveCount();
+      restSamples.push(live);
+      if (restLive == null) restLive = live;
+    }
+
+    log('info', `      rest live-nodes per cycle: ${restSamples.join(' ')}`);
+    log('info', `      created ${census.created}  peak active ${peakActive}/${engine.maxVoices}  rest after first drain ${restLive}`);
+
+    check('live voices returned to zero after every stop',
+      restSamples.length === CENSUS_ENTER_EXIT && engine.voices.size === 0,
+      `${restSamples.length} drained cycles, ${engine.voices.size} voices left`);
+    check('sounding polyphony never exceeded the cap',
+      peakActive <= engine.maxVoices,
+      `${peakActive} of ${engine.maxVoices}`);
+    const climbed = restSamples.some((n) => n > restLive + NODE_SLACK);
+    check(`live node count flat across ${CENSUS_ENTER_EXIT} enter/exit cycles`,
+      !climbed && restLive != null,
+      `first rest ${restLive}, later ${restSamples[restSamples.length - 1]}, slack ${NODE_SLACK}`);
+
+    try { await ctx.close(); } catch { /* already closed */ }
+  } catch (e) {
+    failures++;
+    log('fail', `FAIL  enter/exit census threw: ${e && e.message}`);
+    log('info', e && e.stack ? e.stack : '');
+  } finally {
+    census.uninstall();
+  }
+}
+
+head(`Voice and node census: ${CENSUS_LIFECYCLE} background/foreground, interrupt/resume, rebuild`);
+{
+  const census = installCensus();
+  try {
+    const engine = new AudioEngine();
+    const ctx0 = await engine.start();
+    if (ctx0.state === 'suspended') await ctx0.resume();
+    const performer = new Performer(engine);
+    performer.setChart(CHART);
+    performer.setPalette(PALETTE);
+
+    const life = new AudioLifecycle({
+      engine,
+      performer,
+      reenter: async (mode) => {
+        await performer.play(mode);
+        fillToCap(performer);
+      },
+    });
+
+    const restAfter = [];
+    let peakActive = 0;
+
+    const samplePeak = () => {
+      peakActive = Math.max(peakActive, engine.activeVoiceCount());
+    };
+
+    const waitDrained = async (label) => {
+      const ok = await waitForEmptyVoices(engine);
+      check(`${label}: live voices return to zero`, ok, `${engine.voices.size} still registered`);
+      restAfter.push(census.liveCount());
+    };
+
+    // Warm a rest baseline the same way the enter/exit loop does.
+    await enterBloom(performer);
+    samplePeak();
+    await sleep(150);
+    await drainVoices(engine, performer);
+    const restLive = census.liveCount();
+
+    for (let i = 0; i < CENSUS_LIFECYCLE; i++) {
+      await enterBloom(performer);
+      samplePeak();
+      await life._apply(lifecycleStep(life._snapshot(), 'play', { mode: 'bloom' }));
+      await sleep(100);
+      await life.handleBackground();
+      await waitDrained(`hide ${i + 1}`);
+      await life.handleForeground();
+      samplePeak();
+      await sleep(100);
+      await drainVoices(engine, performer);
+    }
+
+    for (let i = 0; i < CENSUS_LIFECYCLE; i++) {
+      await enterBloom(performer);
+      samplePeak();
+      await life._apply(lifecycleStep(life._snapshot(), 'play', { mode: 'bloom' }));
+      await sleep(100);
+      await life.handleInterruption();
+      await waitDrained(`interrupt ${i + 1}`);
+      await life.handleForeground();
+      samplePeak();
+      await sleep(100);
+      await drainVoices(engine, performer);
+    }
+
+    for (let i = 0; i < CENSUS_LIFECYCLE; i++) {
+      await enterBloom(performer);
+      samplePeak();
+      await life._apply(lifecycleStep(life._snapshot(), 'play', { mode: 'bloom' }));
+      await sleep(100);
+      await life.handleBackground();
+      await waitDrained(`rebuild-hide ${i + 1}`);
+      await life._apply(lifecycleStep(life._snapshot(), 'show', { needsRebuild: true }));
+      samplePeak();
+      await sleep(150);
+      await drainVoices(engine, performer);
+      restAfter.push(census.liveCount());
+    }
+
+    log('info', `      rest live-nodes after lifecycle drains: ${restAfter.join(' ')}`);
+    log('info', `      created ${census.created}  peak active ${peakActive}/${engine.maxVoices}  enter/exit rest ${restLive}`);
+
+    check('sounding polyphony never exceeded the cap across lifecycle cycles',
+      peakActive <= engine.maxVoices,
+      `${peakActive} of ${engine.maxVoices}`);
+    const climbed = restAfter.some((n) => n > restLive + NODE_SLACK);
+    check(`live node count flat across ${CENSUS_LIFECYCLE} hide/show, interrupt/resume, and rebuild cycles`,
+      !climbed,
+      `baseline rest ${restLive}, max later ${Math.max(...restAfter, 0)}, slack ${NODE_SLACK}`);
+
+    const ctx = engine.ctx;
+    try { if (ctx) await ctx.close(); } catch { /* already closed */ }
+  } catch (e) {
+    failures++;
+    log('fail', `FAIL  lifecycle census threw: ${e && e.message}`);
+    log('info', e && e.stack ? e.stack : '');
+  } finally {
+    census.uninstall();
+  }
 }
 
 const summary = document.createElement('h2');

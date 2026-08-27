@@ -246,6 +246,9 @@ export class AudioLifecycle {
         switch (action) {
           case 'stop-audio':
             this.performer.stop({ fade: SUSPEND_FADE, emit: false });
+            this.engine.releaseAll?.(SUSPEND_FADE);
+            await new Promise((r) => setTimeout(r, SUSPEND_FADE * 1000 + 40));
+            this.engine.disposeAll?.();
             if (typeof this.engine.suspend === 'function') {
               try { await this.engine.suspend(); } catch { /* already closed */ }
             }

@@ -706,6 +706,18 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * Tear every remaining voice down immediately. Used after a suspend fade:
+   * `onended` does not fire on a suspended context, and `release` will not
+   * shorten a tail that has already started, so without this a backgrounded
+   * page keeps the nodes of whatever was fading.
+   */
+  disposeAll() {
+    for (const v of Array.from(this.voices)) {
+      if (v.dispose) v.dispose();
+    }
+  }
+
   level() {
     if (!this.analyser) return 0;
     this.analyser.getFloatTimeDomainData(this._analyserData);
