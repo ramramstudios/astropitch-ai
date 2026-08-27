@@ -29,9 +29,8 @@
  * driver behaviour, and it never will. Device dropouts remain a manual-QA
  * item, like the listening checks CLAUDE.md already requires.
  *
- * Unknown #1 in research/audio-stability-plan.md is settled for this
- * environment: the null sink does not underrun so much as run slow, and
- * `renderCapacity` is gone from Chrome. Single-quantum skips are noisy.
+ * For this environment: the null sink does not underrun so much as run slow,
+ * and `renderCapacity` is gone from Chrome. Single-quantum skips are noisy.
  * Realtime ratio, multi-quantum stalls, and a drop budget above the noise
  * are the regression signal. The measured table sits next to those
  * constants, the same way the saturator drive table sits in engine.js.
@@ -76,9 +75,8 @@ const DENSEST = 'bloom';
  * falls behind: it just advances `currentTime` more slowly than the wall
  * clock. `AudioContext.renderCapacity` is gone from Chrome (removed from
  * the spec in 2025). Single-quantum skips also show up non-deterministically
- * (unknown #1 in research/audio-stability-plan.md — the count is too noisy
- * here to trip on zero). So the regression signal this page can actually
- * keep is:
+ * (the count is too noisy here to trip on zero). So the regression signal
+ * this page can actually keep is:
  *
  *   - realtime ratio (audioSec / wallSec), which is load
  *   - a multi-quantum jump, which is a stall rather than a hiccup

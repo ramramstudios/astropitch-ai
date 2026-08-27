@@ -1,8 +1,7 @@
 /**
  * Test-only render-quantum watch. Lives in tests/, not src/audio/:
- * AudioWorklet on mobile WebViews is an unresolved risk (see
- * research/audio-implementation-plan.md) and this processor is only
- * ever loaded by tests/stability.test.html.
+ * AudioWorklet on mobile WebViews is an unresolved risk, and this processor
+ * is only ever loaded by tests/stability.test.html.
  *
  * A healthy graph calls process() once per 128-sample quantum, and
  * currentFrame advances by exactly that amount between calls. A larger

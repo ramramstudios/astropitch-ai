@@ -168,11 +168,21 @@ Four ways to play a chart: **Bloom** assembles it into one chord, rising sign
 first; **Scalar** walks the zodiac from the Ascendant with note length set by
 modality; **Drone** sustains the anchors and surfaces other bodies at a rate
 driven by aspect tightness; **Melodic** builds a tune from only the chart's
-own notes, in whichever major/minor key they best fit, and loops it.
+own notes, in whichever major/minor key they best fit, and loops it. Each
+mode is one entry in `audio/modes.js` — arrangement, button, keyboard
+shortcut, and help text all render from that one registry.
 
 Temperament is switchable. Equal supports both pitch presentations
 (Chromatic / Gliss); Just and Pythagorean instead quantise to the sign in
 either presentation.
+
+Musical timing runs on an audio-clock scheduler (`audio/scheduler.js`): a
+lookahead tick schedules whatever falls in the next ~150ms of `ctx.currentTime`,
+so a throttled or delayed tick still lands notes at the right time instead of
+drifting. `audio/lifecycle.js` owns the `AudioContext` across tab
+backgrounding, interruptions, and route changes — suspending/fading on hide,
+rebuilding the graph if the context closes or the sample rate changes, and
+re-entering the last mode on resume.
 
 ### Tone palettes
 
@@ -237,8 +247,9 @@ node tests/performer.test.mjs    # what the arrangements schedule
 node tests/designer.test.mjs     # hand-placed bodies, switches, moved angles
 node tests/palettes.test.mjs     # every palette builds every combination
 node tests/engine.test.mjs       # polyphony gain-staging arithmetic
-node tests/mobile.test.mjs       # pinch/pan math, bottom-sheet state
+node tests/mobile.test.mjs       # pinch/pan math, bottom-sheet state, MODES/lifecycle wiring
 node tests/ui-state.test.mjs     # overlay eligibility, audio-preference validation
+node tests/ota.test.mjs          # OTA update policy: versioning, rollout, manifest validation
 ```
 
 Everything else needs a real `AudioContext` or DOM, and runs headless in Chrome:
@@ -252,12 +263,23 @@ node tests/run-browser.mjs tests/audio-preferences.test.html
 ```
 
 These measure level and distortion, not whether it sounds good; manual
-listening is still required for audio changes.
+listening is still required for audio changes. See `TODO.md` for known gaps
+that need a real device or a real ear rather than a headless render.
+
+## Native shells and OTA updates
+
+`native/` holds thin iOS (WKWebView) and Android (WebView) shells — the audio
+engine and UI are the same JS running in both. New palettes and modes ship as
+web-asset updates without an app-store review, via a hand-rolled OTA path
+(`src/ota/`, verified by SHA-256 per file); the PWA keeps using the service
+worker instead. See `native/README.md` and `native/ota/README.md`.
 
 ## Layout
 
 ```
 index.html
+sw.js                service worker (PWA only — native shells use OTA instead)
+bundle.json          stamps the shipped web-bundle version
 src/
   ontology.js        signs, houses, elements, modalities, bodies, aspects
   ephemeris.js       Sun, Moon, planets, angles, house systems
@@ -269,8 +291,18 @@ src/
     palettes.js      the timbre and gesture tables the renderer reads
     tuning.js        longitude -> frequency, temperaments
     performer.js     bloom, scalar, drone, melodic
+    modes.js          the MODES registry (single source for UI + dispatch)
+    scheduler.js      audio-clock lookahead scheduling
+    lifecycle.js      background/foreground/interrupt handling
+    native-bridge.js  event bridge to the native shells
+  ota/
+    policy.js         pure OTA decision logic (versioning, rollout, manifest)
+    client.js         runs the check inside a native shell
   ui/
     wheel.js         SVG chart wheel + circular oscilloscope
     app.js           wiring
     starfield.js
+native/
+  ios/, android/     thin shells; see native/README.md
+  ota/               bundle packing + publishing scripts
 ```

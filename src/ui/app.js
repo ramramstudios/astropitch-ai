@@ -1412,11 +1412,10 @@ function setActiveTransportMode(mode = null) {
 /**
  * Visibility / interrupt handling for the shared AudioContext. Without this
  * the transport UI keeps showing "playing" over a frozen or suspended graph.
- * See research/audio-implementation-plan.md Phase 2.
  *
- * Phase 4 native shells post the same events through attachNativeBridge so
- * iOS AVAudioSession interruptions and Android process lifecycle share one path.
- * Phase 5 OTA is started separately via startOtaCheck (native shells only).
+ * Native shells post the same events through attachNativeBridge so iOS
+ * AVAudioSession interruptions and Android process lifecycle share one path.
+ * OTA is started separately via startOtaCheck (native shells only).
  */
 function wireAudioLifecycle() {
   lifecycle.onEvent((event) => {

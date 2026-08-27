@@ -132,8 +132,7 @@ console.log('\n--- MODES registry is the single source for buttons, keys, and he
 {
   // Buttons and the keyboard-help line are rendered from MODES at boot. The
   // HTML only holds the containers; if a mode is missing fields or the UI
-  // stops iterating MODES, a new sound feature becomes a seven-file edit
-  // again — see research/audio-implementation-plan.md Phase 3.
+  // stops iterating MODES, a new sound feature becomes a seven-file edit again.
   const appSrc = readFileSync(join(__dirname, '../src/ui/app.js'), 'utf8');
   const htmlSrc = readFileSync(join(__dirname, '../index.html'), 'utf8');
   const cssSrc = readFileSync(join(__dirname, '../src/styles.css'), 'utf8');

@@ -22,8 +22,6 @@
  *   { playing: boolean }
  *   { ota: 'apply', manifest: object }
  *   { ota: 'rollback' }
- *
- * See research/audio-implementation-plan.md Phases 4–5.
  */
 
 export const NATIVE_EVENT = 'astropitch:native';

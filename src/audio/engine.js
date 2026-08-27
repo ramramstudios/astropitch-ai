@@ -123,7 +123,7 @@ function ceilingCurve(n = 8192, knee = 0.82, ceiling = 0.995, headroom = 1) {
 /** Summed voice amplitude that still passes at unity gain. */
 const LOAD_REF = 0.34;
 /**
- * Load-model calibration, Phase 5 of research/audio-stability-plan.md.
+ * Load-model calibration.
  *
  * voice.peak is the VCA envelope, not the acoustic peak. Sub, unison octaves
  * and noise all sum into oscMix but are invisible to peak; summing peaks

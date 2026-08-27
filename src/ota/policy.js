@@ -4,8 +4,6 @@
  * Native shells own the live bundle; the PWA keeps using the service worker.
  * Updates are web assets only — never native binaries — so they stay inside
  * Apple 2.5.2 / Play dynamic-code carve-outs.
- *
- * See research/audio-implementation-plan.md Phase 5.
  */
 
 /** @typedef {{ bundleVersion: string, shellVersion?: number, channel?: string }} LocalBundle */
