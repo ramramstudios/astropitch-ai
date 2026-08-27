@@ -80,7 +80,7 @@ Realtime `AudioContext` page at `tests/stability.test.html`, worklet frame count
 - Haiku review.
 - Re-running `tests/polyphony.test.html` after a model change — there was no model change.
 
-### Phase 6 — Stop rule — **done** (this commit)
+### Phase 6 — Stop rule — **done** (`33309b1`)
 
 Phases 1–5 are on `audio`. The mastering chain is not retuned. Glue, saturator drive, limiter, `SAT_HEADROOM`, `CEILING_HEADROOM`, and `LOAD_REF` stay where measurement left them.
 
