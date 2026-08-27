@@ -467,6 +467,10 @@ export class AudioEngine {
     satTrim.gain.value = 1 / SAT_HEADROOM;
     satTrim.connect(saturator);
 
+    // Stability plan Phase 6: stop. Do not retune glue, the saturator, or the
+    // limiter because a residual looked high. Reopen this chain only when a
+    // listening complaint names the mode, the chart, the stage the per-stage
+    // residual blames, and what the band energy and GR telemetry said.
     // Gentle glue, not pumping.
     const glue = ctx.createDynamicsCompressor();
     glue.threshold.value = -20;

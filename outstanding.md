@@ -34,7 +34,7 @@ Realtime `AudioContext` page at `tests/stability.test.html`, worklet frame count
 - Running every existing assertion at 44.1 kHz. Helpers are parameterised so they *can*; the default remains 48 kHz. Only the dedicated fixture is compared across rates.
 - `tests/performer.test.mjs` / `tests/palettes.test.mjs` fake contexts still say 48000. Those are not offline renders.
 
-### Phase 3 — Node and voice census over a long session — **done** (this commit)
+### Phase 3 — Node and voice census over a long session — **done** (`3d35d2d`)
 
 **Completed**
 
@@ -49,11 +49,7 @@ Realtime `AudioContext` page at `tests/stability.test.html`, worklet frame count
 - Haiku review. Same reason as Phase 2.
 - Full offline suites still not re-run after the VCA/`disposeAll` changes. Those paths are not what the census measures; `tests/engine.test.mjs` and `tests/mobile.test.mjs` passed.
 
----
-
-## Remaining phases
-
-### Phase 4 — Four missing offline metrics — **done** (this commit)
+### Phase 4 — Four missing offline metrics — **done** (`9bcb01f`)
 
 **Completed**
 
@@ -69,7 +65,7 @@ Realtime `AudioContext` page at `tests/stability.test.html`, worklet frame count
 - Haiku review.
 - Full `tests/audio.test.html` (the ~460-scene matrix). The new section was measured with a dedicated probe that uses the same helpers and fixture. The 144×palette loop was not re-run.
 
-### Phase 5 — Calibrate the load model — **done** (this commit)
+### Phase 5 — Calibrate the load model — **done** (`e4de48c`)
 
 **Completed**
 
@@ -84,11 +80,22 @@ Realtime `AudioContext` page at `tests/stability.test.html`, worklet frame count
 - Haiku review.
 - Re-running `tests/polyphony.test.html` after a model change — there was no model change.
 
-### Phase 6 — Stop rule — **not started**
+### Phase 6 — Stop rule — **done** (this commit)
 
-Do not retune the mastering chain. Close the plan unless a listening complaint arrives with numbers (mode, chart, stage, bands, GR).
+Phases 1–5 are on `audio`. The mastering chain is not retuned. Glue, saturator drive, limiter, `SAT_HEADROOM`, `CEILING_HEADROOM`, and `LOAD_REF` stay where measurement left them.
+
+Reopen the chain only when a specific listening complaint survives the new instruments and arrives with numbers: which mode, which chart, which stage the per-stage residual blames, and what band energy and GR telemetry say. At that point the diagnosis is the plan.
+
+**Waived**
+
+- Haiku review.
+- A mastering-chain listening pass. Out of scope for this phase by design.
 
 ---
+
+## Remaining phases
+
+None. Phases 1–6 of `research/audio-stability-plan.md` are on `audio`.
 
 ## Standing waivers (not phase-specific)
 
