@@ -21,6 +21,12 @@ import { MODALITIES } from '../ontology.js';
 import { getPalette } from './palettes.js';
 
 const noiseBuffers = new WeakMap();
+function unitNoise(tick, salt) {
+  let x = Math.imul((tick + 1) | 0, 0x9E3779B1) ^ Math.imul((salt + 1) | 0, 0x85EBCA77);
+  x = Math.imul(x ^ (x >>> 16), 0x7FEB352D);
+  x = Math.imul(x ^ (x >>> 15), 0x846CA68B);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+}
 function noiseBuffer(ctx) {
   let buf = noiseBuffers.get(ctx);
   if (!buf) {
@@ -28,9 +34,12 @@ function noiseBuffer(ctx) {
     buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
     // Slightly pink-tilted noise; pure white is thin and hissy on a transient.
+    // Hashed from time so a 44.1 kHz context and a 48 kHz one sample the same
+    // field rather than two different Math.random sequences of different length.
     let last = 0;
+    const rate = ctx.sampleRate;
     for (let i = 0; i < len; i++) {
-      const w = Math.random() * 2 - 1;
+      const w = unitNoise(Math.floor((i / rate) * 48000), 17) * 2 - 1;
       last = (last + 0.035 * w) / 1.035;
       d[i] = w * 0.72 + last * 3.6;
     }
@@ -235,7 +244,10 @@ export class Voice {
       ds.connect(this.engine.delaySend);
       this.nodes.push(ds);
     }
-    this.nodes.push(panner, dryGain);
+    // The VCA has to be on `nodes`. dispose() only disconnects what is listed,
+    // and leaving this connected to the panner leaked one GainNode per voice —
+    // the census in tests/stability.test.html is what caught it.
+    this.nodes.push(panner, dryGain, vca);
 
     let chainHead = vca;
     if (this.spec.drive > 0.02) {

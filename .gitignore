@@ -1,1 +1,6 @@
 .DS_Store
+native/ios/AstroPitch/www/**
+!native/ios/AstroPitch/www/.gitkeep
+native/android/app/src/main/assets/www/**
+!native/android/app/src/main/assets/www/.gitkeep
+native/ota/dist/

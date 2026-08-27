@@ -321,22 +321,7 @@
   <footer class="transport" id="transportBar">
     <div class="transport-main">
       <img class="transport-brand" src="favicon.png" alt="AstroPitch">
-      <button class="play" id="bloomBtn" aria-pressed="false" title="The chart opens like a flower, petal by petal outward from the Sun to Pluto. Click again to stop.">
-        <span class="play-name">Bloom</span>
-        <span class="play-sub">chart as chord</span>
-      </button>
-      <button class="play" id="scalarBtn" aria-pressed="false" title="Walk the zodiac from the Ascendant. Click again to stop.">
-        <span class="play-name">Scalar</span>
-        <span class="play-sub">walk the wheel</span>
-      </button>
-      <button class="play" id="droneBtn" aria-pressed="false" title="Generative sustain driven by your aspects. Click again to stop.">
-        <span class="play-name">Drone</span>
-        <span class="play-sub">generative</span>
-      </button>
-      <button class="play" id="melodicBtn" aria-pressed="false" title="A tonal melody built only from the chart's own notes, looping like Drone. Click again to stop.">
-        <span class="play-name">Melodic</span>
-        <span class="play-sub">chart as tune</span>
-      </button>
+      <div class="transport-modes" id="transportModes"></div>
       <button class="transport-hide" id="transportHide" aria-controls="transportBar" aria-expanded="true" title="Hide the player">Hide</button>
     </div>
     <div class="volume">
@@ -472,7 +457,7 @@
       <h3>Keyboard</h3>
       <ul class="keys">
         <li><kbd>Space</kbd> play the chart, or stop it</li>
-        <li><kbd>B</kbd> bloom · <kbd>S</kbd> scalar · <kbd>D</kbd> drone · <kbd>M</kbd> melodic</li>
+        <li id="modeKeysHelp"></li>
         <li><kbd>[</kbd> hide or show the controls, for a wider wheel</li>
         <li><kbd>]</kbd> hide or show the player</li>
         <li><kbd>Esc</kbd> close this</li>
@@ -584,7 +569,9 @@
     // Everything AstroPitch does is local computation, so the app shell
     // works fully offline once cached — registered after load so it never
     // competes with the page's own resources for bandwidth.
-    if ('serviceWorker' in navigator) {
+    // Native shells (Phase 4) set __astropitchNativeShell and own the bundle;
+    // a service worker there would fight an OTA updater (Phase 5).
+    if ('serviceWorker' in navigator && !window.__astropitchNativeShell) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is a bonus, not a requirement */ });
       });

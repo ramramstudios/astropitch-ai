@@ -16,6 +16,17 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { nextPinchView, clampPanView, VIEW_MIN_SCALE, VIEW_MAX_SCALE } from '../src/ui/wheel.js';
 import { nextSheetState, nearestSheetState } from '../src/ui/app.js';
+import { lifecycleStep, LIFECYCLE_STATES, AudioLifecycle } from '../src/audio/lifecycle.js';
+import {
+  parseNativeEvent,
+  dispatchNativeToLifecycle,
+  attachNativeBridge,
+  notifyNativePlaying,
+  isNativeShell,
+  NATIVE_EVENT,
+  NATIVE_EVENT_TYPES,
+} from '../src/audio/native-bridge.js';
+import { MODES, modeButtonId } from '../src/audio/modes.js';
 
 let fails = 0;
 const ok = (label, cond, detail = '') => {
@@ -25,6 +36,8 @@ const ok = (label, cond, detail = '') => {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
+
+const sameActions = (got, want) => JSON.stringify(got) === JSON.stringify(want);
 
 console.log('--- pinch zoom: focal point stays fixed in container-relative space ---');
 {
@@ -113,6 +126,266 @@ console.log('\n--- mode-detection query stays identical between app.js and its i
     ok('the two query strings are identical', appMatch[1] === htmlMatch[1],
       `app.js: "${appMatch[1]}" vs index.html: "${htmlMatch[1]}"`);
   }
+}
+
+console.log('\n--- MODES registry is the single source for buttons, keys, and help ---');
+{
+  // Buttons and the keyboard-help line are rendered from MODES at boot. The
+  // HTML only holds the containers; if a mode is missing fields or the UI
+  // stops iterating MODES, a new sound feature becomes a seven-file edit
+  // again — see research/audio-implementation-plan.md Phase 3.
+  const appSrc = readFileSync(join(__dirname, '../src/ui/app.js'), 'utf8');
+  const htmlSrc = readFileSync(join(__dirname, '../index.html'), 'utf8');
+  const cssSrc = readFileSync(join(__dirname, '../src/styles.css'), 'utf8');
+
+  ok('index.html has a transportModes container, not hand-written mode buttons',
+    htmlSrc.includes('id="transportModes"') && !htmlSrc.includes('id="bloomBtn"'));
+  ok('index.html has a modeKeysHelp slot filled from MODES',
+    htmlSrc.includes('id="modeKeysHelp"') && !/<kbd>B<\/kbd>\s*bloom/.test(htmlSrc));
+
+  ok('app.js builds buttons from MODES', appSrc.includes('buildTransportModes')
+    && /for \(const mode of MODES\)/.test(appSrc));
+  ok('app.js binds keys by iterating MODES',
+    /MODES\.find\(\(m\) => m\.key === e\.key\.toLowerCase\(\)\)/.test(appSrc));
+  ok('app.js syncs aria-pressed from MODES',
+    /for \(const m of MODES\)/.test(appSrc) && appSrc.includes('aria-pressed'));
+
+  const keys = new Set();
+  const ids = new Set();
+  for (const mode of MODES) {
+    ok(`${mode.id}: has label, key, title, sub, and schedule`,
+      !!mode.label && !!mode.key && !!mode.title && !!mode.sub
+      && typeof mode.schedule === 'function');
+    ok(`${mode.id}: key is a single lowercase letter`, /^[a-z]$/.test(mode.key));
+    ok(`${mode.id}: id is unique`, !ids.has(mode.id));
+    ok(`${mode.id}: key is unique`, !keys.has(mode.key));
+    ids.add(mode.id);
+    keys.add(mode.key);
+    ok(`styles.css keeps a glyph rule for #${modeButtonId(mode)}`,
+      cssSrc.includes(`#${modeButtonId(mode)}`));
+  }
+}
+
+console.log('\n--- audio lifecycle: hide while playing records the mode and stops audio ---');
+{
+  const playing = { phase: LIFECYCLE_STATES.playing, recordedMode: 'drone' };
+  const next = lifecycleStep(playing, 'hide', { mode: 'drone' });
+  ok('moves to suspended', next.phase === LIFECYCLE_STATES.suspended);
+  ok('remembers the mode that was playing', next.recordedMode === 'drone');
+  ok('stops audio and notifies the UI', sameActions(next.actions, ['stop-audio', 'emit-suspended']),
+    JSON.stringify(next.actions));
+}
+
+console.log('\n--- audio lifecycle: interrupt matches hide ---');
+{
+  const playing = { phase: LIFECYCLE_STATES.playing, recordedMode: 'melodic' };
+  const next = lifecycleStep(playing, 'interrupt', { mode: 'melodic' });
+  ok('interrupt also suspends', next.phase === LIFECYCLE_STATES.suspended);
+  ok('interrupt records melodic', next.recordedMode === 'melodic');
+  ok('interrupt stops audio and emits suspended',
+    sameActions(next.actions, ['stop-audio', 'emit-suspended']), JSON.stringify(next.actions));
+}
+
+console.log('\n--- audio lifecycle: hide while idle is a no-op ---');
+{
+  const idle = { phase: LIFECYCLE_STATES.idle, recordedMode: null };
+  const next = lifecycleStep(idle, 'hide', { mode: null });
+  ok('stays idle', next.phase === LIFECYCLE_STATES.idle);
+  ok('does nothing', next.actions.length === 0, JSON.stringify(next.actions));
+}
+
+console.log('\n--- audio lifecycle: show while suspended re-enters the recorded mode ---');
+{
+  const suspended = { phase: LIFECYCLE_STATES.suspended, recordedMode: 'drone' };
+  const healthy = lifecycleStep(suspended, 'show', { needsRebuild: false });
+  ok('returns to playing', healthy.phase === LIFECYCLE_STATES.playing);
+  ok('keeps the recorded mode', healthy.recordedMode === 'drone');
+  ok('resumes context, re-enters mode, emits resumed',
+    sameActions(healthy.actions, ['resume-context', 'reenter', 'emit-resumed']),
+    JSON.stringify(healthy.actions));
+
+  const broken = lifecycleStep(suspended, 'show', { needsRebuild: true });
+  ok('a closed or re-routed context rebuilds instead of resuming',
+    sameActions(broken.actions, ['rebuild', 'reenter', 'emit-resumed']),
+    JSON.stringify(broken.actions));
+}
+
+console.log('\n--- audio lifecycle: user stop clears resume intent ---');
+{
+  const playing = { phase: LIFECYCLE_STATES.playing, recordedMode: 'bloom' };
+  const stopped = lifecycleStep(playing, 'stop');
+  ok('stop returns to idle', stopped.phase === LIFECYCLE_STATES.idle);
+  ok('stop forgets the mode', stopped.recordedMode === null);
+
+  const ended = lifecycleStep(playing, 'end');
+  ok('a finite mode ending also clears resume intent',
+    ended.phase === LIFECYCLE_STATES.idle && ended.recordedMode === null);
+
+  // Backgrounded, then the user somehow clears state — show must not restart.
+  const cleared = lifecycleStep({ phase: LIFECYCLE_STATES.suspended, recordedMode: null }, 'show');
+  ok('suspended with no recorded mode does not re-enter',
+    cleared.phase === LIFECYCLE_STATES.idle && !cleared.actions.includes('reenter'),
+    JSON.stringify(cleared));
+}
+
+console.log('\n--- audio lifecycle: play marks the active mode ---');
+{
+  const next = lifecycleStep({ phase: LIFECYCLE_STATES.idle, recordedMode: null }, 'play', { mode: 'scalar' });
+  ok('play moves to playing', next.phase === LIFECYCLE_STATES.playing);
+  ok('play records scalar', next.recordedMode === 'scalar');
+}
+
+console.log('\n--- audio lifecycle coordinator: hide stops audio; show re-enters ---');
+async function testLifecycleCoordinator() {
+  const stops = [];
+  const reentered = [];
+  const events = [];
+  let mode = 'drone';
+  let needsRebuild = false;
+  const fakeEngine = {
+    ctx: null,
+    needsRebuild: () => needsRebuild,
+    start: async () => {},
+    suspend: async () => { stops.push('suspend'); },
+    rebuild: async () => { stops.push('rebuild'); },
+    ensureKeepAlive() {},
+  };
+  const fakePerformer = {
+    get mode() { return mode; },
+    listeners: new Set(),
+    onEvent(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
+    stop(opts) { stops.push(['stop', opts]); mode = null; },
+  };
+  const life = new AudioLifecycle({
+    engine: fakeEngine,
+    performer: fakePerformer,
+    reenter: async (m) => { reentered.push(m); mode = m; },
+    isHidden: () => false,
+  });
+  life.onEvent((e) => events.push(e));
+
+  // Simulate transport start without attaching to the DOM.
+  await life._apply(lifecycleStep(life._snapshot(), 'play', { mode: 'drone' }));
+  ok('coordinator tracks playing', life.phase === LIFECYCLE_STATES.playing);
+
+  await life.handleBackground();
+  ok('hide moves coordinator to suspended', life.phase === LIFECYCLE_STATES.suspended);
+  ok('hide records drone', life.recordedMode === 'drone');
+  ok('hide fades the performer without a UI stop event',
+    stops.some((s) => Array.isArray(s) && s[0] === 'stop' && s[1]?.emit === false));
+  ok('hide emits suspended for the transport UI',
+    events.some((e) => e.type === 'suspended' && e.mode === 'drone'));
+
+  stops.length = 0;
+  events.length = 0;
+  await life.handleForeground();
+  ok('show returns to playing', life.phase === LIFECYCLE_STATES.playing);
+  ok('show re-enters drone', reentered[0] === 'drone', `${reentered}`);
+  ok('show emits resumed', events.some((e) => e.type === 'resumed' && e.mode === 'drone'));
+
+  // Broken context path.
+  mode = 'melodic';
+  await life._apply(lifecycleStep(life._snapshot(), 'play', { mode: 'melodic' }));
+  await life.handleBackground();
+  needsRebuild = true;
+  reentered.length = 0;
+  stops.length = 0;
+  await life.handleForeground();
+  ok('show rebuilds when the context is unhealthy', stops.includes('rebuild'));
+  ok('show still re-enters after rebuild', reentered[0] === 'melodic', `${reentered}`);
+}
+
+await testLifecycleCoordinator();
+
+console.log('\n--- native bridge: shared event shape maps onto Phase 2 lifecycle ---');
+{
+  ok('parses bare string types', parseNativeEvent('background') === NATIVE_EVENT_TYPES.background);
+  ok('parses { type } payloads', parseNativeEvent({ type: 'interrupt' }) === NATIVE_EVENT_TYPES.interrupt);
+  ok('parses CustomEvent-style detail',
+    parseNativeEvent({ detail: { type: 'foreground' } }) === NATIVE_EVENT_TYPES.foreground);
+  ok('rejects unknown types', parseNativeEvent({ type: 'explode' }) === null);
+  ok('rejects empty payloads', parseNativeEvent(null) === null);
+}
+
+console.log('\n--- native bridge: dispatch forwards to lifecycle handlers ---');
+async function testNativeBridgeDispatch() {
+  const calls = [];
+  const fakeLife = {
+    handleBackground: async () => { calls.push('background'); },
+    handleForeground: async () => { calls.push('foreground'); },
+    handleInterruption: async () => { calls.push('interrupt'); },
+  };
+  await dispatchNativeToLifecycle(fakeLife, { type: 'background' });
+  await dispatchNativeToLifecycle(fakeLife, { type: 'foreground' });
+  await dispatchNativeToLifecycle(fakeLife, { type: 'interrupt' });
+  ok('background/foreground/interrupt each hit the matching handler',
+    calls.join(',') === 'background,foreground,interrupt', calls.join(','));
+  ok('unknown events are ignored', dispatchNativeToLifecycle(fakeLife, { type: 'nope' }) === null);
+}
+await testNativeBridgeDispatch();
+
+console.log('\n--- native bridge: attach installs dispatch + playing notify ---');
+async function testNativeBridgeAttach() {
+  const calls = [];
+  const fakeLife = {
+    handleBackground: async () => { calls.push('bg'); },
+    handleForeground: async () => { calls.push('fg'); },
+    handleInterruption: async () => { calls.push('int'); },
+  };
+  const listeners = new Map();
+  const performerListeners = new Set();
+  let shellPlaying = null;
+  const fakeWin = {
+    __astropitchNativeShell: true,
+    AstroPitchShell: { setPlaying: (v) => { shellPlaying = v; } },
+    addEventListener: (type, fn) => {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener: (type, fn) => listeners.get(type)?.delete(fn),
+  };
+  const fakePerformer = {
+    onEvent: (fn) => {
+      performerListeners.add(fn);
+      return () => performerListeners.delete(fn);
+    },
+  };
+
+  ok('isNativeShell sees the injected mark', isNativeShell(fakeWin));
+
+  const detach = attachNativeBridge(fakeLife, { window: fakeWin, performer: fakePerformer });
+  ok('installs window.__astropitchNative.dispatch', typeof fakeWin.__astropitchNative?.dispatch === 'function');
+
+  await fakeWin.__astropitchNative.dispatch({ type: 'background' });
+  ok('native dispatch reaches handleBackground', calls.includes('bg'));
+
+  for (const fn of listeners.get(NATIVE_EVENT) || []) {
+    await fn({ detail: { type: 'interrupt' } });
+  }
+  ok('CustomEvent path reaches handleInterruption', calls.includes('int'));
+
+  for (const fn of performerListeners) fn({ type: 'start', mode: 'drone' });
+  ok('performer start notifies the shell', shellPlaying === true);
+  for (const fn of performerListeners) fn({ type: 'stop' });
+  ok('performer stop clears the shell playing flag', shellPlaying === false);
+
+  ok('notifyNativePlaying hits AstroPitchShell.setPlaying',
+    notifyNativePlaying(true, fakeWin) === true && shellPlaying === true);
+
+  detach();
+  ok('detach removes dispatch', fakeWin.__astropitchNative.dispatch == null);
+}
+await testNativeBridgeAttach();
+
+console.log('\n--- native bridge: app.js and index.html stay wired ---');
+{
+  const appSrc = readFileSync(join(__dirname, '../src/ui/app.js'), 'utf8');
+  const htmlSrc = readFileSync(join(__dirname, '../index.html'), 'utf8');
+  ok('app.js imports attachNativeBridge', appSrc.includes("from '../audio/native-bridge.js'"));
+  ok('wireAudioLifecycle attaches the native bridge',
+    appSrc.includes('attachNativeBridge(lifecycle'));
+  ok('index.html skips the service worker inside a native shell',
+    htmlSrc.includes('!window.__astropitchNativeShell'));
 }
 
 console.log(`\n${fails === 0 ? 'All mobile-mode checks passed.' : `${fails} FAILURE(S).`}`);

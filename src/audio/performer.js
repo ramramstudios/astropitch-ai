@@ -3,7 +3,7 @@
  *
  * A natal chart has ten planetary bodies scattered across a chromatic octave.
  * ASC, MC, DSC and IC are directional reference points, not voices — they are
- * never scheduled by bloom, scalar, drone, or melodic (see `_sounding`).
+ * never scheduled by the transport modes in modes.js (see `_sounding`).
  * They are only heard on demand, via a click on the wheel that auditions the aspect
  * network attached to that direction (`playDirectionalAspects`). Playing all
  * ten planets at one pitch level gets a tone cluster, which is honest but
@@ -24,6 +24,8 @@ import { buildVoiceSpec, Voice } from './voices.js';
 import { DEFAULT_PALETTE } from './palettes.js';
 import { frequencyFor } from './tuning.js';
 import { SIGNS } from '../ontology.js';
+import { AudioScheduler } from './scheduler.js';
+import { modeById, DEFAULT_MODE_ID } from './modes.js';
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const CHOKE_FADE = 0.05;
@@ -34,204 +36,8 @@ function loudnessTrim(freq) {
   return clamp(0.45 + (freq / 220) * 0.55, 0.4, 1);
 }
 
-// Melodic mode: a tonal line built only from the pitch classes present in the
-// chart. See `melodic()` for the composition itself; these are its pure
-// scale-degree helpers, kept free of the engine so they stay easy to reason
-// about (and to test) in isolation.
-
-const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
-const MINOR_STEPS = [0, 2, 3, 5, 7, 8, 10];
-const HARMONIC_MINOR_STEPS = [0, 2, 3, 5, 7, 8, 11];
-
-/**
- * Find the tonic and scale (major, natural minor, or harmonic minor — the
- * one with a proper leading tone, since a raised 7th is what makes the 7-1
- * pull audible) that best accounts for the chart's own pitch classes. The
- * chart is never bent to fit the scale; the scale is chosen to fit the
- * chart, then only ever used to name the notes that are already there.
- */
-function fitScale(pcs) {
-  const pcSet = new Set(pcs);
-  let best = null;
-  for (let tonic = 0; tonic < 12; tonic++) {
-    for (const steps of [MAJOR_STEPS, MINOR_STEPS, HARMONIC_MINOR_STEPS]) {
-      const scalePcs = steps.map((s) => (tonic + s) % 12);
-      const covered = scalePcs.filter((pc) => pcSet.has(pc)).length;
-      // Reward a scale whose own tonic and fifth are bodies the chart
-      // actually placed there — a tonal centre the chart argues for itself,
-      // not one merely compatible with it.
-      const score = covered * 10
-        + (pcSet.has(tonic) ? 4 : 0)
-        + (pcSet.has((tonic + 7) % 12) ? 2 : 0);
-      if (!best || score > best.score) best = { tonic, steps, score };
-    }
-  }
-  return best;
-}
-
-/**
- * Sort the chart's pitch classes into scale degrees (0-6, i.e. 1st-7th) the
- * chosen scale actually has bodies on, and the leftover pitch classes the
- * scale does not explain — the out-of-key placements, kept as chromatic
- * colour rather than dropped.
- */
-function degreesFor(pcs, scale) {
-  const byDegree = new Map();
-  scale.steps.forEach((step, degree) => {
-    const pc = (scale.tonic + step) % 12;
-    if (pcs.includes(pc)) byDegree.set(degree, pc);
-  });
-  const present = [...byDegree.keys()].sort((a, b) => a - b);
-  const inScale = new Set(byDegree.values());
-  const chromatic = pcs.filter((pc) => !inScale.has(pc));
-  return { byDegree, present, chromatic };
-}
-
-const circularDegreeDist = (a, b) => {
-  const d = Math.abs(a - b) % 7;
-  return Math.min(d, 7 - d);
-};
-
-function nearestPresentDegree(target, present) {
-  return present.reduce((best, d) => (
-    circularDegreeDist(d, target) < circularDegreeDist(best, target) ? d : best
-  ));
-}
-
-function nearestDegreeBySemitone(pc, scale) {
-  let best = 0;
-  let bestDist = Infinity;
-  scale.steps.forEach((step, degree) => {
-    const spc = (scale.tonic + step) % 12;
-    const dist = Math.min((pc - spc + 12) % 12, (spc - pc + 12) % 12);
-    if (dist < bestDist) { bestDist = dist; best = degree; }
-  });
-  return best;
-}
-
-/**
- * A short motif, stated in scale-degree deltas from wherever it starts, each
- * delta paired with its own note value in beats — a real melody is not just
- * a pitch shape but a rhythm cell, and the two repeat together every time the
- * motif is restated. Longer values fall on the leaps, shorter ones on the
- * steps between them, the classical proportion that keeps a running line from
- * ever landing all on the same beat — the constant-eighth-note pulse that was
- * both the flattest-sounding phrasing and, since every note ends up the same
- * length, the surest way to pile overlapping voices on top of each other. The
- * elemental balance of the chart decides its character: earth and water
- * charts get a stepwise, "scalar" shape (their motion is grounded, adjacent);
- * fire and air charts get an "angular" one built from skips and leaps.
- */
-function pickMotif(scalar) {
-  const scalarMotifs = [
-    { steps: [0, 1, 1], beats: [1, 0.5, 0.5] },
-    { steps: [0, 1, -1, 1], beats: [0.75, 0.5, 0.5, 0.75] },
-    { steps: [0, -1, 1, 1], beats: [0.5, 0.5, 0.5, 1] },
-    { steps: [0, 1, 2], beats: [0.5, 0.5, 1] },
-  ];
-  const angularMotifs = [
-    { steps: [0, 2, -1, 2], beats: [1, 0.5, 0.5, 1] },
-    { steps: [0, -3, 1, 2], beats: [1, 0.5, 0.5, 0.75] },
-    { steps: [0, 4, -2], beats: [1, 0.75, 1] },
-    { steps: [0, 3, -2, 1], beats: [0.75, 0.5, 0.75, 0.5] },
-  ];
-  const motifs = scalar ? scalarMotifs : angularMotifs;
-  return motifs[Math.floor(Math.random() * motifs.length)];
-}
-
-/**
- * Walk the motif as a classical melodic sequence — restating it, transposed,
- * on each of the chart's present degrees in turn — then snap every note the
- * motif reaches back onto a degree the chart actually has a body on. Scalar
- * charts sweep the degrees in an arch (up, then back down); angular charts
- * jump between the extremes, so the leaps between phrases match the leaps
- * within them. Each degree carries the beat value the motif gave its slot,
- * so the sequence's rhythm repeats along with its shape.
- */
-function buildDegreeWalk(present, scalar) {
-  if (present.length === 1) {
-    return { degrees: [present[0], present[0], present[0]], beats: [1, 1, 1.5] };
-  }
-
-  const motif = pickMotif(scalar);
-  let anchors;
-  if (scalar) {
-    anchors = [...present, ...present.slice(0, -1).reverse()];
-  } else {
-    anchors = [];
-    let lo = 0;
-    let hi = present.length - 1;
-    while (lo <= hi) {
-      anchors.push(present[lo++]);
-      if (lo <= hi) anchors.push(present[hi--]);
-    }
-  }
-
-  const degrees = [];
-  const beats = [];
-  for (const anchor of anchors) {
-    motif.steps.forEach((delta, i) => {
-      const target = ((anchor + delta) % 7 + 7) % 7;
-      degrees.push(nearestPresentDegree(target, present));
-      beats.push(motif.beats[i]);
-    });
-  }
-  return { degrees, beats };
-}
-
-// Beat values for the notes the motif's own rhythm cell doesn't cover: a
-// coverage note is a plain aside so it gets the motif's middling value: a
-// chromatic tone is a grace note so it stays brief; a cadence note is where
-// the phrase actually arrives, so it gets the room a resolution needs — the
-// approach note held, the resolution itself held longer still.
-const COVERAGE_BEATS = 0.75;
-const CHROMATIC_BEATS = 0.3;
-const CADENCE_BEATS = [0.75, 1.25];
-
-/**
- * Assemble the full phrase: the motif sequence, then whichever present
- * degrees it never touched (so every body sounds at least once), then the
- * cadence — a 4-3 resolution and a 7-1 resolution, each only if the chart
- * actually has bodies on both scale degrees involved. Chromatic (out-of-key)
- * bodies are threaded in as an appoggiatura just before their nearest
- * in-scale neighbour, the conventional way to spend an out-of-key tone.
- */
-function buildMelody(present, chromatic, scale, byDegree, scalar) {
-  const walk = buildDegreeWalk(present, scalar);
-  const notes = walk.degrees.map((degree, i) => (
-    { pc: byDegree.get(degree), degree, kind: 'motif', beats: walk.beats[i] }
-  ));
-
-  const touched = new Set(notes.map((n) => n.degree));
-  for (const degree of present) {
-    if (!touched.has(degree)) {
-      notes.push({ pc: byDegree.get(degree), degree, kind: 'coverage', beats: COVERAGE_BEATS });
-    }
-  }
-
-  if (present.includes(3) && present.includes(2)) {
-    notes.push({ pc: byDegree.get(3), degree: 3, kind: 'cadence', beats: CADENCE_BEATS[0] });
-    notes.push({ pc: byDegree.get(2), degree: 2, kind: 'cadence', beats: CADENCE_BEATS[1] });
-  }
-  if (present.includes(6) && present.includes(0)) {
-    notes.push({ pc: byDegree.get(6), degree: 6, kind: 'cadence', beats: CADENCE_BEATS[0] });
-    notes.push({ pc: byDegree.get(0), degree: 0, kind: 'cadence', beats: CADENCE_BEATS[1] });
-  }
-
-  for (const pc of chromatic) {
-    const targetDegree = nearestPresentDegree(nearestDegreeBySemitone(pc, scale), present);
-    const chromaticNote = { pc, degree: null, kind: 'chromatic', beats: CHROMATIC_BEATS };
-    const idx = notes.findIndex((n) => n.degree === targetDegree);
-    if (idx === -1) {
-      notes.push(chromaticNote, { pc: byDegree.get(targetDegree), degree: targetDegree, kind: 'coverage', beats: COVERAGE_BEATS });
-    } else notes.splice(idx, 0, chromaticNote);
-  }
-
-  return notes;
-}
-
 export class Performer {
-  constructor(engine) {
+  constructor(engine, { scheduler } = {}) {
     this.engine = engine;
     this.chart = null;
     this.tuning = { refA: 432, temperament: 'equal', microtones: false };
@@ -240,7 +46,7 @@ export class Performer {
     this.mode = null;
     this.active = [];
     this.timers = [];
-    this.loopHandle = null;
+    this.scheduler = scheduler ?? new AudioScheduler({ now: () => this.engine.now });
     this.listeners = new Set();
     this.designerPreview = null;
     this._choked = new Map();
@@ -577,226 +383,19 @@ export class Performer {
   }
 
   /**
-   * The chart as a chord that assembles from its solar centre: the Sun, then
-   * the inner planets, then the Moon as the personal threshold, and finally
-   * the outer bodies. Everything holds, then releases together.
-   *
-   * With two charts overlaid the same order runs, but each body is immediately
-   * followed by its opposite number — so Sun lands against Sun, and you hear
-   * the contact as an interval rather than as two unrelated events.
+   * Enter a transport mode by id. Modes are registered in modes.js — this is
+   * the only dispatch point; UI and lifecycle call play(), not named methods.
    */
-  async bloom() {
-    await this._begin('bloom');
-    const ORDER = ['sun', 'mercury', 'venus', 'moon', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
-    const placements = this._sounding();
-    const detunes = this._detuneMap(placements);
-
-    // The Sun arrives at once; the inner planets move quickly, then the
-    // personal threshold and slower bodies have room to settle underneath.
-    const gaps = { sun: 0, mercury: 0.75, venus: 0.55, moon: 0.95, mars: 0.55, jupiter: 0.6, saturn: 0.7, uranus: 0.55, neptune: 0.7, pluto: 0.8 };
-
-    const baseOf = (p) => p.baseKey ?? p.key;
-    const ordered = placements
-      .slice()
-      .sort((x, y) => ORDER.indexOf(baseOf(x)) - ORDER.indexOf(baseOf(y))
-        || String(x.side ?? '').localeCompare(String(y.side ?? '')));
-
-    const start = this.engine.now + 0.08;
-    let t = start;
-    let prevBase = null;
-    const voices = [];
-
-    for (const p of ordered) {
-      const base = baseOf(p);
-      // A body's counterpart arrives almost on top of it; a new body waits.
-      t += base === prevBase ? 0.2 : (gaps[base] ?? 0.6);
-      prevBase = base;
-      voices.push(this._voiceFor(p, { time: t, detune: detunes[p.key] }));
-      this._emitAt({ type: 'note', key: p.key }, t);
-    }
-
-    const hold = t + 3.4;
-    for (const v of voices) v.release(hold);
-    this._endAt('bloom', hold + 2.4);
+  async play(modeId = DEFAULT_MODE_ID) {
+    const mode = modeById(modeId);
+    await mode.schedule(this);
   }
 
-  /**
-   * Walk the zodiac from the Ascendant and sound each body as you pass it.
-   * Note length comes from modality: cardinal strikes, fixed holds, mutable
-   * sits in between and wavers.
-   */
-  async scalar() {
-    await this._begin('scalar');
-    // The walk's start line is the house-1 cusp, not the rising sign's
-    // boundary: those match for whole sign, but equal and the quadrant
-    // systems put the Ascendant's exact degree ahead of it, and a body
-    // between the two would otherwise sound before the chart has risen.
-    const asc = this.chart.cusps?.[0] ?? this.chart.ascSignIndex * 30;
-    const placements = this._sounding().slice().sort((a, b) =>
-      ((a.longitude - asc + 360) % 360) - ((b.longitude - asc + 360) % 360));
-
-    const lengths = { cardinal: 0.55, fixed: 1.35, mutable: 0.9 };
-    const start = this.engine.now + 0.08;
-    let t = start;
-
-    for (const p of placements) {
-      const dur = lengths[p.modality] * (120 / this.tempo);
-      this._voiceFor(p, { time: t, duration: dur * 0.92, gainMul: 1.5 });
-      this._emitAt({ type: 'note', key: p.key }, t);
-      t += dur;
-    }
-
-    // Buffer past the last note's nominal end for the slowest (fixed) release.
-    this._endAt('scalar', t + 3.6);
-  }
-
-  /**
-   * A tonal melody, constrained to only the pitch classes the chart actually
-   * places — no note is invented to fill out the scale. `fitScale` finds the
-   * major/minor key those pitch classes best argue for, `buildMelody` turns
-   * that into one phrase (a motif, sequenced across the chart's degrees, a
-   * pass to catch any note the motif skipped, and a 4-3/7-1 cadence wherever
-   * the chart has the bodies for it), and this method just keeps replaying
-   * that phrase — the way a good motif is repeated rather than replaced —
-   * until stop(), the same open-ended loop as drone().
-   */
-  async melodic() {
-    await this._begin('melodic');
-    const placements = this._sounding();
-
-    const byPc = new Map();
-    for (const p of placements) {
-      if (!byPc.has(p.signIndex)) byPc.set(p.signIndex, []);
-      byPc.get(p.signIndex).push(p);
-    }
-    const pcs = [...byPc.keys()];
-
-    const notes = [];
-    if (pcs.length) {
-      const scale = fitScale(pcs);
-      const { byDegree, present, chromatic } = degreesFor(pcs, scale);
-      const earthy = placements.filter((p) => p.element === 'earth' || p.element === 'water').length;
-      const fiery = placements.filter((p) => p.element === 'fire' || p.element === 'air').length;
-      notes.push(...buildMelody(present, chromatic, scale, byDegree, earthy >= fiery));
-    }
-
-    // A single sustained register, like a lead line rather than the ensemble's
-    // full spread of registers — each body keeps its own timbre, just not its
-    // own octave.
-    const REGISTER = 0;
-    const beat = 60 / this.tempo;
-    const rotation = new Map();
-    const nextPlacement = (pc) => {
-      const list = byPc.get(pc);
-      const i = rotation.get(pc) ?? 0;
-      rotation.set(pc, (i + 1) % list.length);
-      return list[i];
-    };
-
-    const playPhrase = (startTime) => {
-      let t = startTime;
-      for (const note of notes) {
-        const placement = nextPlacement(note.pc);
-        const dur = note.beats * beat;
-        this._voiceFor(placement, {
-          time: t,
-          duration: dur * 0.9,
-          // Quiet outer bodies are atmosphere in a chord; as the sole voice of
-          // a melodic line they need to be heard as clearly as the Sun is.
-          gainMul: Math.min(1.8, 1 / placement.gain),
-          octaveShift: REGISTER - placement.octave,
-        });
-        this._emitAt({ type: 'note', key: placement.key }, t);
-        t += dur;
-      }
-      return t;
-    };
-
-    const phraseBeats = notes.reduce((sum, n) => sum + n.beats, 0);
-    playPhrase(this.engine.now + 0.08);
-    if (phraseBeats > 0) {
-      this.loopHandle = setInterval(() => {
-        if (this.mode !== 'melodic') return;
-        playPhrase(this.engine.now + 0.05);
-      }, phraseBeats * beat * 1000);
-    }
-  }
-
-  /**
-   * Generative sustain. The anchors hold indefinitely while the remaining
-   * bodies surface and sink, chosen by how tightly they aspect something else —
-   * so a chart with exact aspects is a busy drone and a chart without them is
-   * a still one.
-   */
-  async drone() {
-    await this._begin('drone');
-    const placements = this._sounding();
-    const detunes = this._detuneMap(placements);
-    const baseOf = (p) => p.baseKey ?? p.key;
-
-    // Two charts overlaid already put two of everything in the bed, so the
-    // anchors drop to just the lights to leave the same room.
-    const anchorBases = this.chart.meta?.synastry
-      ? ['sun', 'moon']
-      : ['sun', 'moon', 'saturn'];
-    const anchorSet = new Set(anchorBases);
-    const anchorPlacements = placements.filter((p) => anchorSet.has(baseOf(p)));
-    const anchorKeys = new Set(anchorPlacements.map((p) => p.key));
-    const floating = placements.filter((p) => !anchorKeys.has(p.key));
-
-    const activity = {};
-    for (const p of placements) activity[p.key] = 0.25;
-    for (const asp of this.chart.aspects) {
-      activity[asp.a] = (activity[asp.a] ?? 0) + asp.exactness;
-      activity[asp.b] = (activity[asp.b] ?? 0) + asp.exactness;
-    }
-
-    const startAnchors = (at) => {
-      const voices = [];
-      anchorPlacements.forEach((p, i) => {
-        const v = this._voiceFor(p, {
-          time: at + i * 0.9,
-          gainMul: 0.85 / Math.sqrt(anchorPlacements.length * 0.5),
-          detune: detunes[p.key],
-        });
-        voices.push(v);
-        this._emitAt({ type: 'note', key: p.key }, at + i * 0.9);
-      });
-      return voices;
-    };
-
-    let bed = startAnchors(this.engine.now + 0.08);
-    // Refresh the bed periodically: envelopes are finite and drift accumulates.
-    const CYCLE = 24;
-
-    const tick = () => {
-      if (this.mode !== 'drone') return;
-      const now = this.engine.now;
-      const next = startAnchors(now + 0.5);
-      for (const v of bed) v.release(now + 2.2);
-      bed = next;
-    };
-
-    const shimmer = () => {
-      if (this.mode !== 'drone' || floating.length === 0) return;
-      const weights = floating.map((p) => activity[p.key] ?? 0.25);
-      const total = weights.reduce((a, b) => a + b, 0);
-      let r = Math.random() * total;
-      let pick = floating[0];
-      for (let i = 0; i < floating.length; i++) {
-        r -= weights[i];
-        if (r <= 0) { pick = floating[i]; break; }
-      }
-      const t = this.engine.now + 0.05;
-      const octaveShift = Math.random() < 0.25 ? 1 : 0;
-      this._voiceFor(pick, { time: t, duration: 2 + Math.random() * 4, gainMul: 0.75, detune: detunes[pick.key], octaveShift });
-      this._emitAt({ type: 'note', key: pick.key }, t);
-    };
-
-    this.loopHandle = setInterval(tick, CYCLE * 1000);
-    this.shimmerHandle = setInterval(shimmer, 2600);
-    setTimeout(shimmer, 3000);
-  }
+  // Thin aliases so existing tests and dynamic performer[mode]() calls keep working.
+  async bloom() { return this.play('bloom'); }
+  async scalar() { return this.play('scalar'); }
+  async drone() { return this.play('drone'); }
+  async melodic() { return this.play('melodic'); }
 
   async _begin(mode) {
     await this.engine.start();
@@ -814,10 +413,7 @@ export class Performer {
     this.designerPreview = null;
     for (const t of this.timers) clearTimeout(t);
     this.timers.length = 0;
-    if (this.loopHandle) clearInterval(this.loopHandle);
-    if (this.shimmerHandle) clearInterval(this.shimmerHandle);
-    this.loopHandle = null;
-    this.shimmerHandle = null;
+    this.scheduler.stop();
 
     const now = this.engine.now;
     for (const v of this.active) {
@@ -828,3 +424,23 @@ export class Performer {
     if (emit) this._emit({ type: 'stop' });
   }
 }
+
+
+export {
+  MODES,
+  modeById,
+  DEFAULT_MODE_ID,
+  modeButtonId,
+  melodicOnsets,
+  droneEvents,
+  placementForNote,
+  DRONE_CYCLE,
+  DRONE_STAGGER,
+  DRONE_FIRST_LEAD,
+  DRONE_REFRESH_LEAD,
+  DRONE_RELEASE_LAG,
+  DRONE_SHIMMER,
+  DRONE_SHIMMER_LEAD,
+  DRONE_FIRST_SHIMMER,
+  MELODIC_LEAD,
+} from './modes.js';

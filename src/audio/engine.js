@@ -122,6 +122,47 @@ function ceilingCurve(n = 8192, knee = 0.82, ceiling = 0.995, headroom = 1) {
 
 /** Summed voice amplitude that still passes at unity gain. */
 const LOAD_REF = 0.34;
+/**
+ * Load-model calibration, Phase 5 of research/audio-stability-plan.md.
+ *
+ * voice.peak is the VCA envelope, not the acoustic peak. Sub, unison octaves
+ * and noise all sum into oscMix but are invisible to peak; summing peaks
+ * also assumes every voice adds in phase. Those errors point opposite ways.
+ *
+ * Measured 2026-08-27. Solo true-peak (dry, staging defeated, 4× cubic) over
+ * voice.peak, gain 0.35, house 1, 3 s, palettes × elements × modalities:
+ *
+ *     palette      element  modality   true/peak
+ *     astropitch   fire     all        0.38
+ *     astropitch   earth    0.47–0.49
+ *     astropitch   air      0.42–0.44
+ *     astropitch   water    0.44–0.50
+ *     harmonic     fire     0.45
+ *     harmonic     earth    0.41–0.44
+ *     harmonic     air      0.30–0.31
+ *     harmonic     water    0.45–0.47
+ *     unison 3oct fire      0.38   (same as the one-octave fire — layering
+ *                                  did not under-count at the true peak)
+ *     earth sub             0.47
+ *
+ *     min 0.30  median 0.44  max 0.50
+ *
+ * The model is loud vs the ear on every construction: actual peak is about
+ * half of peak. n voices of air/fixed, same conditions:
+ *
+ *     n     true   n×peak  √n×peak  true/(n×)  true/(√n×)
+ *     1     0.120  0.214   0.214    0.56       0.56
+ *     4     0.281  0.857   0.429    0.33       0.66
+ *     8     0.491  1.715   0.606    0.29       0.81
+ *     16    0.465  3.430   0.857    0.14       0.54
+ *
+ * Coherence over-count is real and large. Layering under-count did not show
+ * up in true peak. Correcting only the second would over-duck. Correcting
+ * only the first (trusting true/peak ≈ 0.44) would raise the mix. Neither
+ * error is large enough in the direction that caused the original complaint
+ * (too hot) to justify touching LOAD_REF. Measured, within tolerance, no
+ * change.
+ */
 /** How the buses give way above it: the sum grows as load ** (1 - LOAD_EXP). */
 const LOAD_EXP = 0.65;
 /** Hard cap on the projected sum, whatever the curve above asks for. */
@@ -153,12 +194,37 @@ const FADE_RESOLUTION = 0.4;
 const FADE_SAMPLES_MAX = 8;
 
 /**
+ * Unit-interval noise from a tick and a salt, independent of call order.
+ *
+ * The IR and the voice noise buffer used to draw Math.random once per sample.
+ * At 44.1 kHz that is fewer draws than at 48 kHz, so a seeded comparison of
+ * two rates was comparing two different rooms. Hashing the physical time
+ * (and channel) gives the same noise field at any rate; each context just
+ * samples it at its own resolution.
+ */
+function unitNoise(tick, salt) {
+  let x = Math.imul((tick + 1) | 0, 0x9E3779B1) ^ Math.imul((salt + 1) | 0, 0x85EBCA77);
+  x = Math.imul(x ^ (x >>> 16), 0x7FEB352D);
+  x = Math.imul(x ^ (x >>> 15), 0x846CA68B);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Canonical rate of the noise field the IR samples. */
+const IR_NOISE_RATE = 48000;
+
+/**
  * A synthetic stereo impulse response.
  *
  * Sparse early reflections, then a noise tail whose brightness falls as it
  * decays (real rooms absorb highs faster than lows). The two channels are
  * generated independently, which is what makes the tail sound wide rather than
  * like a mono blob in the middle of your head.
+ *
+ * Duration is `floor(rate * seconds) / rate`, so the tail lasts the same time
+ * at 44.1 kHz as at 48 kHz — only the resolution changes. The parity check in
+ * tests/audio.test.html asserts that. The one-pole coeff is per-sample rather
+ * than per-second, which is the other rate-exposed spot: a future edit that
+ * forgets to go through `t = i / rate` will show up as a brightness shift.
  */
 function createImpulseResponse(ctx, { seconds = 3.6, decay = 1.9, damping = 0.86 } = {}) {
   const rate = ctx.sampleRate;
@@ -175,7 +241,7 @@ function createImpulseResponse(ctx, { seconds = 3.6, decay = 1.9, damping = 0.86
       // Density build-up: a room takes a few milliseconds to go diffuse.
       const build = Math.min(1, t / 0.028);
       const env = build * Math.exp(-decay * t) * (1 - progress) ** 1.7;
-      const white = Math.random() * 2 - 1;
+      const white = unitNoise(Math.floor(t * IR_NOISE_RATE), ch) * 2 - 1;
       // One-pole lowpass whose coefficient shrinks over time -> darkening tail.
       const coeff = 0.06 + damping * (1 - progress) ** 1.4;
       lp += (white - lp) * coeff;
@@ -188,7 +254,8 @@ function createImpulseResponse(ctx, { seconds = 3.6, decay = 1.9, damping = 0.86
       const t = 0.005 + (k / taps) ** 1.5 * 0.075 + (ch ? 0.0031 : 0);
       const idx = Math.floor(t * rate);
       if (idx < length) {
-        data[idx] += (Math.random() < 0.5 ? -1 : 1) * 0.55 * (1 - k / taps) ** 1.2;
+        const sign = unitNoise(k, ch + 2) < 0.5 ? -1 : 1;
+        data[idx] += sign * 0.55 * (1 - k / taps) ** 1.2;
       }
     }
   }
@@ -228,6 +295,8 @@ export class AudioEngine {
     this.sendExp = SEND_EXP;
     this._analyserData = null;
     this._providedContext = context;
+    this._sampleRate = null;
+    this._keepAlive = null;
     if (context) {
       this._build(context);
       this.ready = true;
@@ -235,14 +304,105 @@ export class AudioEngine {
   }
 
   async start() {
-    if (!this.ctx) this._build();
-    if (this.ctx.state === 'suspended') await this.ctx.resume();
+    if (!this.ctx || this.ctx.state === 'closed') this._build();
+    if (this.ctx.state === 'suspended' || this.ctx.state === 'interrupted') {
+      await this.ctx.resume();
+    }
     this.ready = true;
     return this.ctx;
   }
 
+  /**
+   * Park the context while the page is hidden. Live contexts only — an
+   * OfflineAudioContext supplied for tests has no suspend to speak of.
+   */
+  async suspend() {
+    if (!this.ctx || this._providedContext) return;
+    if (this.ctx.state === 'running') await this.ctx.suspend();
+  }
+
+  /**
+   * Whether the live graph has to be torn down and rebuilt before sound can
+   * continue. A closed context, a Safari `interrupted` state that will not
+   * resume cleanly, or a sample-rate change under a live context (headphones
+   * unplugged on some platforms) all qualify.
+   */
+  needsRebuild() {
+    if (this._providedContext) return false;
+    if (!this.ctx || this.ctx.state === 'closed') return true;
+    if (this._sampleRate != null && this.ctx.sampleRate !== this._sampleRate) return true;
+    return false;
+  }
+
+  /**
+   * Tear down the current graph and build a fresh one. Voices owned by the
+   * old context are dropped without release — their nodes are already dead.
+   * Used by the lifecycle layer after an interrupt that closed the context
+   * or changed the hardware sample rate.
+   */
+  async rebuild() {
+    if (this._providedContext) return this.ctx;
+    this._stopKeepAlive();
+    this.voices.clear();
+    const prev = this.ctx;
+    if (prev && prev.state !== 'closed') {
+      try { await prev.close(); } catch { /* already shutting down */ }
+    }
+    this.ctx = null;
+    this.ready = false;
+    this.analyser = null;
+    this.master = null;
+    this.mixBus = null;
+    this.dryBus = null;
+    this.reverbSend = null;
+    this.reverbReturn = null;
+    this.delaySend = null;
+    this.delayReturn = null;
+    this.delayTimes = null;
+    this.stages = null;
+    this._build();
+    await this.start();
+    return this.ctx;
+  }
+
+  /**
+   * Silent looping buffer so the audio route stays warm after the first
+   * gesture. Cheap, and the fix for the cold-start stutter that otherwise
+   * lands on the first real note in a WebView.
+   */
+  ensureKeepAlive() {
+    if (!this.ctx || this._providedContext || this._keepAlive) return;
+    if (typeof this.ctx.createBuffer !== 'function') return;
+    const buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(gain);
+    gain.connect(this.ctx.destination);
+    try {
+      src.start();
+    } catch {
+      return;
+    }
+    this._keepAlive = { src, gain };
+  }
+
+  _stopKeepAlive() {
+    if (!this._keepAlive) return;
+    try { this._keepAlive.src.stop(); } catch { /* already stopped */ }
+    try { this._keepAlive.src.disconnect(); } catch { /* */ }
+    try { this._keepAlive.gain.disconnect(); } catch { /* */ }
+    this._keepAlive = null;
+  }
+
   get now() {
     return this.ctx ? this.ctx.currentTime : 0;
+  }
+
+  get sampleRate() {
+    return this.ctx ? this.ctx.sampleRate : this._sampleRate;
   }
 
   _build(provided = null) {
@@ -250,6 +410,7 @@ export class AudioEngine {
       latencyHint: 'interactive',
     });
     this.ctx = ctx;
+    this._sampleRate = ctx.sampleRate;
 
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
@@ -306,6 +467,10 @@ export class AudioEngine {
     satTrim.gain.value = 1 / SAT_HEADROOM;
     satTrim.connect(saturator);
 
+    // Stability plan Phase 6: stop. Do not retune glue, the saturator, or the
+    // limiter because a residual looked high. Reopen this chain only when a
+    // listening complaint names the mode, the chart, the stage the per-stage
+    // residual blames, and what the band energy and GR telemetry said.
     // Gentle glue, not pumping.
     const glue = ctx.createDynamicsCompressor();
     glue.threshold.value = -20;
@@ -353,6 +518,7 @@ export class AudioEngine {
     reverbReturn.connect(mixBus);
     this.reverbSend = reverbSend;
     this.reverbReturn = reverbReturn;
+    this.stages.convolver = convolver;
 
     const delaySend = ctx.createGain();
     delaySend.gain.value = 1;
@@ -582,6 +748,18 @@ export class AudioEngine {
     const t = this.now;
     for (const v of Array.from(this.voices)) {
       if (v.release) v.release(t, fade);
+    }
+  }
+
+  /**
+   * Tear every remaining voice down immediately. Used after a suspend fade:
+   * `onended` does not fire on a suspended context, and `release` will not
+   * shorten a tail that has already started, so without this a backgrounded
+   * page keeps the nodes of whatever was fading.
+   */
+  disposeAll() {
+    for (const v of Array.from(this.voices)) {
+      if (v.dispose) v.dispose();
     }
   }
 

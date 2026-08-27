@@ -15,11 +15,13 @@ Always ask the user if they want to commit changes, and if so, have them provide
 - `node tests/mobile.test.mjs` — pure-logic checks for mobile mode: pinch/pan view math, bottom-sheet state transitions, and the app.js/index.html MODE_QUERY consistency check
 - `tests/audio.test.html` — OfflineAudioContext render tests
 - `tests/polyphony.test.html` — what a transport sounds like once it has been *left running*, which one-shot renders miss. Drives the real `melodic()`/`drone()` with the timer functions swapped for the audio clock. Kept on its own page because audio.test.html already renders ~460 scenes and the two together exhaust the headless renderer
+- `tests/stability.test.html` — realtime `AudioContext`: dropped render quanta, `renderCapacity` load/underrun, and clock drift, at the polyphony cap. An offline render cannot observe any of this. Headless Chrome uses a null sink, so device dropouts remain manual QA.
 
-Both browser suites run headless and exit non-zero on failure:
+Browser suites run headless and exit non-zero on failure:
 
 - `node tests/run-browser.mjs tests/audio.test.html 1800`
 - `node tests/run-browser.mjs tests/polyphony.test.html 2400`
+- `node tests/run-browser.mjs tests/stability.test.html 180`
 
 The timeout argument is in seconds and these are slow — the polyphony page renders about four minutes of audio. It needs Chrome or Chromium installed.
 

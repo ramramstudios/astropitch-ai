@@ -24,6 +24,23 @@ import { SIGNS } from '../src/ontology.js';
 const out = document.getElementById('out');
 let failures = 0;
 
+/**
+ * Default rate for the existing suite. Real devices are not this tidy — 44.1 kHz
+ * is common, and a Bluetooth route can force something else. Helpers below take
+ * a rate so a parity check can render the same fixture at more than one, and so
+ * an assertion here cannot quietly depend on 48 kHz by using a literal that
+ * only matches this default.
+ */
+const RATE = 48000;
+
+function offline(seconds, { channels = 2, rate = RATE } = {}) {
+  return new OfflineAudioContext({
+    numberOfChannels: channels,
+    length: Math.ceil(rate * seconds),
+    sampleRate: rate,
+  });
+}
+
 const log = (cls, msg) => {
   const pre = document.createElement('pre');
   pre.className = cls;
@@ -37,13 +54,13 @@ const check = (label, ok, detail = '') => {
 };
 
 /**
- * Deterministic renders. The impulse response and the noise buffer are both
- * built from Math.random, so without this every run gets a different room and
- * a different noise floor. Every render helper below goes through it: a paired
- * comparison is only a comparison if both passes got the same room, and a
- * reported figure that moves between runs is not a tripwire. renderPreMaster
- * was left unseeded once, and the staging section's numbers moved by 3 dB
- * between two runs of the same code.
+ * Deterministic renders. Gesture onsets in the burst scene still draw
+ * Math.random, so without this a paired comparison of two passes is not a
+ * comparison. The impulse response and the voice noise buffer are hashed from
+ * time rather than drawn from Math.random, so they match across sample rates
+ * on their own; the seed is for everything else. renderPreMaster was left
+ * unseeded once, and the staging section's numbers moved by 3 dB between two
+ * runs of the same code.
  *
  * Declared here, above the helpers, because the scenes start rendering part
  * way down this file and a const referenced before its declaration runs is a
@@ -56,9 +73,9 @@ function seeded(fn) {
   try { return fn(); } finally { Math.random = realRandom; }
 }
 
-async function render(seconds, build) {
+async function render(seconds, build, rate = RATE) {
   const ctx = seeded(() => {
-    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const c = offline(seconds, { rate });
     build(new AudioEngine({ context: c }));
     return c;
   });
@@ -163,18 +180,19 @@ for (const paletteId of PALETTE_IDS) {
 
 head('Envelope endpoints: attack from silence, release to silence');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 6, sampleRate: 48000 });
+  const ctx = offline(6);
   const engine = new AudioEngine({ context: ctx });
   const spec = buildVoiceSpec({ element: 'fire', house: 1, modality: 'cardinal' });
   new Voice(engine, spec, { freq: 440, time: 0.5, duration: 1.5, gain: 0.5, pan: 0 });
   const buffer = await ctx.startRendering();
   const d = buffer.getChannelData(0);
+  const rate = buffer.sampleRate;
 
-  const at = (t) => Math.abs(d[Math.floor(t * 48000)]);
+  const at = (t) => Math.abs(d[Math.floor(t * rate)]);
   let preOnset = 0;
-  for (let i = 0; i < 0.45 * 48000; i++) preOnset = Math.max(preOnset, Math.abs(d[i]));
+  for (let i = 0; i < 0.45 * rate; i++) preOnset = Math.max(preOnset, Math.abs(d[i]));
   let tail = 0;
-  for (let i = Math.floor(5.5 * 48000); i < d.length; i++) tail = Math.max(tail, Math.abs(d[i]));
+  for (let i = Math.floor(5.5 * rate); i < d.length; i++) tail = Math.max(tail, Math.abs(d[i]));
 
   check('silent before the scheduled onset', preOnset < 1e-3, `peak ${preOnset.toExponential(1)}`);
   check('sounding during the note', at(1.0) > 1e-3, `level ${at(1.0).toFixed(4)}`);
@@ -209,7 +227,7 @@ head('A full chart bloom stays within headroom');
 
 head('Voice teardown: nodes are released, not leaked');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 4, sampleRate: 48000 });
+  const ctx = offline(4);
   const engine = new AudioEngine({ context: ctx });
   // A short release, so the teardown deadline lands inside the test's patience.
   const spec = buildVoiceSpec({ element: 'fire', house: 2, modality: 'cardinal' });
@@ -230,7 +248,7 @@ head('Voice teardown: nodes are released, not leaked');
 
 head('Voice stealing caps scheduled polyphony');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 3, sampleRate: 48000 });
+  const ctx = offline(3);
   const engine = new AudioEngine({ context: ctx });
   const spec = buildVoiceSpec({ element: 'air', house: 3, modality: 'fixed' });
   for (let i = 0; i < 90; i++) {
@@ -255,7 +273,7 @@ head('Voice stealing caps scheduled polyphony');
 
 head('Polyphony cap vs. legitimate synastry bloom');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 48000 * 10, sampleRate: 48000 });
+  const ctx = offline(10);
   const engine = new AudioEngine({ context: ctx });
   const specs = [
     { element: 'air', house: 1, modality: 'cardinal' },
@@ -326,9 +344,9 @@ head('Click-burst dynamics: staggered burst is not squashed flat');
  * dominated by the wash and reads an intended reduction in reverb as the mix
  * falling apart.
  */
-async function renderPath(seconds, build, path) {
+async function renderPath(seconds, build, path, rate = RATE) {
   const ctx = seeded(() => {
-    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const c = offline(seconds, { rate });
     const engine = new AudioEngine({ context: c });
     if (path === 'dry') {
       engine.reverbReturn.gain.value = 0;
@@ -342,9 +360,9 @@ async function renderPath(seconds, build, path) {
   return analyse(await ctx.startRendering());
 }
 
-async function renderPreMaster(seconds, build, config = {}) {
+async function renderPreMaster(seconds, build, config = {}, rate = RATE) {
   const ctx = seeded(() => {
-    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const c = offline(seconds, { rate });
     const engine = new AudioEngine({ context: c });
     Object.assign(engine, config);
     build(engine);
@@ -355,13 +373,14 @@ async function renderPreMaster(seconds, build, config = {}) {
   return analyse(await ctx.startRendering());
 }
 
-async function renderSeeded(seconds, build, trim = 1, config = {}) {
+async function renderSeeded(seconds, build, trim = 1, config = {}, rate = RATE, tap = null) {
   const ctx = seeded(() => {
-    const c = new OfflineAudioContext({ numberOfChannels: 2, length: Math.ceil(48000 * seconds), sampleRate: 48000 });
+    const c = offline(seconds, { rate });
     const engine = new AudioEngine({ context: c });
     Object.assign(engine, config);
     build(engine);
     engine.master.gain.value *= trim;
+    if (tap) tap(engine, c);
     return c;
   });
   return await ctx.startRendering();
@@ -411,6 +430,112 @@ function distortionDb(loud, quiet, scale, block = 128) {
   return signal > 0 ? 10 * Math.log10(residual / signal) : -Infinity;
 }
 
+/** In-place radix-2 FFT. N must be a power of two. */
+function fftRadix2(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i]; re[i] = re[j]; re[j] = tr;
+      const ti = im[i]; im[i] = im[j]; im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wlenRe = Math.cos(ang);
+    const wlenIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let wRe = 1;
+      let wIm = 0;
+      for (let j = 0; j < len / 2; j++) {
+        const uRe = re[i + j];
+        const uIm = im[i + j];
+        const vRe = re[i + j + len / 2] * wRe - im[i + j + len / 2] * wIm;
+        const vIm = re[i + j + len / 2] * wIm + im[i + j + len / 2] * wRe;
+        re[i + j] = uRe + vRe;
+        im[i + j] = uIm + vIm;
+        re[i + j + len / 2] = uRe - vRe;
+        im[i + j + len / 2] = uIm - vIm;
+        const nwRe = wRe * wlenRe - wIm * wlenIm;
+        wIm = wRe * wlenIm + wIm * wlenRe;
+        wRe = nwRe;
+      }
+    }
+  }
+}
+
+/**
+ * Fraction of windowed energy below 120 Hz, between 120 and 400 Hz, and
+ * above 4 kHz. Fractions rather than absolute energy, so a 48 kHz buffer
+ * being longer than a 44.1 kHz one of the same duration does not look like
+ * a brighter mix. The band edges are the ones Phase 4 will report; using
+ * them here means a rate-dependent brightness shift in the IR or the
+ * oversampled shapers shows up as a moved fraction rather than a moved peak.
+ */
+function bandEnergy(buffer, edges = [120, 400, 4000]) {
+  const N = 2048;
+  const hop = 1024;
+  const rate = buffer.sampleRate;
+  const nBands = edges.length + 1;
+  const acc = new Float64Array(nBands);
+  let total = 0;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  const win = new Float64Array(N);
+  for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (N - 1));
+
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const d = buffer.getChannelData(ch);
+    for (let start = 0; start + N <= d.length; start += hop) {
+      im.fill(0);
+      for (let i = 0; i < N; i++) re[i] = d[start + i] * win[i];
+      fftRadix2(re, im);
+      for (let k = 1; k < N / 2; k++) {
+        const e = re[k] * re[k] + im[k] * im[k];
+        const hz = k * rate / N;
+        let b = nBands - 1;
+        for (let i = 0; i < edges.length; i++) {
+          if (hz < edges[i]) { b = i; break; }
+        }
+        acc[b] += e;
+        total += e;
+      }
+    }
+  }
+  return Array.from(acc, (x) => x / (total || 1));
+}
+
+function dbRatio(a, b) {
+  return 20 * Math.log10(a / b);
+}
+
+/**
+ * Cubic (Catmull-Rom) 4× true-peak estimate. Sample peak misses intersample
+ * peaks; a converter does not. Not a full ITU-R BS.1770 oversampler — an
+ * estimate, which is what this phase asked for.
+ */
+function truePeak(buffer) {
+  const hermite = (y0, y1, y2, y3, mu) => {
+    const a0 = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
+    const a1 = y0 - 2.5 * y1 + 2 * y2 - 0.5 * y3;
+    const a2 = -0.5 * y0 + 0.5 * y2;
+    return ((a0 * mu + a1) * mu + a2) * mu + y1;
+  };
+  let peak = 0;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const d = buffer.getChannelData(ch);
+    for (let i = 1; i < d.length - 2; i++) {
+      peak = Math.max(peak, Math.abs(d[i]));
+      for (const mu of [0.25, 0.5, 0.75]) {
+        peak = Math.max(peak, Math.abs(hermite(d[i - 1], d[i], d[i + 1], d[i + 2], mu)));
+      }
+    }
+  }
+  return peak;
+}
+
 const DENSE_SPECS = [
   { element: 'air', house: 1, modality: 'cardinal' },
   { element: 'water', house: 8, modality: 'fixed' },
@@ -438,6 +563,97 @@ const dense = (n, gain = 0.2) => (engine) => {
     });
   }
 };
+
+/**
+ * Sample-rate parity. The rest of this page defaults to 48 kHz because that is
+ * what OfflineAudioContext gives if you ask for nothing in particular, and
+ * because the numbers already in comments were measured there. Real output
+ * runs at whatever the device gives. The two places with real exposure are
+ * createImpulseResponse (tail length is floor(rate * seconds), brightness
+ * follows the one-pole coeff per sample) and WaveShaper.oversample, which
+ * resamples relative to the context rate.
+ *
+ * The same 16-voice dense fixture is rendered at 44100 and 48000. Peak, RMS,
+ * and band energy are bit-stable across repeat runs and get a tight bound.
+ * The 128-sample residual is not: four back-to-back full-suite runs (same
+ * deterministic graph, same seed, same machine) gave each rate independently
+ * one of two outcomes, uncorrelated with which rate it was —
+ *
+ *     run 1  44100 -49.7 dB   48000 -50.7 dB   Δ 1.06 dB
+ *     run 2  44100 -37.8 dB   48000 -50.7 dB   Δ 12.91 dB
+ *     run 3  44100 -37.7 dB   48000 -38.6 dB   Δ 0.88 dB
+ *     run 4  44100 -49.7 dB   48000 -50.7 dB   Δ 1.06 dB
+ *
+ * i.e. this is per-render engine jitter, not a rate effect: both -50 dB and
+ * -38 dB showed up at both rates. Peak and RMS are single-render statistics
+ * and do not see it; the residual differences two separate startRendering()
+ * calls at a 128-sample block, and a compressor/limiter is a feedback system —
+ * a sub-ULP difference in float summation order (plausible from the
+ * convolver's FFT) has room to compound over 8s of gain-reduction history
+ * into a macroscopically different envelope. The bound below covers the
+ * worst gap actually observed, with margin; it is not tight enough to catch
+ * a small rate-dependent regression in this metric, but nothing tighter would
+ * survive a re-run. A future change that makes the IR a different *length*,
+ * or moves both attractors together, still blows past it.
+ */
+const PARITY_RATES = [44100, 48000];
+const PARITY_PEAK_DB = 0.4;
+const PARITY_RMS_DB = 1.0;
+const PARITY_RESIDUAL_DB = 15.0;
+const PARITY_BAND = 0.04;
+const PARITY_IR_SECONDS = 0.01;
+
+head('Sample-rate parity: 44.1 kHz and 48 kHz stay close');
+{
+  const irDurations = PARITY_RATES.map((rate) => seeded(() => {
+    const c = offline(0.05, { channels: 1, rate });
+    return new AudioEngine({ context: c }).stages.convolver.buffer.duration;
+  }));
+  log('info', `      IR duration  ${PARITY_RATES.map((r, i) => `${r} Hz ${irDurations[i].toFixed(3)}s`).join('   ')}`);
+  check('the impulse response lasts the same time at both rates',
+    Math.abs(irDurations[0] - irDurations[1]) < PARITY_IR_SECONDS,
+    `Δ ${(irDurations[0] - irDurations[1]).toFixed(4)}s`);
+  check('and that time is the 3.6 s tail, not a sample-count accident',
+    irDurations.every((d) => Math.abs(d - 3.6) < 0.01),
+    irDurations.map((d) => d.toFixed(4)).join(', '));
+
+  const at = {};
+  for (const rate of PARITY_RATES) {
+    const loud = await renderSeeded(8, dense(16), 1, {}, rate);
+    const quiet = await renderSeeded(8, dense(16), 1 / 8, {}, rate);
+    const stats = analyse(loud);
+    at[rate] = {
+      peak: stats.peak,
+      rms: stats.rms,
+      residual: distortionDb(loud, quiet, 8, 128),
+      bands: bandEnergy(loud),
+    };
+  }
+  const a = at[44100];
+  const b = at[48000];
+  const peakDb = Math.abs(dbRatio(a.peak, b.peak));
+  const rmsDb = Math.abs(dbRatio(a.rms, b.rms));
+  const residDb = Math.abs(a.residual - b.residual);
+  const bandDelta = a.bands.map((x, i) => Math.abs(x - b.bands[i]));
+  const bandNames = ['<120', '120-400', '400-4k', '>4k'];
+
+  log('info', `      44100  peak ${a.peak.toFixed(3)}  rms ${a.rms.toFixed(4)}  residual ${a.residual.toFixed(1)} dB` +
+    `  bands ${a.bands.map((x) => x.toFixed(3)).join(' ')}`);
+  log('info', `      48000  peak ${b.peak.toFixed(3)}  rms ${b.rms.toFixed(4)}  residual ${b.residual.toFixed(1)} dB` +
+    `  bands ${b.bands.map((x) => x.toFixed(3)).join(' ')}`);
+  log('info', `      Δ peak ${peakDb.toFixed(2)} dB  rms ${rmsDb.toFixed(2)} dB  residual ${residDb.toFixed(2)} dB` +
+    `  bands ${bandNames.map((n, i) => `${n} ${bandDelta[i].toFixed(3)}`).join('  ')}`);
+
+  check('peak within a tight tolerance across rates', peakDb < PARITY_PEAK_DB,
+    `${peakDb.toFixed(2)} dB of ${PARITY_PEAK_DB}`);
+  check('RMS within a tight tolerance across rates', rmsDb < PARITY_RMS_DB,
+    `${rmsDb.toFixed(2)} dB of ${PARITY_RMS_DB}`);
+  check('128-sample residual stays within a recorded bound across rates', residDb < PARITY_RESIDUAL_DB,
+    `${residDb.toFixed(2)} dB of ${PARITY_RESIDUAL_DB}`);
+  check('band energy does not migrate when the rate changes',
+    Math.max(...bandDelta) < PARITY_BAND,
+    bandNames.map((n, i) => `${n} ${bandDelta[i].toFixed(3)}`).join('  '));
+}
 
 head('Polyphony: the master chain is never driven past what it can take');
 {
@@ -530,6 +746,177 @@ head('Polyphony: the gain staging is what is keeping the chain clean');
     `worst ${worst.toFixed(1)} dB = ${(10 ** (worst / 20) * 100).toFixed(1)}% of signal`);
 }
 
+/**
+ * The four offline metrics the previous instrumentation never had.
+ *
+ * Only true-peak is an assertion in this phase. Per-stage residual, compressor
+ * gain reduction, and band energy are reported so a later complaint can name
+ * a stage and a band instead of "it sounds dirty". Turning a first reading
+ * into a threshold without knowing the range is how a suite acquires a flake.
+ *
+ * Measured 2026-08-27, dense(16) × 8 s, 128-sample residual:
+ *     glue       -59.7 dB
+ *     saturator  -51.1 dB
+ *     limiter    -50.9 dB
+ *     output     -50.7 dB
+ *     bands      <120 2.6%  120–400 81.0%  400–4k 16.3%  >4k 0.08%
+ *     true peak  0.900
+ *     glue.reduction    min -0.45  (varies; instrument present)
+ *     limiter.reduction min -1.03  (varies; instrument present)
+ */
+const TAPS = {
+  glue: (engine, ctx) => {
+    engine.stages.glue.disconnect();
+    engine.stages.glue.connect(ctx.destination);
+  },
+  saturator: (engine, ctx) => {
+    engine.stages.satMakeup.disconnect();
+    engine.stages.satMakeup.connect(ctx.destination);
+  },
+  limiter: (engine, ctx) => {
+    engine.stages.limiter.disconnect();
+    engine.stages.limiter.connect(ctx.destination);
+  },
+};
+
+head('Missing offline metrics: per-stage residual, GR, bands, true peak');
+{
+  const fixture = dense(16);
+  const seconds = 8;
+
+  const residuals = {};
+  for (const [name, tap] of Object.entries(TAPS)) {
+    const loud = await renderSeeded(seconds, fixture, 1, {}, RATE, tap);
+    const quiet = await renderSeeded(seconds, fixture, 1 / 8, {}, RATE, tap);
+    residuals[name] = distortionDb(loud, quiet, 8, 128);
+  }
+  const outLoud = await renderSeeded(seconds, fixture, 1);
+  const outQuiet = await renderSeeded(seconds, fixture, 1 / 8);
+  residuals.output = distortionDb(outLoud, outQuiet, 8, 128);
+
+  log('info', '      128-sample residual after each stage (reporting only):');
+  for (const name of ['glue', 'saturator', 'limiter', 'output']) {
+    log('info', `      ${name.padEnd(10)}  ${residuals[name].toFixed(1)} dB`);
+  }
+
+  const bands = bandEnergy(outLoud);
+  const bandNames = ['<120 Hz', '120–400 Hz', '400 Hz–4 kHz', '>4 kHz'];
+  log('info', `      band energy  ${bandNames.map((n, i) => `${n} ${(bands[i] * 100).toFixed(1)}%`).join('   ')}`);
+  log('info', `      (Phase 4's three numbers: <120 ${(bands[0] * 100).toFixed(1)}%  120–400 ${(bands[1] * 100).toFixed(1)}%  >4 kHz ${(bands[3] * 100).toFixed(1)}%)`);
+
+  const tp = truePeak(outLoud);
+  const samplePeak = analyse(outLoud).peak;
+  log('info', `      sample peak ${samplePeak.toFixed(4)}  true-peak estimate ${tp.toFixed(4)}`);
+  check('true peak stays below full scale', tp < 1.0, `true peak ${tp.toFixed(4)}`);
+
+  // Glue and limiter reduction, sampled on the audio clock during one render.
+  // reduction readback is not uniformly reliable; if it sits on a constant
+  // the instrument is absent and this reports a skip rather than a failure.
+  const gr = { glue: [], limiter: [] };
+  const grCtx = seeded(() => {
+    const c = offline(seconds);
+    const engine = new AudioEngine({ context: c });
+    fixture(engine);
+    for (const t of [1, 2, 3, 4, 5, 6]) {
+      c.suspend(t).then(() => {
+        gr.glue.push(engine.stages.glue.reduction);
+        gr.limiter.push(engine.stages.limiter.reduction);
+        c.resume();
+      });
+    }
+    return c;
+  });
+  await grCtx.startRendering();
+  const summariseGr = (samples, name) => {
+    if (!samples.length || samples.every((x) => x === samples[0])) {
+      log('info', `      ${name}.reduction unavailable or constant (${samples[0] ?? 'n/a'}); skip`);
+      return;
+    }
+    const min = Math.min(...samples);
+    const max = Math.max(...samples);
+    const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
+    log('info', `      ${name}.reduction  min ${min.toFixed(2)}  mean ${mean.toFixed(2)}  max ${max.toFixed(2)}  n=${samples.length}`);
+  };
+  summariseGr(gr.glue, 'glue');
+  summariseGr(gr.limiter, 'limiter');
+}
+
+head('Load model: solo true-peak vs voice.peak, and coherent vs incoherent sum');
+{
+  // Calibration, not a retune. The table lives next to LOAD_REF in engine.js.
+  const ELEMENTS = ['fire', 'earth', 'air', 'water'];
+  const MODALITIES = ['cardinal', 'fixed', 'mutable'];
+  const GAIN = 0.35;
+  const rows = [];
+
+  const renderCal = async (build) => {
+    const ctx = seeded(() => {
+      const c = offline(3);
+      const engine = new AudioEngine({ context: c });
+      engine.loadRef = Infinity;
+      engine.reverbReturn.gain.value = 0;
+      engine.delayReturn.gain.value = 0;
+      engine.master.disconnect();
+      engine.master.connect(c.destination);
+      const voices = build(engine);
+      return { c, voices };
+    });
+    const buffer = await ctx.c.startRendering();
+    return { tp: truePeak(buffer), peaks: ctx.voices.map((v) => v.peak) };
+  };
+
+  for (const palette of PALETTE_IDS) {
+    for (const element of ELEMENTS) {
+      for (const modality of MODALITIES) {
+        const { tp, peaks } = await renderCal((engine) => {
+          const spec = buildVoiceSpec({ element, house: 1, modality, palette });
+          return [new Voice(engine, spec, { freq: 220, time: 0.05, duration: 1.5, gain: GAIN, pan: 0 })];
+        });
+        rows.push({ palette, element, modality, ratio: tp / peaks[0], tp, model: peaks[0] });
+      }
+    }
+  }
+
+  const ratios = rows.map((r) => r.ratio);
+  const minR = Math.min(...ratios);
+  const maxR = Math.max(...ratios);
+  log('info', `      ${rows.length} solos  true/peak min ${minR.toFixed(2)}  max ${maxR.toFixed(2)}`);
+  for (const r of rows) {
+    log('info', `      ${r.palette} ${r.element} ${r.modality}  ${r.ratio.toFixed(2)}  (true ${r.tp.toFixed(3)} / peak ${r.model.toFixed(3)})`);
+  }
+
+  const unison = await renderCal((engine) => {
+    const spec = buildVoiceSpec({ element: 'fire', house: 1, modality: 'fixed', palette: 'astropitch' });
+    return [new Voice(engine, spec, { freq: 110, time: 0.05, duration: 1.5, gain: GAIN, pan: 0, unisonOctaves: [-1, 0, 1] })];
+  });
+  const unisonRatio = unison.tp / unison.peaks[0];
+  log('info', `      unison 3oct  ${unisonRatio.toFixed(2)}`);
+
+  check('no construction is louder than the load model claims',
+    maxR < 1 && unisonRatio < 1,
+    `max solo ${maxR.toFixed(2)}, unison ${unisonRatio.toFixed(2)}`);
+  check('the model is not an empty overestimate either',
+    minR > 0.2,
+    `min ${minR.toFixed(2)}`);
+
+  const sums = [];
+  for (const n of [1, 4, 8, 16]) {
+    const { tp, peaks } = await renderCal((engine) => {
+      const spec = buildVoiceSpec({ element: 'air', house: 3, modality: 'fixed', palette: 'astropitch' });
+      return Array.from({ length: n }, (_, i) => new Voice(engine, spec, {
+        freq: 220 * 2 ** (i / 17), time: 0.05, duration: 1.5, gain: 0.2, pan: (i % 2) ? 0.4 : -0.4,
+      }));
+    });
+    const mean = peaks.reduce((a, b) => a + b, 0) / peaks.length;
+    sums.push({ n, tp, coherent: n * mean });
+    log('info', `      n=${n}  true ${tp.toFixed(3)}  n×peak ${(n * mean).toFixed(3)}  true/(n×) ${(tp / (n * mean)).toFixed(2)}`);
+  }
+  const at16 = sums.find((s) => s.n === 16);
+  check('sixteen voices do not add in phase the way the model assumes',
+    at16.tp < at16.coherent * 0.5,
+    `true ${at16.tp.toFixed(3)} vs n× ${at16.coherent.toFixed(3)}`);
+}
+
 head('Polyphony: reaching the cap fades voices instead of cutting them');
 {
   // Far past maxVoices, so slots have to be reclaimed from voices that are
@@ -551,7 +938,7 @@ head('Polyphony: reaching the cap fades voices instead of cutting them');
 
 head('Polyphony: a voice stolen before it starts never sounds at all');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 1, length: 48000 * 4, sampleRate: 48000 });
+  const ctx = offline(4, { channels: 1 });
   const engine = new AudioEngine({ context: ctx });
   // The fastest attack any gesture has is 2 ms, and release() cannot put its
   // ramp earlier than t0 + 0.01 — so releasing a pending voice rather than
@@ -568,7 +955,7 @@ head('Polyphony: a voice stolen before it starts never sounds at all');
 
 head('Polyphony: the bus follows a release down rather than holding it under');
 {
-  const ctx = new OfflineAudioContext({ numberOfChannels: 1, length: 48000 * 12, sampleRate: 48000 });
+  const ctx = offline(12, { channels: 1 });
   const engine = new AudioEngine({ context: ctx });
   const spec = buildVoiceSpec({ element: 'water', house: 8, modality: 'fixed' });
   for (let i = 0; i < 4; i++) {
@@ -645,7 +1032,8 @@ head('Tuning');
   check('the centre of Aries is A 440', Math.abs(a440 - 440) < 1e-9, `${a440}`);
   // 360 degrees IS 0 degrees; the octave is carried by the octave parameter.
   check('the circle closes on itself', Math.abs(frequencyFor(360, { octave: 0 }) - frequencyFor(0, { octave: 0 })) < 1e-9);
-  check('one octave up is a doubling', Math.abs(frequencyFor(15, { octave: 1 }) - 880) < 1e-9);
+  check('one octave up is a doubling',
+    Math.abs(frequencyFor(15, { octave: 1 }) - frequencyFor(15, { octave: 0 }) * 2) < 1e-9);
   check('359.99 degrees is just under the upper Aries cusp',
     Math.abs(frequencyFor(359.99, { octave: 0 }) - 432 * 2 ** ((359.99 - 15) / 360)) < 1e-9,
     `${frequencyFor(359.99, { octave: 0 }).toFixed(3)}`);

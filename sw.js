@@ -4,12 +4,13 @@
  * installed. Bump CACHE_NAME to invalidate old caches on the next deploy —
  * there's no build step to hash filenames automatically.
  */
-const CACHE_NAME = 'astropitch-v1';
+const CACHE_NAME = 'astropitch-v2';
 
 const SHELL_FILES = [
   '.',
   'index.html',
   'manifest.json',
+  'bundle.json',
   'favicon.ico',
   'favicon.png',
   'favicon.svg',
@@ -25,6 +26,12 @@ const SHELL_FILES = [
   'src/audio/performer.js',
   'src/audio/tuning.js',
   'src/audio/voices.js',
+  'src/audio/lifecycle.js',
+  'src/audio/modes.js',
+  'src/audio/native-bridge.js',
+  'src/audio/scheduler.js',
+  'src/ota/policy.js',
+  'src/ota/client.js',
   'src/chart.js',
   'src/ephemeris.js',
   'src/ontology.js',
