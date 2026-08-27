@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { nextPinchView, clampPanView, VIEW_MIN_SCALE, VIEW_MAX_SCALE } from '../src/ui/wheel.js';
 import { nextSheetState, nearestSheetState } from '../src/ui/app.js';
+import { lifecycleStep, LIFECYCLE_STATES, AudioLifecycle } from '../src/audio/lifecycle.js';
 
 let fails = 0;
 const ok = (label, cond, detail = '') => {
@@ -25,6 +26,8 @@ const ok = (label, cond, detail = '') => {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
+
+const sameActions = (got, want) => JSON.stringify(got) === JSON.stringify(want);
 
 console.log('--- pinch zoom: focal point stays fixed in container-relative space ---');
 {
@@ -114,6 +117,137 @@ console.log('\n--- mode-detection query stays identical between app.js and its i
       `app.js: "${appMatch[1]}" vs index.html: "${htmlMatch[1]}"`);
   }
 }
+
+console.log('\n--- audio lifecycle: hide while playing records the mode and stops audio ---');
+{
+  const playing = { phase: LIFECYCLE_STATES.playing, recordedMode: 'drone' };
+  const next = lifecycleStep(playing, 'hide', { mode: 'drone' });
+  ok('moves to suspended', next.phase === LIFECYCLE_STATES.suspended);
+  ok('remembers the mode that was playing', next.recordedMode === 'drone');
+  ok('stops audio and notifies the UI', sameActions(next.actions, ['stop-audio', 'emit-suspended']),
+    JSON.stringify(next.actions));
+}
+
+console.log('\n--- audio lifecycle: interrupt matches hide ---');
+{
+  const playing = { phase: LIFECYCLE_STATES.playing, recordedMode: 'melodic' };
+  const next = lifecycleStep(playing, 'interrupt', { mode: 'melodic' });
+  ok('interrupt also suspends', next.phase === LIFECYCLE_STATES.suspended);
+  ok('interrupt records melodic', next.recordedMode === 'melodic');
+  ok('interrupt stops audio and emits suspended',
+    sameActions(next.actions, ['stop-audio', 'emit-suspended']), JSON.stringify(next.actions));
+}
+
+console.log('\n--- audio lifecycle: hide while idle is a no-op ---');
+{
+  const idle = { phase: LIFECYCLE_STATES.idle, recordedMode: null };
+  const next = lifecycleStep(idle, 'hide', { mode: null });
+  ok('stays idle', next.phase === LIFECYCLE_STATES.idle);
+  ok('does nothing', next.actions.length === 0, JSON.stringify(next.actions));
+}
+
+console.log('\n--- audio lifecycle: show while suspended re-enters the recorded mode ---');
+{
+  const suspended = { phase: LIFECYCLE_STATES.suspended, recordedMode: 'drone' };
+  const healthy = lifecycleStep(suspended, 'show', { needsRebuild: false });
+  ok('returns to playing', healthy.phase === LIFECYCLE_STATES.playing);
+  ok('keeps the recorded mode', healthy.recordedMode === 'drone');
+  ok('resumes context, re-enters mode, emits resumed',
+    sameActions(healthy.actions, ['resume-context', 'reenter', 'emit-resumed']),
+    JSON.stringify(healthy.actions));
+
+  const broken = lifecycleStep(suspended, 'show', { needsRebuild: true });
+  ok('a closed or re-routed context rebuilds instead of resuming',
+    sameActions(broken.actions, ['rebuild', 'reenter', 'emit-resumed']),
+    JSON.stringify(broken.actions));
+}
+
+console.log('\n--- audio lifecycle: user stop clears resume intent ---');
+{
+  const playing = { phase: LIFECYCLE_STATES.playing, recordedMode: 'bloom' };
+  const stopped = lifecycleStep(playing, 'stop');
+  ok('stop returns to idle', stopped.phase === LIFECYCLE_STATES.idle);
+  ok('stop forgets the mode', stopped.recordedMode === null);
+
+  const ended = lifecycleStep(playing, 'end');
+  ok('a finite mode ending also clears resume intent',
+    ended.phase === LIFECYCLE_STATES.idle && ended.recordedMode === null);
+
+  // Backgrounded, then the user somehow clears state — show must not restart.
+  const cleared = lifecycleStep({ phase: LIFECYCLE_STATES.suspended, recordedMode: null }, 'show');
+  ok('suspended with no recorded mode does not re-enter',
+    cleared.phase === LIFECYCLE_STATES.idle && !cleared.actions.includes('reenter'),
+    JSON.stringify(cleared));
+}
+
+console.log('\n--- audio lifecycle: play marks the active mode ---');
+{
+  const next = lifecycleStep({ phase: LIFECYCLE_STATES.idle, recordedMode: null }, 'play', { mode: 'scalar' });
+  ok('play moves to playing', next.phase === LIFECYCLE_STATES.playing);
+  ok('play records scalar', next.recordedMode === 'scalar');
+}
+
+console.log('\n--- audio lifecycle coordinator: hide stops audio; show re-enters ---');
+async function testLifecycleCoordinator() {
+  const stops = [];
+  const reentered = [];
+  const events = [];
+  let mode = 'drone';
+  let needsRebuild = false;
+  const fakeEngine = {
+    ctx: null,
+    needsRebuild: () => needsRebuild,
+    start: async () => {},
+    suspend: async () => { stops.push('suspend'); },
+    rebuild: async () => { stops.push('rebuild'); },
+    ensureKeepAlive() {},
+  };
+  const fakePerformer = {
+    get mode() { return mode; },
+    listeners: new Set(),
+    onEvent(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
+    stop(opts) { stops.push(['stop', opts]); mode = null; },
+  };
+  const life = new AudioLifecycle({
+    engine: fakeEngine,
+    performer: fakePerformer,
+    reenter: async (m) => { reentered.push(m); mode = m; },
+    isHidden: () => false,
+  });
+  life.onEvent((e) => events.push(e));
+
+  // Simulate transport start without attaching to the DOM.
+  await life._apply(lifecycleStep(life._snapshot(), 'play', { mode: 'drone' }));
+  ok('coordinator tracks playing', life.phase === LIFECYCLE_STATES.playing);
+
+  await life.handleBackground();
+  ok('hide moves coordinator to suspended', life.phase === LIFECYCLE_STATES.suspended);
+  ok('hide records drone', life.recordedMode === 'drone');
+  ok('hide fades the performer without a UI stop event',
+    stops.some((s) => Array.isArray(s) && s[0] === 'stop' && s[1]?.emit === false));
+  ok('hide emits suspended for the transport UI',
+    events.some((e) => e.type === 'suspended' && e.mode === 'drone'));
+
+  stops.length = 0;
+  events.length = 0;
+  await life.handleForeground();
+  ok('show returns to playing', life.phase === LIFECYCLE_STATES.playing);
+  ok('show re-enters drone', reentered[0] === 'drone', `${reentered}`);
+  ok('show emits resumed', events.some((e) => e.type === 'resumed' && e.mode === 'drone'));
+
+  // Broken context path.
+  mode = 'melodic';
+  await life._apply(lifecycleStep(life._snapshot(), 'play', { mode: 'melodic' }));
+  await life.handleBackground();
+  needsRebuild = true;
+  reentered.length = 0;
+  stops.length = 0;
+  await life.handleForeground();
+  ok('show rebuilds when the context is unhealthy', stops.includes('rebuild'));
+  ok('show still re-enters after rebuild', reentered[0] === 'melodic', `${reentered}`);
+}
+
+await testLifecycleCoordinator();
 
 console.log(`\n${fails === 0 ? 'All mobile-mode checks passed.' : `${fails} FAILURE(S).`}`);
 process.exit(fails ? 1 : 0);

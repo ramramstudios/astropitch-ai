@@ -8,6 +8,7 @@ import { TEMPERAMENTS, frequencyFor } from '../audio/tuning.js';
 import { PALETTES, PALETTE_IDS, DEFAULT_PALETTE } from '../audio/palettes.js';
 import { engine } from '../audio/engine.js';
 import { Performer } from '../audio/performer.js';
+import { AudioLifecycle } from '../audio/lifecycle.js';
 import { Wheel } from './wheel.js';
 import { Starfield } from './starfield.js';
 
@@ -257,6 +258,16 @@ const state = {
 };
 
 const performer = new Performer(engine);
+const lifecycle = new AudioLifecycle({
+  engine,
+  performer,
+  reenter: (mode) => ({
+    bloom: () => performer.bloom(),
+    scalar: () => performer.scalar(),
+    drone: () => performer.drone(),
+    melodic: () => performer.melodic(),
+  }[mode] ?? (() => performer.bloom()))(),
+});
 let wheel;
 let starfield;
 // True once the user has edited a birth-form field by hand since the last
@@ -339,6 +350,7 @@ function boot() {
   wireTransportVisibility();
   wireLayoutMode();
   wireKeyboard();
+  wireAudioLifecycle();
   applySource(state.source);
 
   window.addEventListener('resize', onResize);
@@ -1367,6 +1379,19 @@ function setActiveTransportMode(mode = null) {
     $(sel).classList.toggle('is-active', active);
     $(sel).setAttribute('aria-pressed', String(active));
   }
+}
+
+/**
+ * Visibility / interrupt handling for the shared AudioContext. Without this
+ * the transport UI keeps showing "playing" over a frozen or suspended graph.
+ * See research/audio-implementation-plan.md Phase 2.
+ */
+function wireAudioLifecycle() {
+  lifecycle.onEvent((event) => {
+    if (event.type === 'suspended') setActiveTransportMode();
+    else if (event.type === 'resumed') setActiveTransportMode(event.mode);
+  });
+  lifecycle.attach(window);
 }
 
 function wireWheel() {

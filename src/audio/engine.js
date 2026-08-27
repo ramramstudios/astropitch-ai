@@ -228,6 +228,8 @@ export class AudioEngine {
     this.sendExp = SEND_EXP;
     this._analyserData = null;
     this._providedContext = context;
+    this._sampleRate = null;
+    this._keepAlive = null;
     if (context) {
       this._build(context);
       this.ready = true;
@@ -235,14 +237,105 @@ export class AudioEngine {
   }
 
   async start() {
-    if (!this.ctx) this._build();
-    if (this.ctx.state === 'suspended') await this.ctx.resume();
+    if (!this.ctx || this.ctx.state === 'closed') this._build();
+    if (this.ctx.state === 'suspended' || this.ctx.state === 'interrupted') {
+      await this.ctx.resume();
+    }
     this.ready = true;
     return this.ctx;
   }
 
+  /**
+   * Park the context while the page is hidden. Live contexts only — an
+   * OfflineAudioContext supplied for tests has no suspend to speak of.
+   */
+  async suspend() {
+    if (!this.ctx || this._providedContext) return;
+    if (this.ctx.state === 'running') await this.ctx.suspend();
+  }
+
+  /**
+   * Whether the live graph has to be torn down and rebuilt before sound can
+   * continue. A closed context, a Safari `interrupted` state that will not
+   * resume cleanly, or a sample-rate change under a live context (headphones
+   * unplugged on some platforms) all qualify.
+   */
+  needsRebuild() {
+    if (this._providedContext) return false;
+    if (!this.ctx || this.ctx.state === 'closed') return true;
+    if (this._sampleRate != null && this.ctx.sampleRate !== this._sampleRate) return true;
+    return false;
+  }
+
+  /**
+   * Tear down the current graph and build a fresh one. Voices owned by the
+   * old context are dropped without release — their nodes are already dead.
+   * Used by the lifecycle layer after an interrupt that closed the context
+   * or changed the hardware sample rate.
+   */
+  async rebuild() {
+    if (this._providedContext) return this.ctx;
+    this._stopKeepAlive();
+    this.voices.clear();
+    const prev = this.ctx;
+    if (prev && prev.state !== 'closed') {
+      try { await prev.close(); } catch { /* already shutting down */ }
+    }
+    this.ctx = null;
+    this.ready = false;
+    this.analyser = null;
+    this.master = null;
+    this.mixBus = null;
+    this.dryBus = null;
+    this.reverbSend = null;
+    this.reverbReturn = null;
+    this.delaySend = null;
+    this.delayReturn = null;
+    this.delayTimes = null;
+    this.stages = null;
+    this._build();
+    await this.start();
+    return this.ctx;
+  }
+
+  /**
+   * Silent looping buffer so the audio route stays warm after the first
+   * gesture. Cheap, and the fix for the cold-start stutter that otherwise
+   * lands on the first real note in a WebView.
+   */
+  ensureKeepAlive() {
+    if (!this.ctx || this._providedContext || this._keepAlive) return;
+    if (typeof this.ctx.createBuffer !== 'function') return;
+    const buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(gain);
+    gain.connect(this.ctx.destination);
+    try {
+      src.start();
+    } catch {
+      return;
+    }
+    this._keepAlive = { src, gain };
+  }
+
+  _stopKeepAlive() {
+    if (!this._keepAlive) return;
+    try { this._keepAlive.src.stop(); } catch { /* already stopped */ }
+    try { this._keepAlive.src.disconnect(); } catch { /* */ }
+    try { this._keepAlive.gain.disconnect(); } catch { /* */ }
+    this._keepAlive = null;
+  }
+
   get now() {
     return this.ctx ? this.ctx.currentTime : 0;
+  }
+
+  get sampleRate() {
+    return this.ctx ? this.ctx.sampleRate : this._sampleRate;
   }
 
   _build(provided = null) {
@@ -250,6 +343,7 @@ export class AudioEngine {
       latencyHint: 'interactive',
     });
     this.ctx = ctx;
+    this._sampleRate = ctx.sampleRate;
 
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
