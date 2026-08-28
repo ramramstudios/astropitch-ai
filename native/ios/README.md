@@ -59,7 +59,7 @@ human must confirm the ~30 s death on a real device before the first upload.
 
 - `AppDelegate.swift` — activates `AVAudioSession` `.playback` before the
   WebView loads, so the route is warm and the first note does not stutter
-- `WebViewController.swift` — WKWebView, interruption bridge, haptics
+- `WebViewController.swift` — WKWebView, interruption bridge, haptics, share sheet
 - `OtaUpdater.swift` — versioned web-bundle download / verify / swap / rollback
 - `Info.plist`, `PrivacyInfo.xcprivacy`, `Assets.xcassets`
 
@@ -77,6 +77,7 @@ JS → native, via `webkit.messageHandlers.astropitch.postMessage(…)`:
 { playing: boolean }
 { ota: 'apply', manifest } | { ota: 'rollback' }
 { haptic: 'impact' | 'selection' }
+{ share: { type, filename, base64 } }
 ```
 
 No AVFoundation or filesystem APIs are exposed to the page.

@@ -21,6 +21,7 @@ const SHELL_FILES = [
   'src/ui/app.js',
   'src/ui/wheel.js',
   'src/ui/starfield.js',
+  'src/ui/share.js',
   'src/audio/engine.js',
   'src/audio/palettes.js',
   'src/audio/performer.js',

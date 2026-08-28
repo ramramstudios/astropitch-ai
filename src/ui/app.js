@@ -13,6 +13,7 @@ import { AudioLifecycle } from '../audio/lifecycle.js';
 import { attachNativeBridge, createHapticDrag } from '../audio/native-bridge.js';
 import { startOtaCheck } from '../ota/client.js';
 import { Wheel } from './wheel.js';
+import { shareWheel } from './share.js';
 import { Starfield } from './starfield.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -347,6 +348,7 @@ function boot() {
   wireTransportVisibility();
   wireLayoutMode();
   wireFullscreen();
+  wireShare();
   wireKeyboard();
   wireAudioLifecycle();
   // Phase 5: native shells only — PWA keeps the service worker as sole owner.
@@ -1963,6 +1965,46 @@ function wireFullscreen() {
     if (!active) return;
     if (e.target.closest('.wheel-holder')) return;
     apply(false);
+  });
+}
+
+/**
+ * Saving the wheel as an image is a capability the page does not have on its
+ * own — in the native shell it reaches the system share sheet, and in a browser
+ * it falls back to Web Share or a download.
+ */
+function wireShare() {
+  const btn = $('#shareBtn');
+  if (!btn) return;
+
+  let busy = false;
+  btn.addEventListener('click', async () => {
+    // Rasterising a few hundred SVG nodes is not instant on a phone, and a
+    // second tap mid-export would serialise a wheel that is already being
+    // walked.
+    if (busy || !wheel?.svg) return;
+    busy = true;
+    const restore = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparing…';
+    try {
+      // Composite onto the page's own background, or a dark-theme wheel
+      // arrives as invisible strokes on whatever the recipient's app is using.
+      const background = getComputedStyle(document.body).backgroundColor;
+      const how = await shareWheel(wheel.svg, {
+        label: $('#chartLabel')?.textContent ?? '',
+        background,
+      });
+      btn.textContent = how ? 'Shared' : 'Could not share';
+    } catch {
+      btn.textContent = 'Could not share';
+    } finally {
+      setTimeout(() => {
+        btn.textContent = restore;
+        btn.disabled = false;
+        busy = false;
+      }, 1400);
+    }
   });
 }
 

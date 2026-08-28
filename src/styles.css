@@ -156,6 +156,10 @@ select:focus-visible,
   cursor: pointer;
 }
 
+/* Export runs for a moment on a phone and the label says so; dim it while it
+   does, so a second tap reads as unavailable rather than unresponsive. */
+.chart-help:disabled { opacity: 0.5; cursor: default; }
+
 /* At 11px tall this is well under a comfortable tap target; padding grows
    the hit area around the same small link-styled text rather than enlarging
    the text itself. */

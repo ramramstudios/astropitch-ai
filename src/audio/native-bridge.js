@@ -23,6 +23,7 @@
  *   { ota: 'apply', manifest: object }
  *   { ota: 'rollback' }
  *   { haptic: 'impact' | 'selection' }
+ *   { share: { type: string, filename: string, base64: string } }
  *
  * See research/audio-implementation-plan.md Phases 4–5.
  */
@@ -209,6 +210,27 @@ export function createHapticDrag({
       last = null;
     },
   };
+}
+
+/**
+ * Hand the shell a file to put in the system share sheet. The page cannot
+ * write to Files or Photos itself, which is the whole point: this is one of
+ * the few things the web app genuinely cannot do.
+ *
+ * `base64` is the raw payload with no data-URL prefix. Returns false — without
+ * posting — if the payload is not the documented shape, so a malformed export
+ * fails here rather than in the Swift decoder.
+ */
+export function notifyNativeShare(share, win = typeof window !== 'undefined' ? window : null) {
+  if (!share || typeof share !== 'object') return false;
+  const { type, filename, base64 } = share;
+  if (typeof type !== 'string' || !type) return false;
+  if (typeof filename !== 'string' || !filename) return false;
+  if (typeof base64 !== 'string' || !base64) return false;
+  // The filename becomes a path component on the native side. Keeping it a
+  // bare name here means the Swift side never has to reason about traversal.
+  if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) return false;
+  return postToNative({ share: { type, filename, base64 } }, win);
 }
 
 /**

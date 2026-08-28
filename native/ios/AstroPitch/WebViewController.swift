@@ -136,6 +136,11 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
       return
     }
 
+    if let share = dict["share"] as? [String: Any] {
+      presentShareSheet(share)
+      return
+    }
+
     // Playing-state ack; reserved for future session work.
   }
 
@@ -154,6 +159,47 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
     default:
       break
     }
+  }
+
+  /// Write the page's exported chart to a temp file and offer it to the system
+  /// share sheet. Saving to Photos, Files, or Messages is one of the few things
+  /// the web app genuinely cannot do for itself.
+  private func presentShareSheet(_ share: [String: Any]) {
+    guard
+      let filename = share["filename"] as? String,
+      let base64 = share["base64"] as? String,
+      let data = Data(base64Encoded: base64)
+    else { return }
+
+    // The page already refuses to send a path, but this side owns the
+    // filesystem and should not take its word for it.
+    let safeName = (filename as NSString).lastPathComponent
+    guard !safeName.isEmpty, safeName != ".", safeName != ".." else { return }
+
+    // A fresh directory per share, so two exports of the same chart cannot
+    // collide and a stale file is never what gets sent.
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("share/\(UUID().uuidString)", isDirectory: true)
+    let url = dir.appendingPathComponent(safeName)
+    do {
+      try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      try data.write(to: url, options: .atomic)
+    } catch {
+      NSLog("AstroPitch: share write failed: \(error.localizedDescription)")
+      return
+    }
+
+    let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    // iPhone-only, so this is only ever a sheet — but a nil popover source on
+    // an iPad-sized presentation is a crash, and the anchor costs one line.
+    sheet.popoverPresentationController?.sourceView = view
+    sheet.popoverPresentationController?.sourceRect = CGRect(
+      x: view.bounds.midX, y: view.bounds.maxY, width: 0, height: 0
+    )
+    sheet.completionWithItemsHandler = { _, _, _, _ in
+      try? FileManager.default.removeItem(at: dir)
+    }
+    present(sheet, animated: true)
   }
 
   // MARK: - WKNavigationDelegate

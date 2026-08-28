@@ -217,9 +217,42 @@ console.log('--- the Swift shell answers the messages the page sends ---');
   ok('no MediaPlayer import', !/import MediaPlayer/.test(wvc));
   ok('no Now Playing info centre', !/MPNowPlayingInfoCenter|MPRemoteCommandCenter/.test(wvc));
 
+  // Sharing a chart to Messages, Photos or Files is a capability the page
+  // cannot have on its own — the 4.2 case, not decoration.
+  ok('the handler reads the share key', /dict\["share"\] as\? \[String: Any\]/.test(wvc));
+  ok('a share is presented as a UIActivityViewController',
+    /UIActivityViewController/.test(wvc));
+  // The page validates the filename too, but this side owns the filesystem
+  // and should not take its word for it.
+  ok('the filename is reduced to a bare component',
+    /lastPathComponent/.test(wvc) && /safeName != "\.\."/.test(wvc));
+  ok('the temp file is cleaned up after the sheet closes',
+    /completionWithItemsHandler/.test(wvc) && /removeItem\(at: dir\)/.test(wvc));
+  ok('a popover anchor is set so a regular presentation cannot crash',
+    /popoverPresentationController\?\.sourceView/.test(wvc));
+
   // OTA bundles are re-downloadable content.
   ok('the OTA directory is excluded from backup',
     /isExcludedFromBackup = true/.test(read(...IOS, 'OtaUpdater.swift')));
+}
+
+console.log('--- the offline shell ships every module it imports ---');
+{
+  // A module missing from SHELL_FILES is not a build error — it is an app that
+  // works until the first time someone opens it offline.
+  const sw = read('sw.js');
+  const listed = new Set([...sw.matchAll(/'((?:src|\.)[^']*)'/g)].map((m) => m[1]));
+  const imported = new Set();
+  for (const file of ['src/ui/app.js', 'src/ui/wheel.js', 'src/ui/share.js']) {
+    for (const m of read(file).matchAll(/from '(\.[^']+)'/g)) {
+      const rel = m[1].replace(/^\.\.\//, 'src/').replace(/^\.\//, `${file.replace(/\/[^/]+$/, '')}/`);
+      imported.add(rel.replace('src/src/', 'src/'));
+    }
+  }
+  const missing = [...imported].filter((dep) => !listed.has(dep));
+  ok('every module the app imports is in SHELL_FILES',
+    missing.length === 0, missing.join(', '));
+  ok('the walk found something to check', imported.size > 5, String(imported.size));
 }
 
 console.log('--- OTA stays off for the first review ---');

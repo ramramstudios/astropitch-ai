@@ -24,6 +24,7 @@ import {
   attachNativeBridge,
   notifyNativePlaying,
   notifyNativeHaptic,
+  notifyNativeShare,
   hapticTicksForDrag,
   createHapticDrag,
   HAPTIC_KINDS,
@@ -32,6 +33,14 @@ import {
   NATIVE_EVENT_TYPES,
 } from '../src/audio/native-bridge.js';
 import { MODES, modeButtonId } from '../src/audio/modes.js';
+import {
+  shareFilename,
+  exportDimensions,
+  base64FromBuffer,
+  inlineComputedStyles,
+  BAKED_PROPERTIES,
+  EXPORT_SCALE,
+} from '../src/ui/share.js';
 
 let fails = 0;
 const ok = (label, cond, detail = '') => {
@@ -528,6 +537,156 @@ console.log('--- the designer drag actually asks for the haptics ---');
     ok(`${event} releases it`,
       new RegExp(`'${event}'[\\s\\S]{0,160}haptics\\.end`).test(appSrc));
   }
+}
+
+console.log('--- chart export: a filename safe to hand to native code ---');
+{
+  // The label carries a birth place, so it is user-derived text on its way to
+  // becoming a filename and a value the Swift side writes to disk.
+  ok('a plain label becomes a slug',
+    shareFilename('12 Mar 1988 · London') === 'astropitch-12-mar-1988-london.png',
+    shareFilename('12 Mar 1988 · London'));
+  ok('an empty label still names the file',
+    shareFilename('') === 'astropitch-chart.png', shareFilename(''));
+  ok('nullish is handled', shareFilename(null) === 'astropitch-chart.png');
+  ok('the extension is settable', shareFilename('', 'svg') === 'astropitch-chart.svg');
+
+  // Nothing that could escape a directory may survive into the name. The Swift
+  // side takes lastPathComponent as well, but this is where it should die.
+  for (const nasty of ['../../etc/passwd', 'a/b/c', 'x\\y', '....//..//']) {
+    const out = shareFilename(nasty);
+    ok(`no separators survive ${JSON.stringify(nasty)}`,
+      !out.includes('/') && !out.includes('\\') && !out.includes('..'), out);
+  }
+  ok('a very long label is truncated', shareFilename('x'.repeat(500)).length < 90);
+  ok('the slug never ends in a dash',
+    !shareFilename('Trailing !!! ').replace('.png', '').endsWith('-'),
+    shareFilename('Trailing !!! '));
+}
+
+console.log('--- chart export: raster size follows the viewBox ---');
+{
+  const at = (svg) => exportDimensions(svg);
+  const padded = at('<svg viewBox="-46 -46 1092 1092"></svg>');
+  ok('the padded wheel viewBox is honoured',
+    padded.width === 1092 * EXPORT_SCALE && padded.height === 1092 * EXPORT_SCALE,
+    `${padded.width}x${padded.height}`);
+  ok('exported above 1x so it survives being opened full-screen', EXPORT_SCALE >= 2);
+
+  const oblong = at('<svg viewBox="0 0 800 400"></svg>');
+  ok('a non-square viewBox is not squared off',
+    oblong.width === 1600 && oblong.height === 800, `${oblong.width}x${oblong.height}`);
+
+  // A missing or degenerate viewBox must not produce a zero-sized canvas,
+  // which throws rather than rendering.
+  for (const bad of ['<svg></svg>', '<svg viewBox="0 0 0 0"></svg>', '<svg viewBox="junk"></svg>', '']) {
+    const d = at(bad);
+    ok(`a usable size for ${JSON.stringify(bad.slice(0, 24))}`,
+      d.width > 0 && d.height > 0, `${d.width}x${d.height}`);
+  }
+}
+
+console.log('--- chart export: base64 for the native payload ---');
+{
+  const btoaShim = { btoa: (bin) => Buffer.from(bin, 'binary').toString('base64') };
+  const round = (bytes) => Buffer.from(
+    base64FromBuffer(new Uint8Array(bytes).buffer, btoaShim), 'base64');
+
+  ok('round-trips bytes', round([0, 1, 2, 250, 255]).equals(Buffer.from([0, 1, 2, 250, 255])));
+  ok('empty is empty', base64FromBuffer(new Uint8Array(0).buffer, btoaShim) === '');
+  ok('no data-URL prefix', !base64FromBuffer(new Uint8Array([1]).buffer, btoaShim).startsWith('data:'));
+
+  // A 2x wheel PNG runs to megabytes. Spreading that into String.fromCharCode
+  // in one call blows the argument limit, so the chunking is the point.
+  const big = new Uint8Array(200_000).map((_, i) => i % 256);
+  ok('a payload past the argument limit still encodes',
+    round(big).equals(Buffer.from(big)), String(round(big).length));
+
+  // Every browser has a global btoa, so an absent window is not a reason to
+  // give up — only an environment with no encoder at all is.
+  ok('falls back to the global encoder',
+    base64FromBuffer(new Uint8Array([1]).buffer, {}) === Buffer.from([1]).toString('base64'));
+}
+
+console.log('--- chart export: computed styles are baked onto the clone ---');
+{
+  // The wheel is styled entirely from styles.css, so a serialised copy with no
+  // styles renders as nothing anywhere but this page. A tiny fake tree stands
+  // in for the DOM: only the parallel walk and the property set are being
+  // checked, not the browser's cascade.
+  const node = (cls, kids = []) => ({
+    cls,
+    kids,
+    attrs: {},
+    setAttribute(k, v) { this.attrs[k] = v; },
+    querySelectorAll() { return this.kids.flatMap((k) => [k, ...k.querySelectorAll()]); },
+  });
+  const rim = node('rim');
+  const glyph = node('glyph');
+  const svg = node('svg', [rim, glyph]);
+  const clone = node('svg', [node('rim'), node('glyph')]);
+
+  const styles = {
+    svg: { fill: 'none' },
+    rim: { stroke: '#bdbdb9', 'stroke-width': '2px' },
+    glyph: { fill: '#f4f4f2', 'font-size': '18px', 'font-family': 'serif' },
+  };
+  const getComputed = (n) => ({ getPropertyValue: (p) => styles[n.cls]?.[p] ?? '' });
+
+  inlineComputedStyles(svg, clone, getComputed);
+  ok('the root is styled from the root', clone.attrs.style === 'fill:none', clone.attrs.style);
+  ok('each clone gets the style of the node it came from',
+    clone.kids[0].attrs.style === 'stroke:#bdbdb9;stroke-width:2px', clone.kids[0].attrs.style);
+  ok('text keeps the font it was drawn with',
+    clone.kids[1].attrs.style.includes('font-family:serif'), clone.kids[1].attrs.style);
+
+  // fill:none on an unfilled circle is meaningful — dropping it lets the shape
+  // inherit black and swallow the wheel.
+  ok('an explicit none is kept, not dropped', clone.attrs.style.includes('none'));
+
+  ok('colour, stroke and text properties are all baked',
+    ['fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'opacity', 'font-size', 'font-family']
+      .every((p) => BAKED_PROPERTIES.includes(p)));
+  // Copying the whole computed style is several hundred properties per node
+  // across a few hundred nodes, and most of it is layout a static SVG ignores.
+  ok('the baked set stays small', BAKED_PROPERTIES.length < 30, String(BAKED_PROPERTIES.length));
+}
+
+console.log('--- chart export: the native payload is validated before it is sent ---');
+{
+  const posted = [];
+  const win = { webkit: { messageHandlers: { astropitch: { postMessage: (m) => posted.push(m) } } } };
+  const good = { type: 'image/png', filename: 'astropitch-chart.png', base64: 'iVBORw0K' };
+
+  ok('a well-formed payload is sent', notifyNativeShare(good, win) === true);
+  ok('the payload is the documented shape',
+    JSON.stringify(posted[0]) === JSON.stringify({ share: good }), JSON.stringify(posted[0]));
+
+  const before = posted.length;
+  for (const [why, bad] of [
+    ['no type', { ...good, type: '' }],
+    ['no filename', { ...good, filename: '' }],
+    ['no bytes', { ...good, base64: '' }],
+    ['a non-string filename', { ...good, filename: 42 }],
+    ['a traversing filename', { ...good, filename: '../evil.png' }],
+    ['a path filename', { ...good, filename: 'a/b.png' }],
+    ['a backslash filename', { ...good, filename: 'a\\b.png' }],
+    ['nothing at all', null],
+  ]) {
+    ok(`refuses ${why}`, notifyNativeShare(bad, win) === false);
+  }
+  ok('nothing malformed was posted', posted.length === before, String(posted.length - before));
+  ok('no shell, no share', notifyNativeShare(good, {}) === false);
+}
+
+console.log('--- the wheel panel offers the share ---');
+{
+  const appSrc = readFileSync(join(__dirname, '..', 'src', 'ui', 'app.js'), 'utf8');
+  const htmlShare = readFileSync(join(__dirname, '..', 'index.html'), 'utf8');
+  ok('index.html has a share control', htmlShare.includes('id="shareBtn"'));
+  ok('app.js wires it', /wireShare\(\)/.test(appSrc) && appSrc.includes('shareWheel'));
+  ok('it exports the live wheel, not a re-render', appSrc.includes('shareWheel(wheel.svg'));
+  ok('it names the file from the chart label', appSrc.includes("$('#chartLabel')"));
 }
 
 console.log(`\n${fails === 0 ? 'All mobile-mode checks passed.' : `${fails} FAILURE(S).`}`);
