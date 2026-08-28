@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { nextPinchView, clampPanView, VIEW_MIN_SCALE, VIEW_MAX_SCALE } from '../src/ui/wheel.js';
 import { nextSheetState, nearestSheetState } from '../src/ui/app.js';
+import { originFromRect, farthestCorner } from '../src/ui/starfield.js';
 import { lifecycleStep, LIFECYCLE_STATES, AudioLifecycle } from '../src/audio/lifecycle.js';
 import {
   parseNativeEvent,
@@ -376,6 +377,35 @@ async function testNativeBridgeAttach() {
   ok('detach removes dispatch', fakeWin.__astropitchNative.dispatch == null);
 }
 await testNativeBridgeAttach();
+
+console.log('\n--- construction grid origin is the wheel rect, not a viewport fraction ---');
+{
+  const centre = originFromRect({ left: 100, top: 40, width: 200, height: 200 });
+  ok('origin is the rect centre (x)', close(centre.x, 200), `${centre.x}`);
+  ok('origin is the rect centre (y)', close(centre.y, 140), `${centre.y}`);
+  ok('radius is half the shorter side', close(centre.radius, 100), `${centre.radius}`);
+
+  const wide = originFromRect({ left: 0, top: 0, width: 400, height: 100 });
+  ok('radius uses the shorter side of a non-square rect', close(wide.radius, 50), `${wide.radius}`);
+
+  ok('a corner origin reaches the opposite corner',
+    close(farthestCorner(800, 600, 0, 0), Math.hypot(800, 600)));
+  ok('a centre origin reaches any corner',
+    close(farthestCorner(800, 600, 400, 300), Math.hypot(400, 300)));
+  ok('an origin outside the viewport still reaches the far corner',
+    farthestCorner(400, 300, -50, -50) > Math.hypot(400, 300),
+    `${farthestCorner(400, 300, -50, -50)} vs ${Math.hypot(400, 300)}`);
+
+  const starfieldSrc = readFileSync(join(__dirname, '../src/ui/starfield.js'), 'utf8');
+  const appSrc = readFileSync(join(__dirname, '../src/ui/app.js'), 'utf8');
+      ok('starfield.js no longer pins the origin to a viewport fraction',
+        !starfieldSrc.includes('w * 0.62') && !starfieldSrc.includes('h * 0.48')
+        && !starfieldSrc.includes('50vw') && !starfieldSrc.includes('50vh'));
+  ok('starfield.js reads the wheel from getBoundingClientRect',
+    starfieldSrc.includes('getBoundingClientRect()'));
+  ok('app.js hands the wheel svg to Starfield as the origin source',
+    /new Starfield\(\$\('#stars'\),\s*wheel\.svg\)/.test(appSrc));
+}
 
 console.log('\n--- native bridge: app.js and index.html stay wired ---');
 {

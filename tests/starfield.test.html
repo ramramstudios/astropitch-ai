@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Construction-grid origin tests</title>
+</head>
+<body>
+  <pre id="results"></pre>
+  <script type="module">
+    import { Starfield, originFromRect } from '../src/ui/starfield.js';
+
+    const results = document.querySelector('#results');
+    window.__testFailures = 0;
+
+    function ok(label, condition, detail = '') {
+      if (!condition) window.__testFailures++;
+      results.textContent += `${condition ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}\n`;
+    }
+
+    const close = (a, b, eps = 1.5) => Math.abs(a - b) < eps;
+    const frames = (win, n = 3) => new Promise((resolve) => {
+      const tick = (left) => {
+        if (left <= 0) resolve();
+        else win.requestAnimationFrame(() => tick(left - 1));
+      };
+      tick(n);
+    });
+    const settle = async (win) => {
+      await frames(win, 3);
+      await new Promise((r) => setTimeout(r, 50));
+      await frames(win, 2);
+    };
+
+    try {
+      const box = document.createElement('div');
+      box.className = 'wheel-holder';
+      box.style.cssText = 'position:fixed;left:120px;top:80px;width:200px;height:200px;';
+      document.body.append(box);
+      const canvas = document.createElement('canvas');
+      const grid = new Starfield(canvas, box);
+      grid.measure();
+
+      ok('fixture origin is the box centre',
+        close(grid.origin.x, 220, 0.6) && close(grid.origin.y, 180, 0.6)
+        && close(grid.origin.radius, 100, 0.6),
+        JSON.stringify(grid.origin));
+
+      box.style.left = '480px';
+      box.style.top = '40px';
+      grid.measure();
+      ok('measure() follows a moved box without waiting for observers',
+        close(grid.origin.x, 580, 0.6) && close(grid.origin.y, 140, 0.6),
+        JSON.stringify(grid.origin));
+
+      box.style.transform = 'translate(30px, 16px)';
+      grid.measure();
+      ok('measure() includes a CSS transform (pinch/pan equivalent)',
+        close(grid.origin.x, 610, 0.6) && close(grid.origin.y, 156, 0.6),
+        JSON.stringify(grid.origin));
+
+      box.style.transform = '';
+      box.style.width = '320px';
+      box.style.height = '320px';
+      await settle(window);
+      grid.measure();
+      ok('a resized box updates radius from the live rect',
+        close(grid.origin.radius, 160, 0.6), `${grid.origin.radius}`);
+
+      canvas.remove();
+      box.remove();
+    } catch (error) {
+      window.__testFailures++;
+      results.textContent += `FAIL  fixture error — ${error.stack ?? error}\n`;
+    }
+
+    const frame = document.createElement('iframe');
+    try {
+      localStorage.clear();
+      frame.setAttribute('src', '../index.html');
+      frame.width = 1280;
+      frame.height = 800;
+      frame.style.cssText = 'position:absolute;left:0;top:0;width:1280px;height:800px;border:0;';
+      document.body.append(frame);
+      await new Promise((resolve, reject) => {
+        frame.addEventListener('load', resolve, { once: true });
+        frame.addEventListener('error', () => reject(new Error('index.html did not load')), { once: true });
+      });
+
+      const win = frame.contentWindow;
+      const doc = frame.contentDocument;
+      const $ = (selector) => doc.querySelector(selector);
+
+      const wheelCentre = () => {
+        const svg = $('.wheel-svg');
+        return originFromRect(svg.getBoundingClientRect());
+      };
+      const gridOrigin = () => $('#stars').wheelOrigin;
+      const assertAligned = async (label) => {
+        await settle(win);
+        const wheel = wheelCentre();
+        const origin = gridOrigin();
+        ok(`${label}: the grid has a live origin`,
+          origin && Number.isFinite(origin.x) && Number.isFinite(origin.y) && origin.radius > 0);
+        ok(`${label}: lines converge on the wheel centre`,
+          origin && close(origin.x, wheel.x) && close(origin.y, wheel.y),
+          origin
+            ? `wheel (${wheel.x.toFixed(1)}, ${wheel.y.toFixed(1)}) vs origin (${origin.x.toFixed(1)}, ${origin.y.toFixed(1)})`
+            : 'no origin');
+        return wheel;
+      };
+
+      await settle(win);
+      const rest = await assertAligned('initial desktop layout');
+
+      $('#sideToggle').click();
+      const collapsed = await assertAligned('after hiding the controls panel');
+      ok('hiding the controls actually moves the wheel',
+        !close(collapsed.x, rest.x, 4) || !close(collapsed.y, rest.y, 4) || !close(collapsed.radius, rest.radius, 4),
+        `from (${rest.x.toFixed(1)}, ${rest.y.toFixed(1)}) r${rest.radius.toFixed(1)} to (${collapsed.x.toFixed(1)}, ${collapsed.y.toFixed(1)}) r${collapsed.radius.toFixed(1)}`);
+
+      $('#sideToggle').click();
+      await assertAligned('after showing the controls panel again');
+
+      $('#transportHide').click();
+      await assertAligned('after hiding the player');
+      $('#transportShow').click();
+      await assertAligned('after showing the player again');
+
+      $('#fullscreenBtn').click();
+      const full = await assertAligned('after entering full-screen');
+      ok('full-screen moves or resizes the wheel',
+        !close(full.x, rest.x, 4) || !close(full.y, rest.y, 4) || !close(full.radius, rest.radius, 4),
+        `full-screen (${full.x.toFixed(1)}, ${full.y.toFixed(1)}) r${full.radius.toFixed(1)}`);
+      $('#stage').click();
+      await assertAligned('after leaving full-screen via the background');
+
+      $('#layoutMode').click();
+      const mobile = await assertAligned('after switching to the mobile layout');
+      ok('the mobile layout repositions the wheel',
+        !close(mobile.x, rest.x, 4) || !close(mobile.y, rest.y, 4),
+        `mobile (${mobile.x.toFixed(1)}, ${mobile.y.toFixed(1)})`);
+
+      $('#sheetHandle').click();
+      await assertAligned('after cycling the mobile sheet');
+      $('#sheetHandle').click();
+      await assertAligned('after cycling the mobile sheet again');
+
+      $('#layoutMode').click();
+      await assertAligned('after returning to the desktop layout');
+
+      $('#aboutBtn').click();
+      await assertAligned('with the How it works dialog open');
+      $('#aboutClose').click();
+      await assertAligned('after closing How it works');
+
+      $('#settingsBtn').click();
+      await assertAligned('with Settings open');
+      $('#settingsClose').click();
+      await assertAligned('after closing Settings');
+    } catch (error) {
+      window.__testFailures++;
+      results.textContent += `FAIL  unexpected error — ${error.stack ?? error}\n`;
+    } finally {
+      frame.remove();
+      window.__testDone = true;
+    }
+  </script>
+</body>
+</html>

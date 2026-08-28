@@ -311,7 +311,10 @@ function playLastTransportMode() {
 
 function boot() {
   wheel = new Wheel($('#wheelHolder'));
-  starfield = new Starfield($('#stars'));
+  // The construction grid is anchored to the SVG, not the viewport: the
+  // wheel's getBoundingClientRect is the single source for that origin, and
+  // it already composites the mobile pinch/pan transform on .wheel-viewport.
+  starfield = new Starfield($('#stars'), wheel.svg);
 
   buildPlaceOptions('#placePreset', { lat: '#lat', lon: '#lon', utc: '#utcOffset' }, 'custom');
   buildPlaceOptions('#bPlacePreset', { lat: '#bLat', lon: '#bLon', utc: '#bUtcOffset' }, 'custom');
@@ -355,9 +358,14 @@ function boot() {
   // transport bar or the controls panel both re-cap its max-width. The scope
   // canvas is sized from that box, so anything that moves it has to re-measure
   // or the trace keeps its old size, anchored to the holder's top-left corner
-  // instead of the wheel's centre.
+  // instead of the wheel's centre. The construction grid reads the same box
+  // (via the SVG's getBoundingClientRect) so its vanishing point stays on
+  // the wheel rather than at a hardcoded viewport fraction.
   if (typeof ResizeObserver === 'function') {
-    new ResizeObserver(() => wheel.resizeScope()).observe($('#wheelHolder'));
+    new ResizeObserver(() => {
+      wheel.resizeScope();
+      starfield.measure();
+    }).observe($('#wheelHolder'));
   }
   onResize();
 
