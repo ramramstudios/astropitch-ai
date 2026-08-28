@@ -77,7 +77,7 @@ JS → native, via `webkit.messageHandlers.astropitch.postMessage(…)`:
 { playing: boolean }
 { ota: 'apply', manifest } | { ota: 'rollback' }
 { haptic: 'impact' | 'selection' }
-{ share: { type, filename, base64 } }
+{ share: { type, filename, base64 } }   // chart PNG, or a bounced WAV
 ```
 
 No AVFoundation or filesystem APIs are exposed to the page.
