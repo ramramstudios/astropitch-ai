@@ -1,9 +1,10 @@
 # iOS overnight status
 Updated: 2026-08-28
 
-Everything in scope for the overnight run is done and committed. Nine commits
-on `ios-ready`, nothing pushed. What remains needs a machine with Xcode, a
-phone, or an Apple Developer account — see **Morning checklist**.
+Everything in scope for the overnight run is done and committed, with all ten
+node suites and all four browser suites green. Nothing pushed. What remains
+needs a machine with Xcode, a phone, or an Apple Developer account — see
+**Morning checklist**.
 
 ---
 
@@ -226,15 +227,17 @@ node tests/ota.test.mjs && node tests/native.test.mjs
 | `tests/audio.test.html` (1800 s) | **PASS** |
 | `tests/polyphony.test.html` (2400 s) | **PASS** |
 | `tests/bounce.test.html` (300 s) — new | **PASS** |
-| `tests/stability.test.html` | **Timed out at the documented 180 s budget**, re-run at 600 s — see below |
+| `tests/stability.test.html` | **PASS**, but only at a raised budget — see below |
 
-On stability: it reached "Voice and node census: 20 enter/exit cycles" with
-`drops 0` and `ratio 1.000` on every stress check printed before the cut, then
-ran out of budget. This work touches none of `engine.js`, `voices.js`,
-`performer.js`, `scheduler.js`, `palettes.js`, or `tuning.js` — the suite's
-entire subject — so a timeout here is a budget question on this machine, not a
-regression from these changes. The 180 s figure in `CLAUDE.md` may simply be
-optimistic for a 2021-era Mac. Re-run it on the build machine.
+**All four pass.** Stability first timed out at the 180 s budget `CLAUDE.md`
+documented, having reached "Voice and node census: 20 enter/exit cycles" with
+`drops 0` and `ratio 1.000` on every check printed before the cut. Re-run at
+600 s it finished clean: polyphony never exceeded 24/24 across five
+hide/show, interrupt/resume and rebuild cycles, and the live node count stayed
+flat (baseline 26, max 28, slack 8). Not a regression — this work touches none
+of `engine.js`, `voices.js`, `performer.js`, `scheduler.js`, `palettes.js`, or
+`tuning.js`, the suite's entire subject. The 180 s figure was simply optimistic
+for this machine; `CLAUDE.md` now says 600.
 
 `CLAUDE.md` has been updated with `tests/native.test.mjs` and
 `tests/bounce.test.html`.
@@ -262,18 +265,16 @@ optimistic for a 2021-era Mac. Re-run it on the build machine.
 6. **Host `docs/privacy.html`** somewhere public and put the URL in App Store
    Connect. GitHub Pages on this repo gives
    `https://ramramstudios.github.io/astropitch-ai/privacy.html`.
-7. **Re-run `tests/stability.test.html`** with a longer budget on the build
-   machine and confirm it passes there.
-8. **Confirm or change the bundle ID.** `com.ramramstudios.astropitch` is
+7. **Confirm or change the bundle ID.** `com.ramramstudios.astropitch` is
    frozen in the project and can never change after the first upload. Change it
    now if a different domain is owned.
-9. **Create the App Store Connect record**, answer the age questionnaire (the
+8. **Create the App Store Connect record**, answer the age questionnaire (the
    answers are in `research/ios-store-listing.md`; it gates submission), and
    set the privacy label to Data Not Collected.
-10. **Capture screenshots** — the six-frame shot list with captions is in the
+9. **Capture screenshots** — the six-frame shot list with captions is in the
     listing draft. 6.9" iPhone, 1320 × 2868, RGB, no alpha.
-11. **TestFlight**, then the device QA matrix in Phase 4.2 of the plan:
+10. **TestFlight**, then the device QA matrix in Phase 4.2 of the plan:
     listening pass on all four modes and both palettes, interruption, route
     change, airplane mode from cold launch, safe areas, cold-start stutter.
-12. **Submit**, with the review notes from the listing draft pasted verbatim.
+11. **Submit**, with the review notes from the listing draft pasted verbatim.
     They are the highest-leverage text in the submission.

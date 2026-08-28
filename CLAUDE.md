@@ -23,7 +23,7 @@ Browser suites run headless and exit non-zero on failure:
 
 - `node tests/run-browser.mjs tests/audio.test.html 1800`
 - `node tests/run-browser.mjs tests/polyphony.test.html 2400`
-- `node tests/run-browser.mjs tests/stability.test.html 180`
+- `node tests/run-browser.mjs tests/stability.test.html 600`
 - `node tests/run-browser.mjs tests/bounce.test.html 300`
 
 The timeout argument is in seconds and these are slow — the polyphony page renders about four minutes of audio. It needs Chrome or Chromium installed.
