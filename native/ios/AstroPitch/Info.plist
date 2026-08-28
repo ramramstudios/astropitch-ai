@@ -16,32 +16,39 @@
 	<string>AstroPitch</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- Must equal bundle.json's bundleVersion and sw.js's CACHE_NAME suffix;
+	     tests/native.test.mjs holds the three together. -->
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<!-- The only cryptography here is CryptoKit SHA-256 (a hash, not
+	     encryption) in OtaUpdater, plus OS-provided HTTPS. Both are exempt, so
+	     answering once here avoids the "Missing Compliance" hold on every
+	     upload. Revisit if a third-party SDK ever links in. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>UILaunchStoryboardName</key>
-	<string></string>
-	<key>UIRequiredDeviceCapabilities</key>
-	<array>
-		<string>armv7</string>
-	</array>
+	<!-- The modern dictionary form. An empty UILaunchStoryboardName is not "no
+	     launch screen" — UIKit falls back to a legacy compatibility mode that
+	     computes the wrong screen size and letterboxes the app, which would
+	     undo the viewport-fit=cover / safe-area work in styles.css.
+	     LaunchBackground matches manifest.json's background_color and
+	     theme_color so the launch screen hands off without a flash. -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<!-- Background audio: expect the ~27 s WKWebView freeze anyway;
-	     Phase 2 rebuild-on-resume is the recovery path. -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
-	<key>UIStatusBarStyle</key>
-	<string>UIStatusBarStyleLightContent</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 </dict>

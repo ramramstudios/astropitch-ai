@@ -1,0 +1,303 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CAC5FD4EE59C72144895F31C /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B8E9E401D5972A317B12AB4 /* AppDelegate.swift */; };
+		EEF9894012ED832EEAC9B73B /* WebViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23174D523B0F95585DDB1023 /* WebViewController.swift */; };
+		92D34308C114C558F3CFC87D /* OtaUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38206CEB7F4C3661B22ED6B8 /* OtaUpdater.swift */; };
+		399D22F735552CA2ECE22C55 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 12515C14AE2551614040219A /* Assets.xcassets */; };
+		02DCB0C8EF79B1DB7EC3F941 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0B95EC68B307BC182C3E9795 /* PrivacyInfo.xcprivacy */; };
+		6EAB8104A7E2D585E09BD6B8 /* www in Resources */ = {isa = PBXBuildFile; fileRef = 5B84133571F3A2627968CFC6 /* www */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		8B349A25402166EF1953DE73 /* AstroPitch.app */ = {isa = PBXFileReference; explicitFileType = "wrapper.application"; includeInIndex = 0; path = AstroPitch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8B8E9E401D5972A317B12AB4 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AstroPitch/AppDelegate.swift; sourceTree = "<group>"; };
+		23174D523B0F95585DDB1023 /* WebViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WebViewController.swift; path = AstroPitch/WebViewController.swift; sourceTree = "<group>"; };
+		38206CEB7F4C3661B22ED6B8 /* OtaUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OtaUpdater.swift; path = AstroPitch/OtaUpdater.swift; sourceTree = "<group>"; };
+		12515C14AE2551614040219A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AstroPitch/Assets.xcassets; sourceTree = "<group>"; };
+		0B95EC68B307BC182C3E9795 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = AstroPitch/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		5B84133571F3A2627968CFC6 /* www */ = {isa = PBXFileReference; lastKnownFileType = folder; name = www; path = AstroPitch/www; sourceTree = "<group>"; };
+		5308515A19E5ADFED6A90AA7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = AstroPitch/Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FBD6A4686A2FA6F2BF9909A9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		ECC8267753432C32BB96CAC7 = {
+			isa = PBXGroup;
+			children = (
+				17247D9607A20D816AD10EFB /* AstroPitch */,
+				EB5E0211C63D0FC4713D4D4E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EB5E0211C63D0FC4713D4D4E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8B349A25402166EF1953DE73 /* AstroPitch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		17247D9607A20D816AD10EFB /* AstroPitch */ = {
+			isa = PBXGroup;
+			children = (
+				8B8E9E401D5972A317B12AB4 /* AppDelegate.swift */,
+				23174D523B0F95585DDB1023 /* WebViewController.swift */,
+				38206CEB7F4C3661B22ED6B8 /* OtaUpdater.swift */,
+				12515C14AE2551614040219A /* Assets.xcassets */,
+				0B95EC68B307BC182C3E9795 /* PrivacyInfo.xcprivacy */,
+				5B84133571F3A2627968CFC6 /* www */,
+				5308515A19E5ADFED6A90AA7 /* Info.plist */,
+			);
+			name = AstroPitch;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1AC095319BC4232DD18542A2 /* AstroPitch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2AFA946BACADC33389FD63BC /* Build configuration list for PBXNativeTarget "AstroPitch" */;
+			buildPhases = (
+				7D9675E5FFB41963598FCAC8 /* Sources */,
+				FBD6A4686A2FA6F2BF9909A9 /* Frameworks */,
+				81298B43717DEE390F4D5FD1 /* Sync www */,
+				D5B9629A0C7CBF660C9DB7FA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AstroPitch;
+			productName = AstroPitch;
+			productReference = 8B349A25402166EF1953DE73 /* AstroPitch.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E719EE82FFED111E7411CBEA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					1AC095319BC4232DD18542A2 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = 9FF9089F9EADAB7003E50675 /* Build configuration list for PBXProject "AstroPitch" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = ECC8267753432C32BB96CAC7;
+			productRefGroup = EB5E0211C63D0FC4713D4D4E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1AC095319BC4232DD18542A2 /* AstroPitch */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D5B9629A0C7CBF660C9DB7FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				399D22F735552CA2ECE22C55 /* Assets.xcassets in Resources */,
+				02DCB0C8EF79B1DB7EC3F941 /* PrivacyInfo.xcprivacy in Resources */,
+				6EAB8104A7E2D585E09BD6B8 /* www in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		81298B43717DEE390F4D5FD1 /* Sync www */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Sync www";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/../sync-www.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7D9675E5FFB41963598FCAC8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAC5FD4EE59C72144895F31C /* AppDelegate.swift in Sources */,
+				EEF9894012ED832EEAC9B73B /* WebViewController.swift in Sources */,
+				92D34308C114C558F3CFC87D /* OtaUpdater.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		8B2D3C92DF8B2B5B9373498B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		F2613897E988D10FB0BE1FCB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		EE1DFD0CA2D960EF98CAEE49 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AstroPitch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ramramstudios.astropitch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		63BBA826D95B3AEC4F0EAECB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AstroPitch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ramramstudios.astropitch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		9FF9089F9EADAB7003E50675 /* Build configuration list for PBXProject "AstroPitch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B2D3C92DF8B2B5B9373498B /* Debug */,
+				F2613897E988D10FB0BE1FCB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2AFA946BACADC33389FD63BC /* Build configuration list for PBXNativeTarget "AstroPitch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE1DFD0CA2D960EF98CAEE49 /* Debug */,
+				63BBA826D95B3AEC4F0EAECB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E719EE82FFED111E7411CBEA /* Project object */;
+}

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Nothing is collected and nothing leaves the device. Charts live in
+	     localStorage; the page makes no network request. OtaUpdater touches
+	     FileManager.urls / createDirectory / fileExists, none of which are
+	     required-reason APIs (file timestamp and disk space are; these are
+	     not). Must stay consistent with the App Store Connect nutrition
+	     label, which is "Data Not Collected" throughout. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

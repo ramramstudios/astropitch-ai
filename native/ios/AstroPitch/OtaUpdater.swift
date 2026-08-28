@@ -6,10 +6,16 @@ import CryptoKit
 enum OtaUpdater {
   static let shellVersion = 1
 
+  /// Every path below is built from this, so excluding the directory here is
+  /// enough — downloaded bundles are re-downloadable content and Apple's Data
+  /// Storage Guidelines say that must not be backed up to iCloud.
   private static var root: URL {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    let dir = base.appendingPathComponent("ota", isDirectory: true)
+    var dir = base.appendingPathComponent("ota", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    try? dir.setResourceValues(values)
     return dir
   }
 
