@@ -8,12 +8,13 @@ import { TEMPERAMENTS, frequencyFor } from '../audio/tuning.js';
 import { PALETTES, PALETTE_IDS, DEFAULT_PALETTE } from '../audio/palettes.js';
 import { engine } from '../audio/engine.js';
 import { Performer } from '../audio/performer.js';
-import { MODES, DEFAULT_MODE_ID, modeButtonId } from '../audio/modes.js';
+import { MODES, DEFAULT_MODE_ID, modeButtonId, modeById } from '../audio/modes.js';
 import { AudioLifecycle } from '../audio/lifecycle.js';
 import { attachNativeBridge, createHapticDrag } from '../audio/native-bridge.js';
+import { BOUNCEABLE_MODES, isBounceable } from '../audio/bounce.js';
 import { startOtaCheck } from '../ota/client.js';
 import { Wheel } from './wheel.js';
-import { shareWheel } from './share.js';
+import { shareWheel, shareBounce } from './share.js';
 import { Starfield } from './starfield.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -349,6 +350,7 @@ function boot() {
   wireLayoutMode();
   wireFullscreen();
   wireShare();
+  wireBounce();
   wireKeyboard();
   wireAudioLifecycle();
   // Phase 5: native shells only — PWA keeps the service worker as sole owner.
@@ -2003,6 +2005,72 @@ function wireShare() {
         btn.textContent = restore;
         btn.disabled = false;
         busy = false;
+      }, 1400);
+    }
+  });
+}
+
+/**
+ * Render the current arrangement to a WAV and share it. An offline render of
+ * your own chart is unambiguously an app feature rather than a page one.
+ *
+ * Only Bloom and Scalar can be bounced: Drone and Melodic are open-ended loops
+ * with no end to render to (see src/audio/bounce.js). The button says which
+ * mode it will render rather than silently doing something else.
+ */
+function wireBounce() {
+  const btn = $('#bounceBtn');
+  if (!btn) return;
+
+  // The button follows whichever finite mode is current, and falls back to the
+  // last one used so it is never dead while Drone is playing.
+  const modeToBounce = () => {
+    const current = performer.mode ?? lastTransportMode;
+    return isBounceable(current) ? current : BOUNCEABLE_MODES[0];
+  };
+
+  const label = () => {
+    const mode = modeById(modeToBounce());
+    return `Bounce ${mode?.label ?? ''}`.trim();
+  };
+
+  const sync = () => {
+    if (btn.disabled) return;
+    btn.textContent = label();
+    btn.title = `Render ${modeById(modeToBounce())?.label ?? ''} to an audio file`;
+  };
+  sync();
+  performer.onEvent((event) => {
+    if (event.type === 'start' || event.type === 'stop' || event.type === 'end') sync();
+  });
+
+  let busy = false;
+  btn.addEventListener('click', async () => {
+    // A 90-second render is not instant, and a second one alongside it would
+    // build a whole parallel engine for no reason.
+    if (busy || !state.chart) return;
+    busy = true;
+    btn.disabled = true;
+    btn.textContent = 'Rendering…';
+    try {
+      const how = await shareBounce(state.chart, modeToBounce(), {
+        label: $('#chartLabel')?.textContent ?? '',
+        // Read from the performer rather than from state, so the file is
+        // rendered with exactly what the live transport is set to.
+        settings: {
+          tuning: performer.tuning,
+          palette: performer.palette,
+          tempo: performer.tempo,
+        },
+      });
+      btn.textContent = how ? 'Rendered' : 'Could not render';
+    } catch {
+      btn.textContent = 'Could not render';
+    } finally {
+      setTimeout(() => {
+        btn.disabled = false;
+        busy = false;
+        sync();
       }, 1400);
     }
   });

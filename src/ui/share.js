@@ -1,5 +1,5 @@
 /**
- * Chart image export.
+ * Export: chart image, and an offline WAV bounce of the current arrangement.
  *
  * The wheel is an SVG styled entirely from styles.css — custom properties,
  * classes, no presentation attributes. Serialising the live node therefore
@@ -13,11 +13,14 @@
  *     UIActivityViewController
  *   - browser      → navigator.share where it exists, else a download
  *
- * The pure parts (which properties get baked, filename derivation, payload
- * shape) are exported for tests/mobile.test.mjs, which has no DOM.
+ * Both exports end at the same `deliver()`; the only difference between them
+ * is the bytes. The pure parts (which properties get baked, filename
+ * derivation, payload shape) are exported for tests/mobile.test.mjs, which has
+ * no DOM.
  */
 
 import { notifyNativeShare } from '../audio/native-bridge.js';
+import { bounceToWav } from '../audio/bounce.js';
 
 /**
  * The properties a standalone copy of the wheel actually needs. Copying the
@@ -216,16 +219,33 @@ export async function shareWheel(svg, {
 
   const type = blob.type || 'image/png';
   const name = type === 'image/svg+xml' ? shareFilename(label, 'svg') : filename;
+  return deliver(blob, name, { document: doc, window: win, title: label || 'AstroPitch chart' });
+}
+
+/**
+ * Hand a finished blob to the best destination available: the native share
+ * sheet, then Web Share, then a download. Shared by the chart image and the
+ * WAV bounce — the only thing that differs between them is the bytes.
+ *
+ * Returns `'native'`, `'web-share'`, `'download'`, or `null`.
+ */
+export async function deliver(blob, filename, {
+  document: doc = typeof document !== 'undefined' ? document : null,
+  window: win = typeof window !== 'undefined' ? window : null,
+  title = 'AstroPitch',
+} = {}) {
+  if (!blob || !win) return null;
+  const type = blob.type || 'application/octet-stream';
 
   if (win.webkit?.messageHandlers?.astropitch) {
     const base64 = base64FromBuffer(await blob.arrayBuffer(), win);
-    if (base64 && notifyNativeShare({ type, filename: name, base64 }, win)) return 'native';
+    if (base64 && notifyNativeShare({ type, filename, base64 }, win)) return 'native';
   }
 
-  const file = typeof win.File === 'function' ? new win.File([blob], name, { type }) : null;
+  const file = typeof win.File === 'function' ? new win.File([blob], filename, { type }) : null;
   if (file && win.navigator?.canShare?.({ files: [file] })) {
     try {
-      await win.navigator.share({ files: [file], title: label || 'AstroPitch chart' });
+      await win.navigator.share({ files: [file], title });
       return 'web-share';
     } catch {
       // A cancelled share is not a failure worth falling through loudly for,
@@ -237,7 +257,7 @@ export async function shareWheel(svg, {
     const url = win.URL.createObjectURL(blob);
     const link = doc.createElement('a');
     link.href = url;
-    link.download = name;
+    link.download = filename;
     doc.body.appendChild(link);
     link.click();
     link.remove();
@@ -245,4 +265,26 @@ export async function shareWheel(svg, {
     return 'download';
   }
   return null;
+}
+
+/**
+ * Offline-render the current arrangement and hand the WAV to the same
+ * destinations the chart image uses.
+ *
+ * Only the finite modes can be bounced — see src/audio/bounce.js for why the
+ * two looping modes are refused rather than rendered wrong.
+ */
+export async function shareBounce(chart, modeId, {
+  label = '',
+  settings = {},
+  document: doc = typeof document !== 'undefined' ? document : null,
+  window: win = typeof window !== 'undefined' ? window : null,
+} = {}) {
+  const wav = await bounceToWav(chart, modeId, { settings });
+  const blob = new win.Blob([wav], { type: 'audio/wav' });
+  return deliver(blob, shareFilename(label ? `${label} ${modeId}` : modeId, 'wav'), {
+    document: doc,
+    window: win,
+    title: label || 'AstroPitch',
+  });
 }

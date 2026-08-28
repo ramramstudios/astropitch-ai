@@ -30,6 +30,7 @@ const SHELL_FILES = [
   'src/audio/lifecycle.js',
   'src/audio/modes.js',
   'src/audio/native-bridge.js',
+  'src/audio/bounce.js',
   'src/audio/scheduler.js',
   'src/ota/policy.js',
   'src/ota/client.js',

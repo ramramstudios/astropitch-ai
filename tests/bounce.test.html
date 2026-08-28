@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AstroPitch — offline bounce tests</title>
+  <style>
+    body { font: 13px ui-monospace, Menlo, monospace; background: #0b0819; color: #ddd; padding: 2rem; }
+    .pass { color: #8fbf6a; } .fail { color: #ff6a5d; } .info { color: #8d8fae; }
+    h2 { font-size: 14px; color: #e9cd93; margin: 1.6rem 0 0.5rem; font-weight: 400; }
+    pre { margin: 0.15rem 0; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<h1 style="font-size:16px;font-weight:400">Offline bounce</h1>
+<div id="out"></div>
+
+<script type="module">
+/**
+ * Does the WAV bounce actually render audio?
+ *
+ * tests/mobile.test.mjs covers the pure parts — the WAV header, the clipping,
+ * the trim and fade, which modes are refused. None of that needs an audio
+ * context and none of it can tell you whether `bounceToWav` produces sound:
+ * the whole path from a real OfflineAudioContext through the engine, the
+ * performer, and a finite mode's schedule only exists in a browser.
+ *
+ * This is the check that the file is not a minute of silence. It is small on
+ * purpose — two renders — because tests/audio.test.html and
+ * tests/polyphony.test.html already exhaust the headless renderer between
+ * them, and this exists to prove the path is wired, not to measure the sound.
+ */
+import { makeChart } from '../src/chart.js';
+import { SOUNDING_BODIES } from '../src/ontology.js';
+import { bounceToWav, BOUNCE_RATE } from '../src/audio/bounce.js';
+
+const out = document.getElementById('out');
+let failures = 0;
+const log = (cls, msg) => {
+  const pre = document.createElement('pre');
+  pre.className = cls;
+  pre.textContent = msg;
+  out.appendChild(pre);
+};
+const head = (t) => { const h = document.createElement('h2'); h.textContent = t; out.appendChild(h); };
+const check = (label, ok, detail = '') => {
+  if (!ok) failures++;
+  log(ok ? 'pass' : 'fail', `${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
+};
+
+const spread = (offset) => Object.fromEntries(SOUNDING_BODIES.map((k, i) => [k, (i * 33 + offset) % 360]));
+const CHART = makeChart(spread(0), { system: 'whole' });
+
+// Deterministic: gesture onsets still draw Math.random, and a size comparison
+// between two renders is only a comparison if both got the same notes.
+const realRandom = Math.random;
+const seeded = async (fn) => {
+  let s = 20260807;
+  Math.random = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  try { return await fn(); } finally { Math.random = realRandom; }
+};
+
+/** Read back what encodeWav wrote, so the assertions are about the real file. */
+function decode(wav) {
+  const view = new DataView(wav);
+  const channels = view.getUint16(22, true);
+  const rate = view.getUint32(24, true);
+  const bytes = view.getUint32(40, true);
+  const frames = bytes / (channels * 2);
+  let peak = 0;
+  let sum = 0;
+  let nonZero = 0;
+  for (let i = 0; i < frames * channels; i++) {
+    const v = view.getInt16(44 + i * 2, true) / 32768;
+    const a = Math.abs(v);
+    if (a > peak) peak = a;
+    if (a > 1e-4) nonZero++;
+    sum += v * v;
+  }
+  return {
+    channels, rate, frames,
+    seconds: frames / rate,
+    peak,
+    rms: Math.sqrt(sum / (frames * channels)),
+    audibleFraction: nonZero / (frames * channels),
+  };
+}
+
+for (const mode of ['bloom', 'scalar']) {
+  head(`${mode} renders to a WAV with audio in it`);
+  const wav = await seeded(() => bounceToWav(CHART, mode));
+  const d = decode(wav);
+  log('info', `      ${d.seconds.toFixed(2)}s  ${d.channels}ch @ ${d.rate}  peak ${d.peak.toFixed(3)}  rms ${d.rms.toFixed(4)}  audible ${(d.audibleFraction * 100).toFixed(0)}%`);
+
+  check('stereo at the bounce rate', d.channels === 2 && d.rate === BOUNCE_RATE, `${d.channels}ch @ ${d.rate}`);
+
+  // The whole point. A silent file is what a mis-wired render produces, and
+  // every pure test in mobile.test.mjs would still pass for one.
+  check('the file is not silence', d.peak > 0.01, `peak ${d.peak.toFixed(4)}`);
+  check('there is sustained audio, not one click',
+    d.audibleFraction > 0.2, `${(d.audibleFraction * 100).toFixed(0)}% above the floor`);
+
+  // Nothing should reach digital full scale: the master chain limits below it,
+  // and a file pinned at 1.0 means the clamp in encodeWav is doing the
+  // limiting instead of the mastering chain.
+  check('nothing is clipped at full scale', d.peak < 0.999, `peak ${d.peak.toFixed(4)}`);
+
+  // The render asks for 90 s and trims. A file still at the full length means
+  // trimAndFade found audio at the very end, i.e. the arrangement never ended.
+  check('the trailing silence was trimmed', d.seconds < 80, `${d.seconds.toFixed(2)}s`);
+  check('a real arrangement, not a fragment', d.seconds > 3, `${d.seconds.toFixed(2)}s`);
+
+  // No click at either seam.
+  const view = new DataView(wav);
+  check('starts from silence', Math.abs(view.getInt16(44, true)) < 64, String(view.getInt16(44, true)));
+  check('ends at silence',
+    Math.abs(view.getInt16(wav.byteLength - 2, true)) < 64, String(view.getInt16(wav.byteLength - 2, true)));
+}
+
+head('a loop mode is refused rather than rendered short');
+for (const mode of ['drone', 'melodic']) {
+  let threw = null;
+  try { await bounceToWav(CHART, mode); } catch (err) { threw = err; }
+  check(`${mode} throws`, threw instanceof Error, threw ? threw.message : 'resolved');
+}
+
+head('the live engine is untouched by a bounce');
+{
+  // A bounce builds its own engine against an OfflineAudioContext. If it
+  // reached the shared singleton instead, the app's audio would stop when a
+  // file was rendered.
+  const { engine } = await import('../src/audio/engine.js');
+  const before = engine.ctx;
+  await seeded(() => bounceToWav(CHART, 'bloom'));
+  check('the shared engine never got a context', engine.ctx === before,
+    `${String(before)} → ${String(engine.ctx)}`);
+}
+
+log(failures ? 'fail' : 'pass', failures ? `\n${failures} FAILED` : '\nALL BOUNCE TESTS PASSED');
+window.__testFailures = failures;
+window.__testDone = true;
+</script>
+</body>
+</html>

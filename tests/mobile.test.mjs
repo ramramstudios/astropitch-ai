@@ -34,6 +34,14 @@ import {
 } from '../src/audio/native-bridge.js';
 import { MODES, modeButtonId } from '../src/audio/modes.js';
 import {
+  encodeWav,
+  trimAndFade,
+  isBounceable,
+  BOUNCEABLE_MODES,
+  BOUNCE_RATE,
+  bounceToWav,
+} from '../src/audio/bounce.js';
+import {
   shareFilename,
   exportDimensions,
   base64FromBuffer,
@@ -687,6 +695,142 @@ console.log('--- the wheel panel offers the share ---');
   ok('app.js wires it', /wireShare\(\)/.test(appSrc) && appSrc.includes('shareWheel'));
   ok('it exports the live wheel, not a re-render', appSrc.includes('shareWheel(wheel.svg'));
   ok('it names the file from the chart label', appSrc.includes("$('#chartLabel')"));
+}
+
+console.log('--- WAV bounce: only the finite modes can be rendered ---');
+{
+  // Bloom and Scalar schedule every voice up front and stop. Drone and Melodic
+  // are open-ended loops on a 25 ms audio-clock ticker, which an offline
+  // render does not advance — rendering them would mean shimming the page's
+  // global timers under a live transport. Refused rather than rendered wrong.
+  ok('bloom bounces', isBounceable('bloom'));
+  ok('scalar bounces', isBounceable('scalar'));
+  ok('drone does not', !isBounceable('drone'));
+  ok('melodic does not', !isBounceable('melodic'));
+  ok('nonsense does not', !isBounceable('') && !isBounceable(undefined));
+  ok('the list is exactly the two finite modes',
+    BOUNCEABLE_MODES.join(',') === 'bloom,scalar', BOUNCEABLE_MODES.join(','));
+
+  // Every id here must be a real mode, or the button offers something that
+  // cannot be played.
+  const known = new Set(MODES.map((m) => m.id));
+  ok('every bounceable mode is a real mode', BOUNCEABLE_MODES.every((m) => known.has(m)));
+}
+
+console.log('--- WAV bounce: a loop mode is refused, not silently truncated ---');
+{
+  const chart = { placements: [], byKey: {}, aspects: [] };
+  const reject = async (label, ...args) => {
+    let threw = null;
+    try { await bounceToWav(...args); } catch (err) { threw = err; }
+    ok(label, threw instanceof Error, threw ? threw.message : 'resolved');
+  };
+  await reject('drone is refused', chart, 'drone');
+  await reject('melodic is refused', chart, 'melodic');
+  await reject('no chart is refused', null, 'bloom');
+  // Node has no OfflineAudioContext; the injected null is the same condition.
+  await reject('no offline context is refused', chart, 'bloom', { Offline: null });
+}
+
+console.log('--- WAV bounce: the file is a WAV a decoder will accept ---');
+{
+  const rate = BOUNCE_RATE;
+  const frames = 1000;
+  const tone = (sign) => Float32Array.from(
+    { length: frames }, (_, i) => sign * Math.sin(2 * Math.PI * 440 * i / rate));
+  const wav = encodeWav([tone(1), tone(-1)], rate);
+  const view = new DataView(wav);
+  const ascii = (at, n) => String.fromCharCode(
+    ...new Uint8Array(wav, at, n));
+
+  ok('RIFF/WAVE header', ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WAVE');
+  ok('a fmt and a data chunk', ascii(12, 4) === 'fmt ' && ascii(36, 4) === 'data');
+  ok('declared PCM', view.getUint16(20, true) === 1);
+  ok('stereo', view.getUint16(22, true) === 2);
+  ok('the sample rate it was told', view.getUint32(24, true) === rate);
+  // 16-bit, not float: Messages and Files play the former and some of them
+  // play the latter as noise.
+  ok('16-bit samples', view.getUint16(34, true) === 16);
+  ok('block align follows channels and depth', view.getUint16(32, true) === 4);
+  ok('byte rate follows block align', view.getUint32(28, true) === rate * 4);
+
+  const dataBytes = frames * 4;
+  ok('the data chunk size matches the frames', view.getUint32(40, true) === dataBytes);
+  ok('RIFF size counts everything after it', view.getUint32(4, true) === 36 + dataBytes);
+  ok('the file is exactly header plus data', wav.byteLength === 44 + dataBytes, String(wav.byteLength));
+
+  // Interleaved, and the two channels really are opposite.
+  ok('channels are interleaved, not planar',
+    view.getInt16(44, true) === -view.getInt16(46, true)
+      || (view.getInt16(44, true) === 0 && view.getInt16(46, true) === 0));
+
+  ok('mono is allowed too', encodeWav([tone(1)], rate).byteLength === 44 + frames * 2);
+  ok('an empty render still produces a valid header',
+    encodeWav([new Float32Array(0)], rate).byteLength === 44);
+}
+
+console.log('--- WAV bounce: samples past full scale clip rather than wrap ---');
+{
+  // The master chain limits, but a sample a hair over 1.0 written without a
+  // clamp wraps to full-scale negative — the loudest possible click.
+  const hot = Float32Array.from([1.5, -1.5, 1, -1, 0]);
+  const view = new DataView(encodeWav([hot], BOUNCE_RATE));
+  const at = (i) => view.getInt16(44 + i * 2, true);
+  ok('over +1 clips to positive full scale', at(0) === 32767, String(at(0)));
+  ok('under -1 clips to negative full scale', at(1) === -32768, String(at(1)));
+  ok('exactly +1 does not wrap', at(2) === 32767, String(at(2)));
+  ok('exactly -1 is full scale negative', at(3) === -32768, String(at(3)));
+  ok('silence is silence', at(4) === 0);
+
+  const holes = encodeWav([Float32Array.from([NaN, Infinity, -Infinity])], BOUNCE_RATE);
+  const hv = new DataView(holes);
+  ok('no sample encodes as a non-finite value',
+    [0, 1, 2].every((i) => Number.isFinite(hv.getInt16(44 + i * 2, true))));
+}
+
+console.log('--- WAV bounce: the render is trimmed and its seams faded ---');
+{
+  const rate = 1000;
+  // Half a second of tone, then four and a half seconds of nothing.
+  const loud = Float32Array.from({ length: 5000 }, (_, i) => (i < 500 ? 0.5 : 0));
+  const [out] = trimAndFade([loud], rate, { fadeSeconds: 0.01, tailSeconds: 0.25 });
+
+  ok('the trailing silence is cut', out.length < 5000, String(out.length));
+  // A reverb tail cut exactly at the last audible sample sounds truncated even
+  // though nothing is missing, so a little room is kept.
+  ok('a little room is kept past the last audible sample',
+    out.length >= 500 && out.length <= 500 + 0.25 * rate + 1, String(out.length));
+  ok('the body of the tone survives', Math.abs(out[250] - 0.5) < 1e-6, String(out[250]));
+
+  // A bounce that begins mid-sample or is cut at a non-zero crossing clicks.
+  ok('the head is faded in', out[0] === 0 && Math.abs(out[5]) < 0.5);
+  ok('the tail is faded out', out[out.length - 1] === 0);
+
+  // Both channels must be trimmed to the same length or the interleave shears.
+  const stereo = trimAndFade([loud, Float32Array.from(loud)], rate);
+  ok('both channels come back the same length',
+    stereo[0].length === stereo[1].length, `${stereo[0].length} vs ${stereo[1].length}`);
+
+  // An empty chart with every body off renders silence. A zero-length file is
+  // treated as corrupt by some players.
+  const [silent] = trimAndFade([new Float32Array(5000)], rate);
+  ok('a silent render still yields a playable file', silent.length >= 1, String(silent.length));
+  ok('nothing to trim is handled', trimAndFade([], rate).length === 0);
+  ok('a null input is handled', trimAndFade(null, rate).length === 0);
+}
+
+console.log('--- the wheel panel offers the bounce, and says which mode ---');
+{
+  const appSrc = readFileSync(join(__dirname, '..', 'src', 'ui', 'app.js'), 'utf8');
+  const htmlSrc2 = readFileSync(join(__dirname, '..', 'index.html'), 'utf8');
+  ok('index.html has a bounce control', htmlSrc2.includes('id="bounceBtn"'));
+  ok('app.js wires it', /wireBounce\(\)/.test(appSrc) && appSrc.includes('shareBounce'));
+  // Offering "Bounce" while Drone is selected and then rendering Bloom without
+  // saying so is the confusing version of this feature.
+  ok('the button names the mode it will render', appSrc.includes('`Bounce ${mode'));
+  ok('it only ever offers a bounceable mode', appSrc.includes('isBounceable(current)'));
+  ok('it renders with the live transport settings, not the defaults',
+    appSrc.includes('tuning: performer.tuning') && appSrc.includes('palette: performer.palette'));
 }
 
 console.log(`\n${fails === 0 ? 'All mobile-mode checks passed.' : `${fails} FAILURE(S).`}`);
