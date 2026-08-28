@@ -5,9 +5,10 @@
  */
 
 import {
-  julianDay, centuriesSinceJ2000, sunLongitude, moonLongitude, planetLongitude,
+  julianDay, julianDayFromBirth, centuriesSinceJ2000, sunLongitude, moonLongitude, planetLongitude,
   angles, houseCusps, computeSky, obliquity, greenwichMeanSiderealTime,
 } from '../src/ephemeris.js';
+import { birthFromNow } from '../src/chart.js';
 
 let fails = 0;
 function check(label, got, want, tol, unit = 'deg') {
@@ -131,6 +132,32 @@ console.log('\n--- Real chart: Bob Dylan, 1941-05-24 21:05 CST, Duluth ---');
   if (sunSign !== 'Gemini') fails++;
   if (moonSign !== 'Taurus') fails++;
   if (ascSign !== 'Sagittarius') fails++;
+}
+
+console.log('\n--- birthFromNow labels the same instant in local civil time ---');
+{
+  const at = Date.UTC(2026, 7, 27, 15, 30, 0);
+  const utc = birthFromNow(0, at);
+  const tokyo = birthFromNow(9, at);
+  const atlanta = birthFromNow(-5, at);
+  const mumbai = birthFromNow(5.5, at);
+  const sameJd = (a, b) => Math.abs(julianDayFromBirth(a) - julianDayFromBirth(b)) < 1e-9;
+
+  const stamp = (b) => `${b.year}-${String(b.month).padStart(2, '0')}-${String(b.day).padStart(2, '0')} ${String(b.hour).padStart(2, '0')}:${String(b.minute).padStart(2, '0')} UTC${b.utcOffset}`;
+  const pin = (label, got, want) => {
+    const ok = stamp(got) === want;
+    if (!ok) fails++;
+    console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label}  got ${stamp(got)}  want ${want}`);
+  };
+
+  pin('UTC', utc, '2026-08-27 15:30 UTC0');
+  pin('Tokyo UTC+9', tokyo, '2026-08-28 00:30 UTC9');
+  pin('Atlanta UTC−5', atlanta, '2026-08-27 10:30 UTC-5');
+  pin('Mumbai UTC+5.5', mumbai, '2026-08-27 21:00 UTC5.5');
+  console.log(`  ${sameJd(utc, tokyo) ? 'PASS' : 'FAIL'}  Tokyo offset is the same instant as UTC`);
+  console.log(`  ${sameJd(utc, atlanta) ? 'PASS' : 'FAIL'}  Atlanta offset is the same instant as UTC`);
+  console.log(`  ${sameJd(utc, mumbai) ? 'PASS' : 'FAIL'}  Mumbai offset is the same instant as UTC`);
+  if (!sameJd(utc, tokyo) || !sameJd(utc, atlanta) || !sameJd(utc, mumbai)) fails++;
 }
 
 console.log(`\n${fails === 0 ? 'ALL CHECKS PASSED' : fails + ' CHECK(S) FAILED'}`);

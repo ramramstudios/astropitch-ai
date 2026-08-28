@@ -869,26 +869,24 @@ function wireForms() {
   });
 
   $('#nowBtn').addEventListener('click', () => {
-    // "The sky right now" means the sky over your place, not wherever Random
-    // last landed — anchor to Your chart's coordinates when one exists,
-    // overwriting whatever Sky/Random left in the fields, rather than reading
-    // them as-is the way the date/time fields do.
-    if (state.yourChartForm) {
-      $('#lat').value = state.yourChartForm.lat;
-      $('#lon').value = state.yourChartForm.lon;
-      $('#placePreset').value = state.yourChartForm.placePreset ?? 'custom';
-    }
-    const place = readPlace();
-    const chart = chartForNow(place, $('#houseSystem').value);
-    // The instant itself doesn't care what UTC offset it's labelled with —
-    // chartForNow already computes it in true UTC — so this only changes how
-    // "now" is displayed: in Your chart's timezone rather than always UTC+0,
-    // the way a local clock at that place would actually read right now.
-    const utcOffset = Number(state.yourChartForm?.utcOffset) || 0;
-    const now = new Date(Date.now() + utcOffset * 3600000);
-    $('#birthDate').value = now.toISOString().slice(0, 10);
-    $('#birthTime').value = now.toISOString().slice(11, 16);
+    // Date, time, and UTC offset follow the place currently in the form: the
+    // selected city, or the custom lat/lon and UTC offset sitting next to it.
+    // The remembered typed chart is left alone — Sky is "now, here", not a
+    // revert to wherever Your chart was cast.
+    const utcOffset = readUtcOffset();
     $('#utcOffset').value = utcOffset;
+    const chart = chartForNow(readPlace(), $('#houseSystem').value, utcOffset);
+    const birth = chart.meta.birth;
+    $('#birthDate').value = [
+      birth.year,
+      String(birth.month).padStart(2, '0'),
+      String(birth.day).padStart(2, '0'),
+    ].join('-');
+    $('#birthTime').value = [
+      String(birth.hour).padStart(2, '0'),
+      String(birth.minute).padStart(2, '0'),
+    ].join(':');
+    $('#utcOffset').value = birth.utcOffset;
     syncPlacePresetSelect($('#placePreset').value);
     formTouchedSinceCast = false;
     updateRevertAvailability();
@@ -958,6 +956,18 @@ function readPlace() {
     latitude: Number($('#lat').value) || 0,
     longitude: Number($('#lon').value) || 0,
   };
+}
+
+/** Offset for "now" at the place currently in the form. A named city always
+ *  wins over whatever is sitting in the UTC field — that field is left at 0
+ *  after a previous Sky click, or holds a historical DST value from a typed
+ *  chart, neither of which is the city's offset. Custom coordinates keep the
+ *  offset the user typed; there is no city table to consult. */
+function readUtcOffset() {
+  const selected = PLACES[Number($('#placePreset').value)];
+  if (selected) return selected.utc;
+  const n = Number($('#utcOffset').value);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function birthFormValues() {
@@ -1195,7 +1205,8 @@ function wireOverlay() {
     if (state.partner) { setPartner(null); return; }
     if (!hasUsableSubject()) return;
     // The sky is read at the subject's own place, so its angles mean something.
-    const chart = chartForNow(readPlace(), $('#houseSystem').value);
+    const utcOffset = readUtcOffset();
+    const chart = chartForNow(readPlace(), $('#houseSystem').value, utcOffset);
     setPartner(chart, makeChartDescriptor('sky', chart, 'primary'));
   });
 

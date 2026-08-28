@@ -108,6 +108,66 @@
       await settle(win);
       ok('Clear while Overlay is active immediately shows the same empty state', emptyOverlayIsShown());
       ok('Clear while Overlay is active also removes the stale partner label', !$('#chartLabel').textContent.includes('×'));
+
+      // Sky right now must follow the place currently in the form, not snap
+      // back to the remembered typed chart's coordinates / timezone.
+      $('#tab-chart').click();
+      const change = (selector, value) => {
+        const input = $(selector);
+        input.value = value;
+        input.dispatchEvent(new win.Event('change', { bubbles: true }));
+      };
+      const clockMatches = (offset, beforeMs, afterMs) => {
+        const date = $('#birthDate').value;
+        const time = $('#birthTime').value;
+        const matches = (ms) => {
+          const shifted = new Date(ms + offset * 3600000);
+          return date === shifted.toISOString().slice(0, 10)
+            && time === shifted.toISOString().slice(11, 16);
+        };
+        for (let ms = beforeMs; ms <= afterMs; ms += 1000) {
+          if (matches(ms)) return true;
+        }
+        return matches(afterMs);
+      };
+
+      const tokyo = [...$('#placePreset').options].find((o) => o.textContent.includes('Tokyo'));
+      change('#placePreset', tokyo.value);
+      // A previous Sky click (or a typed chart at UTC) can leave this at 0
+      // while the city dropdown still names Tokyo — the offset has to come
+      // from the city, not from that stale field.
+      set('#utcOffset', '0');
+      const beforeTokyo = Date.now();
+      $('#nowBtn').click();
+      const afterTokyo = Date.now();
+      await settle(win);
+      ok('Sky right now keeps the currently selected city',
+        $('#placePreset').value === tokyo.value
+        && Number($('#lat').value) === 35.690
+        && Number($('#lon').value) === 139.692,
+        `place=${$('#placePreset').selectedOptions[0]?.textContent} lat=${$('#lat').value} lon=${$('#lon').value}`);
+      ok('Sky right now stamps the city\'s local date and time',
+        Number($('#utcOffset').value) === 9 && clockMatches(9, beforeTokyo, afterTokyo),
+        `date=${$('#birthDate').value} time=${$('#birthTime').value} utc=${$('#utcOffset').value}`);
+      ok('Sky right now labels the chart at that city',
+        $('#chartLabel').textContent.includes('Tokyo')
+        && $('#chartLabel').textContent.includes('Sky right now'));
+
+      set('#lat', '12.345');
+      set('#lon', '67.89');
+      set('#utcOffset', '5.5');
+      const beforeCustom = Date.now();
+      $('#nowBtn').click();
+      const afterCustom = Date.now();
+      await settle(win);
+      ok('Sky right now keeps custom coordinates',
+        $('#placePreset').value === 'custom'
+        && Number($('#lat').value) === 12.345
+        && Number($('#lon').value) === 67.89,
+        `place=${$('#placePreset').value} lat=${$('#lat').value} lon=${$('#lon').value}`);
+      ok('Sky right now stamps custom-coordinate local date and time',
+        Number($('#utcOffset').value) === 5.5 && clockMatches(5.5, beforeCustom, afterCustom),
+        `date=${$('#birthDate').value} time=${$('#birthTime').value} utc=${$('#utcOffset').value}`);
     } catch (error) {
       window.__testFailures++;
       results.textContent += `FAIL  unexpected error — ${error.stack ?? error}\n`;

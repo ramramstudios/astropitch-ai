@@ -258,20 +258,25 @@ export function designChart(base, design = {}) {
   });
 }
 
-export function chartForNow(place, houseSystem = 'whole') {
-  const d = new Date();
-  return chartFromBirth(
-    {
-      year: d.getUTCFullYear(),
-      month: d.getUTCMonth() + 1,
-      day: d.getUTCDate(),
-      hour: d.getUTCHours(),
-      minute: d.getUTCMinutes(),
-      utcOffset: 0,
-    },
-    place,
-    houseSystem
-  );
+/** Civil date and time at `utcOffset` hours east of Greenwich, for "now".
+ *  The same instant as UTC `atMs`, just labelled the way a clock at that
+ *  offset would read — `julianDayFromBirth` undoes the offset, so the
+ *  astronomy does not depend on how the moment is written down. */
+export function birthFromNow(utcOffset = 0, atMs = Date.now()) {
+  const offset = Number(utcOffset) || 0;
+  const shifted = new Date(atMs + offset * 3600000);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+    utcOffset: offset,
+  };
+}
+
+export function chartForNow(place, houseSystem = 'whole', utcOffset = 0) {
+  return chartFromBirth(birthFromNow(utcOffset), place, houseSystem);
 }
 
 export function crossAspects(chartA, chartB) {
