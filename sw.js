@@ -4,7 +4,7 @@
  * installed. Bump CACHE_NAME to invalidate old caches on the next deploy —
  * there's no build step to hash filenames automatically.
  */
-const CACHE_NAME = 'astropitch-v2';
+const CACHE_NAME = 'astropitch-1.0.0';
 
 const SHELL_FILES = [
   '.',
