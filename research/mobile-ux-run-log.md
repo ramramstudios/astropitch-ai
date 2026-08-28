@@ -863,3 +863,132 @@ kept.
 first visit reads as "here is something to play with" or as "someone else's
 chart is already here", which is the entire question and is not answerable
 from the source.
+
+---
+
+# Browser suites
+
+`tests/run-browser.mjs` needs Chrome or Chromium. **A Chromium binary is
+present in this environment**, at `/opt/pw-browsers/chromium`, but
+`run-browser.mjs`'s `CHROME` list does not include that path, so it is not
+found by default. It was reached by symlinking `/usr/bin/chromium` to it —
+an environment change only, nothing in the repo was modified for this.
+
+**Attempted once:** `node tests/run-browser.mjs tests/stability.test.html 180`.
+
+Result: the harness works, the page runs, and it **fails in this
+environment** — the melodic scenario reported 13 dropped quanta and a 512-frame
+stall against a recorded budget of 8, and the page then exceeded the 180s
+timeout during the voice/node census. Every non-audio-thread assertion passed
+(realtime ratio 0.987-0.998 across all five modes, 24/24 voices held under a
+main-thread stressor, clock drift -52ms).
+
+**This is not a regression from this branch.** `tests/stability.test.html`
+imports `src/audio/engine.js`, `src/audio/performer.js`, `src/chart.js`,
+`src/ontology.js` and `src/audio/lifecycle.js` — it does not load
+`src/ui/app.js` or `src/styles.css`, which are the only production files this
+run touched. The failures are a shared-CPU VM with a null audio sink failing
+to meet a realtime budget recorded on real hardware, which is the same class
+of limitation `CLAUDE.md` already notes for device dropouts.
+
+**Not run:** `tests/audio.test.html` (1800s) and `tests/polyphony.test.html`
+(2400s). Both are offline audio renders, neither loads any file this branch
+modified, and between them they are over an hour of wall time for zero
+coverage of a CSS-and-sheet-logic change. Recorded as a deliberate waiver
+rather than attempted and abandoned. If the owner wants them green as a
+release gate, they should be run on hardware that can meet the recorded
+budgets — this VM demonstrably cannot, as the stability run above shows.
+
+---
+
+# Final test state
+
+Run with `for f in tests/*.test.mjs; do node "$f"; done`.
+
+| suite | baseline (`af55dfb`) | after this run |
+| --- | --- | --- |
+| engine | 50 | 50 green |
+| ephemeris | 25 | 25 green |
+| **mobile** | **101** | **163 green** |
+| palettes | 23 | 23 green |
+| performer | 87 | 87 green |
+| synastry | 38 | 38 green |
+| ui-state | 10 | 10 green |
+| ota | 0 | 0 green |
+| designer | 55 pass / 2 fail | 55 pass / 2 fail — **unchanged, untouched** |
+
+No regressions. The two `designer.test.mjs` failures ("drops out of the
+elemental balance", "drops out of the modal balance") are the pre-existing,
+chart-math, unrelated-to-mobile pair identified at the start; they were left
+exactly as they were and are not counted as a regression.
+
+62 assertions were added to `tests/mobile.test.mjs`. Four of the new blocks
+were negative-tested — the change was reverted, the block was confirmed to go
+red with the real failing number, and the change was restored — so none of
+them is vacuous.
+
+---
+
+# Consolidated: needs manual QA on device
+
+**Nothing in this list has been seen on a phone.** Every CSS change in this
+run is unverified. `CLAUDE.md` is explicit that mobile CSS/layout behaviour,
+real pointer/touch event wiring, and the service-worker/offline path are not
+covered by the test suite, and `tests/mobile.test.mjs` is DOM-less. The
+assertions added here check that the *declarations* are right; they cannot
+check that the *rendering* is.
+
+**Item 2 — touch targets**
+1. The mobile transport at 44px: `.transport-main` 46px + `.volume` 44px
+   fitting the 100px `--transport-h` without clipping the slider or the mode
+   row, on a device with a home indicator.
+2. `.wheel-kicker` at its new widths: whether `.chart-label` ellipsises too
+   early at 375px with a long chart name, and whether the three actions still
+   fit on one line.
+3. Whether the wider `.chart-help` underline still reads as a link.
+4. Whether the enlarged `.volume-toggle` hit area overlaps the volume slider
+   thumb at the left end of its travel.
+
+**Item 6 — safe areas**
+5. Landscape on a notched iPhone, both rotations: sheet content clear of the
+   notch and the rounded corners, background still reaching both edges.
+6. Portrait URL-bar collapse and expand: the `full` snap landing under the
+   chrome, and the 220ms transition on each visualViewport resize reading as
+   intentional rather than as a wobble.
+7. Focusing a Chart-tab text field: the sheet must *not* resize when the
+   keyboard opens, and `SHEET_KEYBOARD_RATIO = 0.7` must be on the right side
+   of the real numbers.
+8. Pinch-zooming the page (not the wheel) and confirming the sheet holds size.
+9. The `full` snap sitting ~34px higher than before, now the bottom inset is
+   subtracted.
+
+**Item 7 — pinch/pan performance**
+10. **A DevTools performance trace of a sheet drag over USB.** This is the
+    item's actual acceptance check and it has not been done. No performance
+    claim in this run is backed by a measurement.
+11. That the drag still tracks the finger with the write coalesced.
+12. That the tap-to-cycle path (under 4px travel) is unaffected.
+13. Whether `contain: layout paint` on `.side` is safe, given fourteen
+    `position: absolute/fixed` rules whose containing blocks cannot be
+    resolved without a rendered DOM.
+
+**Item 8 — contrast**
+14. Whether `#6f6f6f` still reads as *secondary* beside `--graphite`
+    (`#545454`) at 0.52rem on a bright screen — the three greys are now
+    `0x6f`, `0x54` and `0x0b`.
+15. Both themes on a real panel, including the OS auto-switch; the ratios are
+    computed in sRGB and True Tone or a wide-gamut profile will not render
+    them identically.
+
+**Item 4 — carried over from the analysis**
+16. The tab-strip min-content estimate (240px including separators) on the
+    narrowest supported screen, with whatever mono the device resolves from
+    `--mono`. That estimate is arithmetic, not a measurement.
+
+**Also open, from item 6's investigation but not fixed**
+17. `wireTransportVisibility()` toggles `is-transport-hidden`, which moves
+    `--sheet-bottom` in CSS, but nothing calls the sheet's
+    `recomputeHeights()`. Hiding or showing the transport moves the sheet's
+    bottom edge without updating its snap heights until the next resize.
+    Pre-existing; the one-line fix is described in the item 6 entry and needs
+    a device to judge whether the resulting resize reads as correct.
