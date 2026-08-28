@@ -119,3 +119,112 @@ that way in the file): `button.primary` / `button.ghost` `min-height: 44px`,
   `text + 0.7rem`) still reads as a link rather than a box.
 - That the enlarged `.volume-toggle` hit area does not overlap the volume
   slider's thumb at the left end of its travel.
+
+---
+
+## Item 6 — Confirm safe-area handling in both orientations — **done**
+
+Scoped as verification plus the two gaps the roadmap named, not construction:
+`viewport-fit=cover` and a dozen `env(safe-area-inset-*)` uses were already
+in place.
+
+**Completed**
+
+- **Landscape gap closed.** `html[data-mode="mobile"] .side` was
+  `left: 0; right: 0` with no inset padding, so in landscape on a notched
+  iPhone the notch and the rounded display corners sat over the sheet's tab
+  strip and panel content. Added
+  `padding-left: env(safe-area-inset-left)` / `padding-right:
+  env(safe-area-inset-right)`.
+  Chose padding over inset `left`/`right` offsets deliberately: the box, top
+  border, radius and shadow still reach the screen edges — an inset position
+  would let the wheel show through in the strip beside the sheet — and only
+  the controls move in. That is Apple's own edge-to-edge-background /
+  inset-content split. Both terms are 0 on a device with no physical safe
+  area, so nothing changes on hardware without one.
+- **`availableHeight()` now tracks the visual viewport.** Added a pure,
+  exported `sheetViewportHeight(innerHeight, visualViewport)` in `app.js` and
+  wired `wireSheet`'s `availableHeight()` to it, plus a
+  `window.visualViewport.addEventListener('resize', ...)` alongside the
+  existing `window` resize. iOS Safari reports the *large* viewport from
+  `window.innerHeight` whether or not the URL bar is expanded, and collapsing
+  the bar fires no window `resize`, so `half`/`full` overshot by the height
+  of the bar and put the top of the sheet under browser chrome.
+  `starfield.js` already listened to `visualViewport` for the same reason;
+  this removes that asymmetry.
+- Two corrections inside that helper, both asserted:
+  - Page pinch-zoom divides `visualViewport.height` by the zoom scale;
+    multiplying back by `scale` (then clamping to `innerHeight`) stops a
+    zoomed page collapsing the sheet to a fraction of the screen.
+  - The on-screen keyboard shrinks the visual viewport too, by far more than
+    any URL bar. The Chart tab has text inputs, so resizing the sheet out
+    from under someone who has just focused a field would be worse than the
+    overshoot being fixed. A visual viewport under `SHEET_KEYBOARD_RATIO`
+    (0.7) of the layout height is treated as a keyboard and ignored. iOS
+    Safari's URL bar plus toolbar is ~15% of a phone screen and the keyboard
+    is 40-50%, so one constant separates the cases without detecting the
+    keyboard directly.
+  - Subscribed to `visualViewport` `resize` only, not `scroll`. starfield.js
+    takes `scroll` too because it tracks a *position*; the sheet only needs a
+    height, and re-writing `sheet.style.height` every scroll frame is exactly
+    the layout thrash item 7 is about.
+- **Bottom inset fixed as a side effect.** `availableHeight()` subtracted
+  `--transport-h`, which excludes the home-indicator inset, and carried its
+  own `is-transport-hidden` branch duplicating a rule `styles.css` already
+  has. It now reads `getComputedStyle(sheet).bottom` — the used value of
+  `bottom: var(--sheet-bottom)`, already resolved to px, and already correct
+  in both transport states (`--transport-total-h` when showing,
+  `env(safe-area-inset-bottom)` when hidden). Note
+  `getPropertyValue('--sheet-bottom')` would *not* work: an unregistered
+  custom property computes to its unresolved `calc(... + env(...))` token
+  stream, not a length. Net effect on a home-indicator device: the snap
+  heights stop being ~34px too generous, and one duplicated rule is gone.
+- 18 new assertions in `tests/mobile.test.mjs` (111 -> 129): the
+  `sheetViewportHeight` table (URL bar, pinch-zoom, keyboard, missing
+  `visualViewport`, zero height), that `app.js` actually subscribes to
+  `visualViewport` resize and no longer re-derives `--transport-h`, and that
+  the sheet rule carries both horizontal insets while staying `left: 0 /
+  right: 0`.
+
+**Finding, not fixed — needs an owner decision**
+
+`wireTransportVisibility()`'s `apply()` (`app.js`) toggles
+`is-transport-hidden`, which moves `--sheet-bottom` in CSS, but nothing calls
+the sheet's `recomputeHeights()`. So hiding or showing the transport moves
+the sheet's bottom edge without updating its `peek`/`half`/`full` snap
+heights until the next resize. This predates the run and is *not* made worse
+by the change above — in fact the new `getComputedStyle(sheet).bottom` read
+means the next recompute now picks up the right value automatically. Fixing
+it is a one-line hook (export a `refreshSheetHeights` next to `setSheetMode`
+and call it from `apply`), but it changes behaviour — the sheet visibly
+resizes when you hide the transport — and there is no device here to judge
+whether that reads as correct or as a glitch. Left for the owner.
+
+**Waived**
+
+- Verifying the actual inset values. `env(safe-area-inset-*)` resolves only
+  in a real browser on real hardware; the tests assert that the declarations
+  exist and are wired to the right variables, which is the most a
+  DOM-less suite can do.
+- Simulator checks. The roadmap's own bullet says to verify `half`/`full` on
+  a real home-indicator device rather than a simulator without one, and
+  neither is available here.
+- Browser suites — see "Browser suites" at the foot of this log.
+
+**Needs manual QA on device**
+
+- Landscape on a notched iPhone, both rotations: the sheet's tab strip and
+  panel content clear of the notch and the rounded corners, and the sheet
+  background still reaching both screen edges with no strip of wheel showing
+  beside it.
+- Portrait: scrolling to collapse the URL bar and back, checking the sheet's
+  `full` snap now lands under the chrome rather than behind it, and that the
+  220ms height transition on each visualViewport resize reads as intentional
+  rather than as a wobble.
+- Focusing a Chart-tab text field: confirming the sheet does *not* resize
+  when the keyboard opens (the 0.7 ratio doing its job), and that 0.7 is on
+  the right side of the real numbers for the devices that matter.
+- Pinch-zooming the page itself (not the wheel, which has
+  `touch-action: none`) and confirming the sheet keeps its size.
+- The `full` snap on a home-indicator device now that the bottom inset is
+  subtracted: it should sit ~34px higher than before.

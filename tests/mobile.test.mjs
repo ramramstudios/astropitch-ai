@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { nextPinchView, clampPanView, VIEW_MIN_SCALE, VIEW_MAX_SCALE } from '../src/ui/wheel.js';
-import { nextSheetState, nearestSheetState } from '../src/ui/app.js';
+import { nextSheetState, nearestSheetState, sheetViewportHeight, SHEET_KEYBOARD_RATIO } from '../src/ui/app.js';
 import { originFromRect, farthestCorner } from '../src/ui/starfield.js';
 import { lifecycleStep, LIFECYCLE_STATES, AudioLifecycle } from '../src/audio/lifecycle.js';
 import {
@@ -416,6 +416,74 @@ console.log('\n--- native bridge: app.js and index.html stay wired ---');
     appSrc.includes('attachNativeBridge(lifecycle'));
   ok('index.html skips the service worker inside a native shell',
     htmlSrc.includes('!window.__astropitchNativeShell'));
+}
+
+console.log('\n--- sheet snap heights track the visual viewport ---');
+{
+  // iOS Safari's window.innerHeight is the large viewport whether or not the
+  // URL bar is showing, and collapsing the bar fires no window resize. These
+  // are the numbers availableHeight() feeds the peek/half/full snaps.
+  const vv = (height, scale = 1) => ({ height, scale });
+
+  ok('falls back to innerHeight when there is no visualViewport',
+    sheetViewportHeight(800, undefined) === 800);
+  ok('falls back to innerHeight when visualViewport reports nothing useful',
+    sheetViewportHeight(800, vv(0)) === 800);
+
+  // URL bar showing: 800 layout, 712 actually visible.
+  ok('an expanded URL bar shortens the available height',
+    sheetViewportHeight(800, vv(712)) === 712);
+  ok('a collapsed URL bar gives back the full height',
+    sheetViewportHeight(800, vv(800)) === 800);
+
+  // Page pinch-zoom divides visualViewport.height by the scale; undoing that
+  // keeps a zoomed page from collapsing the sheet.
+  ok('page pinch-zoom does not shrink the sheet',
+    sheetViewportHeight(800, vv(400, 2)) === 800, String(sheetViewportHeight(800, vv(400, 2))));
+  ok('never reports more than the layout viewport',
+    sheetViewportHeight(800, vv(500, 2)) === 800, String(sheetViewportHeight(800, vv(500, 2))));
+
+  // The keyboard shrinks the visual viewport far more than any browser
+  // chrome does. Resizing the sheet mid-typing is worse than the overshoot.
+  const keyboard = Math.round(800 * SHEET_KEYBOARD_RATIO) - 20;
+  ok('an open keyboard is ignored rather than resizing the sheet',
+    sheetViewportHeight(800, vv(keyboard)) === 800, `${keyboard} -> ${sheetViewportHeight(800, vv(keyboard))}`);
+  ok('the keyboard cutoff sits below any plausible URL bar',
+    SHEET_KEYBOARD_RATIO > 0.6 && SHEET_KEYBOARD_RATIO < 0.85, String(SHEET_KEYBOARD_RATIO));
+
+  ok('a zero-height layout viewport does not produce NaN snaps',
+    sheetViewportHeight(0, vv(600)) === 0);
+
+  const appSrc = readFileSync(join(__dirname, '../src/ui/app.js'), 'utf8');
+  ok('wireSheet listens for visualViewport resize, not just window resize',
+    /visualViewport\?\.addEventListener\('resize'/.test(appSrc));
+  ok('availableHeight measures the sheet bottom instead of re-deriving --transport-h',
+    /getComputedStyle\(sheet\)\.bottom/.test(appSrc)
+    && !/getPropertyValue\('--transport-h'\)/.test(appSrc));
+}
+
+console.log('\n--- landscape safe areas reach the bottom sheet ---');
+{
+  // Everything else on the mobile path already inset left/right (.stage,
+  // .transport); the sheet was the gap, so a landscape notch sat over its
+  // tab strip.
+  const cssSrc = readFileSync(join(__dirname, '../src/styles.css'), 'utf8');
+  const sheetRule = cssSrc.match(/html\[data-mode="mobile"\] \.side \{([^}]*)\}/);
+  ok('styles.css still has a mobile .side rule', !!sheetRule);
+  const body = sheetRule ? sheetRule[1] : '';
+  ok('the sheet insets its content from the left safe area',
+    /padding-left:\s*env\(safe-area-inset-left\)/.test(body));
+  ok('the sheet insets its content from the right safe area',
+    /padding-right:\s*env\(safe-area-inset-right\)/.test(body));
+  ok('the sheet box still spans edge to edge behind that padding',
+    /(?:^|[;\n])\s*left:\s*0/.test(body) && /(?:^|[;\n])\s*right:\s*0/.test(body));
+  ok('the sheet still sits on --sheet-bottom, which carries the bottom inset',
+    /bottom:\s*var\(--sheet-bottom\)/.test(body));
+  ok('--sheet-bottom folds in safe-area-inset-bottom in both transport states',
+    /--sheet-bottom:\s*var\(--transport-total-h\)/.test(cssSrc)
+    && /is-transport-hidden\s*\{\s*--sheet-bottom:\s*env\(safe-area-inset-bottom\)/.test(cssSrc));
+  ok('--transport-total-h is --transport-h plus the bottom inset',
+    /--transport-total-h:\s*calc\(var\(--transport-h\)\s*\+\s*env\(safe-area-inset-bottom\)\)/.test(cssSrc));
 }
 
 console.log('\n--- mobile touch targets clear 44x44pt ---');

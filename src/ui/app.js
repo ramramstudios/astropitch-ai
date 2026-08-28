@@ -1718,6 +1718,45 @@ export function nextSheetState(current, states = SHEET_STATES) {
   return states[(states.indexOf(current) + 1) % states.length];
 }
 
+/**
+ * A visual viewport shorter than this fraction of the layout viewport is read
+ * as an on-screen keyboard rather than a collapsing browser chrome. iOS
+ * Safari's URL bar plus toolbar is roughly 15% of a phone screen; the
+ * keyboard is 40-50%. The gap between them is wide enough that one constant
+ * separates the two cases without needing to detect the keyboard directly.
+ */
+export const SHEET_KEYBOARD_RATIO = 0.7;
+
+/**
+ * The viewport height the sheet's snap points should be measured against.
+ *
+ * `window.innerHeight` on iOS Safari reports the *large* viewport — the
+ * height the page would have with the URL bar collapsed — whether or not the
+ * bar is currently expanded, and collapsing it fires no window `resize`. So
+ * snap heights derived from it overshoot by the height of the bar, and
+ * `full` puts the top of the sheet under browser chrome.
+ * `visualViewport.height` is what is actually on screen; starfield.js
+ * already tracks it for the same reason.
+ *
+ * Two corrections on top of that:
+ * - Page pinch-zoom divides `visualViewport.height` by the zoom scale.
+ *   Multiplying back by `scale` recovers the layout height, so zooming the
+ *   page does not collapse the sheet to a fraction of the screen.
+ * - The keyboard shrinks the visual viewport too, by far more than any URL
+ *   bar. Resizing the sheet out from under someone who has just focused a
+ *   chart field is worse than the overshoot this is fixing, so a viewport
+ *   under SHEET_KEYBOARD_RATIO of the layout height is ignored.
+ */
+export function sheetViewportHeight(innerHeight, visual) {
+  if (!(innerHeight > 0)) return 0;
+  const h = visual?.height;
+  if (!(h > 0)) return innerHeight;
+  const layoutH = h * (visual.scale > 0 ? visual.scale : 1);
+  if (!(layoutH > 0)) return innerHeight;
+  if (layoutH < innerHeight * SHEET_KEYBOARD_RATIO) return innerHeight;
+  return Math.min(layoutH, innerHeight);
+}
+
 /** After a drag, settle on whichever snap height the sheet ended up closest to. */
 export function nearestSheetState(heights, currentPx, states = SHEET_STATES) {
   let nearest = states[0];
@@ -1741,9 +1780,17 @@ function wireSheet() {
   let drag = null;
 
   const availableHeight = () => {
-    const hidden = document.body.classList.contains('is-transport-hidden');
-    const transportH = hidden ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--transport-h')) || 0;
-    return window.innerHeight - transportH;
+    // The sheet's own computed `bottom` is `--sheet-bottom` resolved to px:
+    // --transport-h plus safe-area-inset-bottom while the transport shows,
+    // the inset alone once it is hidden. Reading it here keeps the snap math
+    // in step with the CSS instead of re-deriving it — the previous
+    // --transport-h read missed the home-indicator inset and the
+    // is-transport-hidden branch duplicated a rule styles.css already has.
+    // getPropertyValue('--sheet-bottom') would not do: an unregistered
+    // custom property computes to its unresolved `calc(... + env(...))`
+    // token stream, not a length.
+    const bottom = parseFloat(getComputedStyle(sheet).bottom) || 0;
+    return sheetViewportHeight(window.innerHeight, window.visualViewport) - bottom;
   };
 
   const recomputeHeights = () => {
@@ -1779,11 +1826,18 @@ function wireSheet() {
     if (mode === 'mobile' && state === 'peek') apply('half');
   };
 
-  window.addEventListener('resize', () => {
+  const onViewportChange = () => {
     if (mode !== 'mobile') return;
     recomputeHeights();
     apply(state, { persist: false });
-  });
+  };
+  window.addEventListener('resize', onViewportChange);
+  // iOS Safari collapses and expands the URL bar without firing a window
+  // resize; visualViewport does fire one. Only `resize` — starfield.js also
+  // listens for visualViewport `scroll` because it tracks a position, but
+  // the sheet only needs a height, and re-writing sheet.style.height on
+  // every scroll frame would be exactly the layout thrash item 7 is about.
+  window.visualViewport?.addEventListener('resize', onViewportChange);
 
   handle.addEventListener('pointerdown', (e) => {
     if (mode !== 'mobile') return;
