@@ -1757,6 +1757,14 @@ export function sheetViewportHeight(innerHeight, visual) {
   return Math.min(layoutH, innerHeight);
 }
 
+/**
+ * Where a drag of `dy` from `startHeight` puts the sheet, clamped to the
+ * snap range. Dragging up (negative dy) grows the sheet.
+ */
+export function clampSheetHeight(heights, startHeight, dy) {
+  return Math.min(heights.full, Math.max(heights.peek, startHeight - dy));
+}
+
 /** After a drag, settle on whichever snap height the sheet ended up closest to. */
 export function nearestSheetState(heights, currentPx, states = SHEET_STATES) {
   let nearest = states[0];
@@ -1839,11 +1847,34 @@ function wireSheet() {
   // every scroll frame would be exactly the layout thrash item 7 is about.
   window.visualViewport?.addEventListener('resize', onViewportChange);
 
+  // A pointermove can fire several times per frame, and unlike wheel.js's
+  // transform this writes `height` — a layout-triggering property on a
+  // subtree holding the whole five-tab control surface. So the drag keeps
+  // the same leading-edge rAF coalescing _setView uses (wheel.js): the
+  // height is recorded synchronously, the write happens once per frame, and
+  // the frame that runs uses the latest value rather than the one that
+  // scheduled it.
+  let dragFrame = 0;
+  const writeDragHeight = (px) => {
+    drag.height = px;
+    if (dragFrame) return;
+    dragFrame = requestAnimationFrame(() => {
+      dragFrame = 0;
+      if (drag) sheet.style.height = `${drag.height}px`;
+    });
+  };
+  const cancelDragFrame = () => {
+    if (!dragFrame) return;
+    cancelAnimationFrame(dragFrame);
+    dragFrame = 0;
+  };
+
   handle.addEventListener('pointerdown', (e) => {
     if (mode !== 'mobile') return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
-    drag = { pointerId: e.pointerId, startY: e.clientY, startHeight: sheet.getBoundingClientRect().height, moved: false };
+    const startHeight = sheet.getBoundingClientRect().height;
+    drag = { pointerId: e.pointerId, startY: e.clientY, startHeight, height: startHeight, moved: false };
     handle.setPointerCapture(e.pointerId);
   });
 
@@ -1855,14 +1886,20 @@ function wireSheet() {
       drag.moved = true;
       sheet.classList.add('is-sheet-dragging');
     }
-    const next = Math.min(heights.full, Math.max(heights.peek, drag.startHeight - dy));
-    sheet.style.height = `${next}px`;
+    writeDragHeight(clampSheetHeight(heights, drag.startHeight, dy));
   });
 
   const endDrag = (e) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
     const wasDrag = drag.moved;
+    // The height the drag last committed, not a measured rect: with the
+    // write coalesced, a pending frame means the rect can be one frame
+    // behind the gesture, and cancelling that frame here would freeze it
+    // there. Cancel rather than flush — apply() is about to set the snap
+    // height anyway, so flushing would only paint an intermediate one.
+    const endHeight = drag.height;
     drag = null;
+    cancelDragFrame();
     sheet.classList.remove('is-sheet-dragging');
     if (handle.hasPointerCapture?.(e.pointerId)) handle.releasePointerCapture(e.pointerId);
 
@@ -1870,7 +1907,7 @@ function wireSheet() {
       apply(nextSheetState(state));
       return;
     }
-    apply(nearestSheetState(heights, sheet.getBoundingClientRect().height));
+    apply(nearestSheetState(heights, endHeight));
   };
   handle.addEventListener('pointerup', endDrag);
   handle.addEventListener('pointercancel', endDrag);

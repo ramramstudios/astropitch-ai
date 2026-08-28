@@ -228,3 +228,99 @@ whether that reads as correct or as a glitch. Left for the owner.
   `touch-action: none`) and confirming the sheet keeps its size.
 - The `full` snap on a home-indicator device now that the bottom inset is
   subtracted: it should sit ~34px higher than before.
+
+---
+
+## Item 7 — Re-measure mobile pinch/pan render performance — **partly done**
+
+The roadmap's first bullet is fixed; the second is documented as an accepted
+cost with the reasoning below; the third (a harness) is waived.
+
+**Completed — the asymmetry the roadmap named**
+
+`wheel._setView` coalesced its writes into one `requestAnimationFrame`
+(`wheel.js`), but the sheet drag wrote `sheet.style.height` on every
+`pointermove` with no gate (`app.js`). That is backwards: a pointermove can
+fire several times per animation frame, and the sheet writes `height` — a
+**layout**-triggering property on the subtree holding the entire five-tab
+control surface — where the wheel writes `transform`, which the compositor
+can take. The gated one was the cheap one.
+
+- The drag now uses the same leading-edge pattern `_setView` uses: the height
+  is recorded synchronously, the DOM write is coalesced to once per frame,
+  and the frame that runs uses the latest value rather than the one that
+  scheduled it.
+- `endDrag` now snaps from the height the drag last recorded rather than
+  `sheet.getBoundingClientRect().height`. With the write coalesced, that rect
+  can be a frame behind the gesture, and cancelling the pending frame would
+  freeze it there. The pending frame is cancelled rather than flushed —
+  `apply()` sets the snap height immediately afterwards, so flushing would
+  only paint an intermediate value.
+- Extracted the clamp as an exported pure `clampSheetHeight(heights,
+  startHeight, dy)`, matching the existing `nextSheetState` /
+  `nearestSheetState` precedent, so the drag arithmetic is testable without
+  a DOM.
+- 16 new assertions (129 -> 145): the clamp table, that the clamped value
+  feeds `nearestSheetState` correctly at each snap, that `wheel.js` still
+  coalesces, that the sheet now schedules on a frame and skips scheduling
+  when one is pending, that `pointermove` no longer writes `style.height`
+  directly, and that the drag-suppression class and its CSS rule stay
+  paired. Negative-tested: putting the direct write back turns it red.
+
+**Documented, not changed — the 220ms height transition**
+
+`html[data-mode="mobile"] .side` animates `transition: height 220ms ease`.
+`height` is layout-triggering, and `.is-sheet-dragging` suppresses it during
+the drag but not on the snap-back, so the snap-back is ~13 frames of layout
+on that subtree. Keeping it, for three reasons:
+
+1. It is a one-shot 220ms transition at the *end* of a gesture, not a
+   per-frame cost during one. The thing that actually reads as jank — layout
+   thrash while your finger is moving — is what the rAF gate above addresses,
+   and the drag already runs with the transition off.
+2. The obvious alternative, animating `transform: translateY` on a
+   full-height sheet, is not a like-for-like swap. The sheet is
+   `overflow: hidden` with a `.tabpanel` that scrolls inside whatever height
+   it currently has; making it always full-height and translated down changes
+   what the panel's scroll area is, where it clips, and what the handle's
+   `getBoundingClientRect` returns during a drag. That is a redesign of the
+   sheet's geometry, not a perf tweak, and it is not verifiable here.
+3. `contain: layout paint` on `.side` would be the cheap middle option and
+   would confine the relayout to the sheet's subtree. Not applied: `contain`
+   makes the element a containing block for absolutely and fixed-positioned
+   descendants, `styles.css` has fourteen `position: absolute/fixed` rules,
+   and establishing which of them resolve against something outside `.side`
+   needs a rendered DOM. Shipping it blind could silently reposition a
+   control. **Recommended as a follow-up once someone has a device** — it is
+   a one-line change with a real payoff, but it needs to be looked at.
+
+**Waived**
+
+- Any actual measurement. There are no numbers in this entry, and none should
+  be inferred from it. `tests/mobile.test.mjs` is pure math and
+  `tests/run-browser.mjs` drives audio pages against a null sink; neither can
+  observe a dropped frame during a touch gesture. The roadmap's third bullet
+  asks for a decision on whether this becomes a browser page or manual QA:
+  **the recommendation is manual QA via a DevTools performance trace over
+  USB**, not a new page. A headless Chrome with no compositor under load and
+  no touch digitiser cannot reproduce the condition being measured, so a page
+  would produce numbers that look authoritative and mean nothing — the
+  opposite of what the audio stability work did, where the null sink still
+  let the audio thread be measured honestly.
+- Any claim that the change is faster. The rAF gate is correct by
+  construction (fewer forced layouts per frame cannot be slower), but "no
+  jank" is a measurement, and this run did not make one.
+
+**Needs manual QA on device**
+
+- A DevTools performance trace of a sheet drag on a real phone: forced
+  reflows per frame during the drag, and the frame budget of the snap-back
+  transition. This is the item's actual acceptance check and it has not been
+  done.
+- That the drag still tracks the finger with the write coalesced — one frame
+  of latency should be invisible, but that is an assumption until someone
+  drags it.
+- That the tap-to-cycle path (under 4px of travel) is unaffected: the
+  recorded height now seeds from `startHeight` at pointerdown, so a tap that
+  never moves still reports the height it started at.
+- Whether `contain: layout paint` on `.side` is safe, per the note above.

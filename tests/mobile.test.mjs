@@ -15,7 +15,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { nextPinchView, clampPanView, VIEW_MIN_SCALE, VIEW_MAX_SCALE } from '../src/ui/wheel.js';
-import { nextSheetState, nearestSheetState, sheetViewportHeight, SHEET_KEYBOARD_RATIO } from '../src/ui/app.js';
+import {
+  nextSheetState,
+  nearestSheetState,
+  clampSheetHeight,
+  sheetViewportHeight,
+  SHEET_KEYBOARD_RATIO,
+} from '../src/ui/app.js';
 import { originFromRect, farthestCorner } from '../src/ui/starfield.js';
 import { lifecycleStep, LIFECYCLE_STATES, AudioLifecycle } from '../src/audio/lifecycle.js';
 import {
@@ -484,6 +490,54 @@ console.log('\n--- landscape safe areas reach the bottom sheet ---');
     && /is-transport-hidden\s*\{\s*--sheet-bottom:\s*env\(safe-area-inset-bottom\)/.test(cssSrc));
   ok('--transport-total-h is --transport-h plus the bottom inset',
     /--transport-total-h:\s*calc\(var\(--transport-h\)\s*\+\s*env\(safe-area-inset-bottom\)\)/.test(cssSrc));
+}
+
+console.log('\n--- the sheet drag coalesces its writes like the wheel does ---');
+{
+  const heights = { peek: 76, half: 400, full: 700 };
+
+  ok('dragging up grows the sheet', clampSheetHeight(heights, 400, -120) === 520);
+  ok('dragging down shrinks the sheet', clampSheetHeight(heights, 400, 120) === 280);
+  ok('cannot be dragged above full', clampSheetHeight(heights, 400, -1000) === heights.full);
+  ok('cannot be dragged below peek', clampSheetHeight(heights, 400, 1000) === heights.peek);
+  ok('no movement holds the height', clampSheetHeight(heights, 400, 0) === 400);
+  ok('a drag that starts at full stays at full when pulled further up',
+    clampSheetHeight(heights, heights.full, -50) === heights.full);
+
+  // The clamp result is what endDrag now feeds nearestSheetState, instead of
+  // a rect that can be a frame behind the gesture.
+  ok('the clamped height snaps to the nearest state',
+    nearestSheetState(heights, clampSheetHeight(heights, 400, -120)) === 'half');
+  ok('a drag most of the way to full snaps to full',
+    nearestSheetState(heights, clampSheetHeight(heights, 400, -250)) === 'full');
+
+  const appSrc = readFileSync(join(__dirname, '../src/ui/app.js'), 'utf8');
+  const wheelSrc = readFileSync(join(__dirname, '../src/ui/wheel.js'), 'utf8');
+
+  // wheel.js coalesces its transform writes into one frame; the sheet writes
+  // `height`, which triggers layout, so it needs the gate at least as much.
+  ok('wheel.js still coalesces its view writes into one frame',
+    /_viewFrame\s*=\s*requestAnimationFrame/.test(wheelSrc));
+  ok('the sheet drag schedules its height write on a frame',
+    /dragFrame\s*=\s*requestAnimationFrame/.test(appSrc));
+  ok('the sheet drag skips scheduling when a frame is already pending',
+    /if \(dragFrame\) return;/.test(appSrc));
+  ok('pointermove no longer writes sheet.style.height directly',
+    !/pointermove[\s\S]{0,600}?sheet\.style\.height\s*=/.test(appSrc));
+  ok('ending a drag drops any pending frame', /cancelAnimationFrame\(dragFrame\)/.test(appSrc));
+  ok('endDrag snaps from the recorded height, not a possibly stale rect',
+    /apply\(nearestSheetState\(heights, endHeight\)\)/.test(appSrc));
+
+  // The snap-back animates `height`, which is layout-triggering, and
+  // .is-sheet-dragging only suppresses it during the drag. That is a
+  // deliberate accepted cost (see research/mobile-ux-run-log.md item 7);
+  // this pins the two rules so the pairing is not broken by accident.
+  const cssSrc = readFileSync(join(__dirname, '../src/styles.css'), 'utf8');
+  ok('the sheet still suppresses its height transition mid-drag',
+    /\.side\.is-sheet-dragging \{ transition: none; \}/.test(cssSrc));
+  ok('app.js still sets the class the suppression rule keys off',
+    appSrc.includes("classList.add('is-sheet-dragging')")
+    && appSrc.includes("classList.remove('is-sheet-dragging')"));
 }
 
 console.log('\n--- mobile touch targets clear 44x44pt ---');
