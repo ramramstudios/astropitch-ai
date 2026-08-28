@@ -513,3 +513,69 @@ value still wins over it.
 **Not verifiable here:** whether `peek` reads as "there is more below" or as
 "the controls are gone" on a real screen. That is the entire question and it
 needs a phone.
+
+---
+
+## Item 3 — Thumb-zone placement of play/stop and mode switch — **recommendation: no move**
+
+**What is actually true today**
+
+- The transport is `position: fixed; bottom: 0`, full width, and on mobile
+  `.transport-main` is a 6-column grid: `.transport-brand` (column 1), the
+  four `button.play` mode buttons `#transportModes` builds from `MODES`
+  (columns 2-5), and `.transport-hide` (column 6). Below it sits the
+  `.volume` row.
+- At 375px that makes each mode button ~62 x 46px — clear of 44x44pt on both
+  axes — and puts all four in the bottom **centre**, which is exactly
+  Hoober's comfortable zone. The two bottom *corners*, the parts of that zone
+  that are actually a stretch one-handed, hold `.transport-brand`, which is a
+  non-interactive `<img>`, and `.transport-hide`, a secondary action. **The
+  transport is already laid out correctly and should not be touched.**
+- `.sheet-handle` is 44px tall (`padding: 1.25rem 0` around a 4px grip) and
+  full width, so it clears the target bar comfortably.
+
+**Correction to the roadmap.** The bullet says `#sheetHandle` "is the one
+bottom-edge control competing with the OS home-indicator swipe". It is not
+near the bottom edge. The sheet's bottom sits at `--sheet-bottom`, which is
+`--transport-total-h` — 100px plus `safe-area-inset-bottom` on mobile — and
+at `peek` the sheet is only ~89px tall, so the handle is roughly 190px above
+the bottom of the screen. The control that actually occupies the home-indicator
+strip is the transport bar, and it already carries
+`padding-bottom: env(safe-area-inset-bottom)` plus `--transport-total-h`, so
+its buttons sit above the indicator rather than under it. There is no
+conflict to fix.
+
+**Recommendation: leave `.wheel-actions` in the top-right. Do not move it.**
+
+The roadmap flags Full-screen / Settings / How it works as "in the red zone",
+and they are — but that is the correct place for them. Thumb-zone guidance is
+about *frequently used* controls; the whole point of a reach map is that rare
+controls should occupy the far corners so the near ones stay free. All three
+are one-off: Settings and How it works open modals, and Full-screen is a mode
+you enter once. Moving them into reach would push them into competition with
+the four buttons that are pressed constantly, which is the opposite of the
+goal. After item 2 they are 44x44pt targets, so the only defect they had is
+already fixed.
+
+There is a real complaint underneath the roadmap's, and it is not
+reachability — it is that three text buttons across the top of the wheel are
+visual clutter, which is the user's own "crowded ... obstructions". That is
+worth addressing, but the fix is *fewer things in the kicker*, not *the same
+things lower down*, and where they would go is item 4's question. Deciding
+this one on its own would be premature.
+
+**One thing worth promoting instead.** `body.is-fullscreen` hides
+`.side-rail`, `.side` (the whole sheet) and `.wheel-kicker` and lets the
+wheel fill the viewport. It is an app-level CSS mode, not the browser
+Fullscreen API, so it works on iPhone Safari where the real API does not
+apply to arbitrary elements. **That is already the best answer this app has
+to "a clean screen without crowded tabs or obstructions"** — and on mobile it
+is buried in a 0.56rem text link in the corner, with its only exit being an
+undocumented tap on the background. If any part of item 3 is worth acting on,
+it is making that mode discoverable, not relocating the buttons. That
+overlaps item 5 (first-run hints), so it belongs in the same decision.
+
+**Waived / not verifiable here:** actual reach. Hoober's map is a population
+statistic over ~1,333 observations at ~49% one-handed grip, not a measurement
+of this layout on the owner's device and hand. Nothing here has been tried on
+a phone.
