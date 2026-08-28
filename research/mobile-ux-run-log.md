@@ -324,3 +324,106 @@ on that subtree. Keeping it, for three reasons:
   recorded height now seeds from `startHeight` at pointerdown, so a tap that
   never moves still reports the height it started at.
 - Whether `contain: layout paint` on `.side` is safe, per the note above.
+
+---
+
+## Item 8 — Confirm dark/light contrast holds against WCAG — **done**
+
+Every pair the roadmap named **passes**. A pair it did not name **fails**, and
+that is what changed.
+
+**Measured** (sRGB relative luminance, WCAG 2.x formula; ratios computed in
+`tests/mobile.test.mjs`, not recorded by hand)
+
+| pair | light | dark | bar |
+| --- | --- | --- | --- |
+| `.tab` — `--graphite` on `--panel-solid` | 7.31:1 | 10.44:1 | 4.5 (SC 1.4.3) |
+| `--graphite` on `--paper` | 6.88:1 | 11.25:1 | 4.5 |
+| active `.tab` — `--on-ink` on `--ink` | 19.68:1 | 17.87:1 | 4.5 |
+| sheet border `--ink` vs the page behind it | 17.87:1 | 17.87:1 | 3 (SC 1.4.11) |
+| sheet border `--ink` vs the sheet fill | 19.01:1 | 16.58:1 | 3 |
+| `--muted` on `--paper` **before** | **3.49:1** | 6.47:1 | 4.5 |
+| `--muted` on `--panel-solid` **before** | **3.71:1** | 6.00:1 | 4.5 |
+| `--muted` on `--paper` **after** | 4.56:1 | 6.47:1 | 4.5 |
+| `--muted` on `--panel-solid` **after** | 4.85:1 | 6.00:1 | 4.5 |
+
+**Two corrections to the roadmap**
+
+- `--graphite` is *not* the highest-risk pair. It clears AA with room in both
+  themes, at every size it is used at. `.tab` at 0.61rem needs no change.
+- `.chart-help` and `.wheel-kicker` do not carry `--graphite`. `.chart-help`
+  is `color: var(--ink)` and `.wheel-kicker` declares no colour at all, so it
+  inherits `--ink` from `body`. Both are 17.87:1 in both themes. Shrinking
+  them to 0.56rem on mobile does not create a contrast problem, because the
+  colour was never the marginal one.
+
+**Completed**
+
+- `--muted` in light mode was `#828282` — **3.49:1 on `--paper`, failing SC
+  1.4.3's 4.5:1 for small text**. Every light-mode `--muted` use is text
+  between 0.52rem and 1rem, well under the 24px "large text" threshold that
+  would drop the bar to 3:1: `.note` (0.59rem), `.side-tag` (0.52rem),
+  `ul.aspect-key .ak-glyph` (0.66rem), `.setting-switch__option` (0.58rem),
+  `.verdict-counts` (1rem), `.designer-lock` (0.65rem), `.designer-pitch`.
+  The first three of those render inside the mobile sheet, which is what puts
+  this in item 8's scope rather than outside it.
+  (`.verdict-score` at 1.7rem = 27.2px *is* large text and was passing at
+  3.49:1 against the 3:1 bar; it passes more comfortably now.)
+- Changed to `#6f6f6f`: 4.56:1 on `--paper`, 4.85:1 on `--panel-solid`. This
+  is the **lightest** neutral grey that clears 4.5:1 against the page
+  background, chosen so the fix is the smallest visual change that passes
+  rather than a wholesale darkening of every secondary label.
+- Dark mode's `--muted` (`#949490`, 6.47:1) already passed and is untouched.
+- `--muted` is referenced only in `styles.css`, only as `color`, and never
+  from JS or SVG fill — checked before changing it, so there is no drawing
+  code depending on the old value.
+- **SC 1.4.11, the sheet boundary:** passes, and the roadmap's worry about
+  the `box-shadow` doing nothing in dark mode is not a problem. The shadow is
+  not load-bearing — the separation is `border-top: 1px solid var(--ink)`,
+  which is 16.58:1 against the sheet's own fill and 17.87:1 against the page
+  behind it in dark mode. Asserted that the border stays `--ink` so the
+  shadow never becomes the only separator.
+- 18 new assertions (145 -> 163). They parse the palette out of `styles.css`
+  — resolving one level of `var()` aliases, since light-mode `--panel-solid`
+  is `var(--paper-bright)`, and layering dark over light the way the cascade
+  does — then *compute* each ratio rather than recording it, so moving a
+  token has to come back through this suite. Two sanity checks pin the
+  formula (white-on-black = 21:1, symmetry). Negative-tested: restoring
+  `#828282` turns two of them red with the real 3.49:1 / 3.71:1 numbers.
+
+**Recorded as a decision, not a violation**
+
+`--hairline`, the 1px rule between tab cells, is ~1.5:1 against the sheet
+fill in both themes. Not treated as an SC 1.4.11 failure: that criterion
+covers visual information *required* to identify a component or its state,
+and the active tab is identified by a full `--ink` / `--on-ink` inversion at
+19:1, not by the separators. There is an assertion pinning that the active
+state stays an inversion, so if it ever becomes a subtler treatment this
+reasoning stops holding and the test says so.
+
+**Waived**
+
+- Contrast of text over the wheel graphics, images or gradients. The pairs
+  here are all flat token-on-token. Text over the chart wheel or over
+  `--paper-translucent` (the desktop `.side` fill, an 0.86-alpha layer)
+  composites against whatever is behind it and cannot be resolved without a
+  render.
+- `--muted` over `--hover` / `--tab-hover` backgrounds: `#6f6f6f` on
+  `#e5e5e1` is 4.06:1, still short of 4.5. Not chased here — it is a
+  transient hover state on a pointer device, none of the failing selectors
+  are hover targets on mobile, and darkening far enough to cover it would
+  have meant a much larger visual change than the fix required.
+- Non-text contrast of focus indicators, form borders and disabled states.
+  Out of the item's scope (sheet and tabs) and a much larger audit.
+- Browser suites — see below.
+
+**Needs manual QA on device**
+
+- That `#6f6f6f` still reads as *secondary* next to `--graphite` (`#545454`)
+  and `--ink` on a phone screen at 0.52rem. The three greys are now 0x6f,
+  0x54 and 0x0b; on a bright outdoor screen the first two may be harder to
+  tell apart than intended. This is a legibility/aesthetic judgement the
+  maths cannot make.
+- Both themes on a real display, including the OS auto-switch, since the
+  ratios above are computed in sRGB and a phone panel with True Tone or
+  a wide-gamut profile will not render them identically.

@@ -540,6 +540,117 @@ console.log('\n--- the sheet drag coalesces its writes like the wheel does ---')
     && appSrc.includes("classList.remove('is-sheet-dragging')"));
 }
 
+console.log('\n--- WCAG contrast on the mobile sheet surfaces ---');
+{
+  // The palette is the source of truth, read out of styles.css so a token
+  // edit has to come back through here. Ratios are computed, not recorded,
+  // so this stays honest if a colour moves.
+  const cssSrc = readFileSync(join(__dirname, '../src/styles.css'), 'utf8');
+
+  const tokens = (blockRe) => {
+    const m = cssSrc.match(blockRe);
+    const out = {};
+    if (!m) return out;
+    // Hex literals and one-level aliases both: --panel-solid is declared as
+    // var(--paper-bright) in light mode and as a hex in dark mode.
+    for (const d of m[1].matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8}|var\(--[\w-]+\))\s*;/g)) {
+      out[d[1]] = d[2];
+    }
+    return out;
+  };
+  // Dark mode only redeclares what it changes, so it inherits the light
+  // block for everything else — the same way the cascade does.
+  const lightRaw = tokens(/:root \{([\s\S]*?)\n\}/);
+  const darkRaw = { ...lightRaw, ...tokens(/:root\[data-theme="dark"\] \{([\s\S]*?)\n\}/) };
+  const resolve = (raw) => {
+    const out = {};
+    for (const key of Object.keys(raw)) {
+      let v = raw[key];
+      for (let i = 0; i < 8 && v && v.startsWith('var('); i++) v = raw[v.slice(4, -1)];
+      if (v && v.startsWith('#')) out[key] = v;
+    }
+    return out;
+  };
+  const light = resolve(lightRaw);
+  const dark = resolve(darkRaw);
+
+  const chan = (c) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = (hex) => {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? [...h].map((d) => d + d).join('') : h;
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+    return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b);
+  };
+  const contrast = (a, b) => {
+    const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+    return (x + 0.05) / (y + 0.05);
+  };
+
+  const round2 = (n) => Math.round(n * 100) / 100;
+  // SC 1.4.3: 4.5:1 for text under 24px (or under 18.66px bold).
+  // SC 1.4.11: 3:1 for the visual boundary of a UI component.
+  const BODY = 4.5;
+  const NON_TEXT = 3;
+
+  const check = (label, theme, fg, bg, min) => {
+    const pal = theme === 'dark' ? dark : light;
+    const a = pal[fg];
+    const b = pal[bg];
+    if (!a || !b) { ok(`${label} (${theme}): tokens present`, false, `${fg}=${a} ${bg}=${b}`); return; }
+    const r = contrast(a, b);
+    ok(`${label} (${theme})`, r >= min, `${a} on ${b} = ${round2(r)}:1, needs ${min}:1`);
+  };
+
+  // Sanity: the formula reproduces two ratios that are not in dispute.
+  ok('contrast() agrees with the known white-on-black ratio',
+    Math.abs(contrast('#ffffff', '#000000') - 21) < 0.01, String(round2(contrast('#ffffff', '#000000'))));
+  ok('contrast() is symmetric',
+    contrast('#545454', '#fbfbfa') === contrast('#fbfbfa', '#545454'));
+
+  // .tab — var(--graphite) at 0.61rem uppercase over the sheet's
+  // --panel-solid. The roadmap called this the highest-risk pair; it is not,
+  // and this pins that it stays that way.
+  check('.tab label: --graphite on the sheet background', 'light', '--graphite', '--panel-solid', BODY);
+  check('.tab label: --graphite on the sheet background', 'dark', '--graphite', '--panel-solid', BODY);
+  // and the same colour over the page, which is what .panel-lede etc. sit on
+  check('--graphite small text on the page background', 'light', '--graphite', '--paper', BODY);
+  check('--graphite small text on the page background', 'dark', '--graphite', '--paper', BODY);
+
+  // --muted is the token that actually failed: 3.49:1 in light mode, on
+  // .note / .side-tag / .ak-glyph / .setting-switch__option, three of which
+  // are inside the sheet.
+  check('--muted small text on the page background', 'light', '--muted', '--paper', BODY);
+  check('--muted small text on the page background', 'dark', '--muted', '--paper', BODY);
+  check('--muted small text on the sheet background', 'light', '--muted', '--panel-solid', BODY);
+  check('--muted small text on the sheet background', 'dark', '--muted', '--panel-solid', BODY);
+
+  // The active tab inverts rather than tinting, so it is the easy case.
+  check('active .tab: --on-ink on --ink', 'light', '--on-ink', '--ink', BODY);
+  check('active .tab: --on-ink on --ink', 'dark', '--on-ink', '--ink', BODY);
+
+  // SC 1.4.11 — the sheet's boundary against both the surface it sits on and
+  // its own fill. The box-shadow does nothing in dark mode, so the 1px
+  // border-top is the whole separation there; it is --ink, which is why that
+  // is fine.
+  check('sheet boundary vs the page behind it', 'light', '--ink', '--paper', NON_TEXT);
+  check('sheet boundary vs the page behind it', 'dark', '--ink', '--paper', NON_TEXT);
+  check('sheet boundary vs the sheet fill', 'light', '--ink', '--panel-solid', NON_TEXT);
+  check('sheet boundary vs the sheet fill', 'dark', '--ink', '--panel-solid', NON_TEXT);
+
+  ok('the sheet still draws that boundary with --ink, not the shadow alone',
+    /html\[data-mode="mobile"\] \.side \{[^}]*border-top: 1px solid var\(--ink\)/.test(cssSrc));
+
+  // Not asserted as a violation, recorded as a decision: --hairline is the
+  // 1px rule between tab cells at ~1.5:1. SC 1.4.11 covers what is *required*
+  // to identify a component or its state, and the active tab is identified by
+  // a full --ink/--on-ink inversion, not by these separators.
+  ok('active-tab state is carried by an inversion, not by the hairline rule',
+    /\.tab\.is-active \{[^}]*background: var\(--ink\)[^}]*color: var\(--on-ink\)/.test(cssSrc));
+}
+
 console.log('\n--- mobile touch targets clear 44x44pt ---');
 {
   // No DOM here, so this reads the declarations straight out of styles.css.

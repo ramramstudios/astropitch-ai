@@ -3,7 +3,15 @@
   --paper-bright: #fbfbfa;
   --ink: #0b0b0b;
   --graphite: #545454;
-  --muted: #828282;
+  /* #828282 was 3.49:1 on --paper, under WCAG SC 1.4.3's 4.5:1 for small
+     text, and every light-mode --muted use is text at 0.52-1rem — .note,
+     .side-tag, ul.aspect-key .ak-glyph, .setting-switch__option,
+     .verdict-counts, .designer-lock — three of which sit inside the mobile
+     sheet. #6f6f6f is the lightest neutral grey that clears 4.5:1 against
+     --paper (4.56:1), so this is the smallest change that passes rather
+     than a wholesale darkening. Dark mode's #949490 already passes at
+     6.47:1 and is left alone. */
+  --muted: #6f6f6f;
   --hairline: #cfcfcb;
   --soft-line: #e3e3df;
   --on-ink: #fff;
