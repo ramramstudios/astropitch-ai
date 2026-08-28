@@ -427,3 +427,89 @@ reasoning stops holding and the test says so.
 - Both themes on a real display, including the OS auto-switch, since the
   ratios above are computed in sRGB and a phone panel with True Tone or
   a wide-gamut profile will not render them identically.
+
+---
+
+# Recommendations — items 1, 3, 4, 5, 9
+
+These five were **deliberately not shipped**. Each changes the product's
+shape — the default sheet state, where the top-right controls live, whether
+all five tabs stay, a new first-run hint surface, and what a cold visit
+shows — and those are the owner's calls, not this run's. What follows is the
+investigation each item's bullets asked for, a concrete recommendation with
+the diff that would make it, and the tradeoff. Nothing below is applied to
+the branch; where something was coded far enough to check the recommendation
+holds, that is said explicitly and the code was not kept.
+
+---
+
+## Item 1 — Default mobile sheet state and what's visible in it — **recommendation**
+
+**What is actually true today** (re-checked against the file, not the
+roadmap's line numbers)
+
+- `wireSheet()` seeds `state` from `localStorage['astropitch.sheetState']`
+  and falls back to `'half'`. The drag and tap handlers early-return unless
+  `mode === 'mobile'`, so desktop never writes that key — the roadmap's
+  correction here is right, there is no inherited desktop state.
+- `recomputeHeights()` sets `peek` to `Math.round(Math.max(56, handleH +
+  tabsH))`. The `76` in
+  `html[data-mode="mobile"] .side { height: var(--sheet-peek-h, 76px) }` is
+  only the pre-measurement fallback; JS overwrites it on the first
+  `setSheetMode('mobile')`. So `peek` today is roughly a 44px handle plus a
+  ~45px tab strip — **the collapsed sheet is the whole five-tab strip and
+  nothing else**. It is not transport-only, and it never was.
+- `expandSheetIfPeeking()` is called from `select()` on *every* tab
+  activation, including the keyboard arrow path, and promotes `peek → half`.
+  It exists precisely because a tab tapped at peek would otherwise reveal
+  nothing.
+
+**Recommendation: change the fallback to `peek`; do not hide the tab strip.**
+
+The two halves of the roadmap's candidate should be split, because only one
+of them is cheap and only one of them is clearly right.
+
+*Do this — one line:*
+
+```
+-  let state = SHEET_STATES.includes(stored(SHEET_KEY)) ? stored(SHEET_KEY) : 'half';
++  let state = SHEET_STATES.includes(stored(SHEET_KEY)) ? stored(SHEET_KEY) : 'peek';
+```
+
+A first mobile visit then lands on wheel + transport + a 90px tab strip,
+which is as close to "the wheel is the objective" as this costs. Returning
+visitors keep whatever they last left, which is the right behaviour: someone
+who works at `half` should not be reset every session. **Honour the persisted
+value** — do not clear it. The key is only ever written from mobile, so there
+is no stale-desktop-state problem to solve, and resetting it would punish
+exactly the users who have expressed a preference.
+
+*Do not do this — hiding `.tabs` at peek.* It needs three coordinated
+changes (a `.tabs` visibility rule keyed off a peek class, dropping `tabsH`
+from the `peek` formula, and re-deciding `expandSheetIfPeeking`) and it
+takes away the app's only visible affordance that there *is* anything below
+the wheel. A 90px strip showing five words is not the crowding problem; the
+`half` sheet covering 52% of the screen on arrival is. Fixing the default
+gets most of the benefit for a hundredth of the risk. If the strip still
+feels heavy afterwards, that is item 4's question (five tabs), not this one.
+
+**Tradeoff, stated plainly**
+
+Landing on `peek` means the Chart form — the thing a new user must reach to
+do anything — starts off-screen. That is a real cost and it is the argument
+for `half`. Two things blunt it: `expandSheetIfPeeking()` already promotes
+the sheet on any tab tap, so the form is one tap away and that tap is on a
+visible, labelled target; and item 9's recommendation (seed the sky chart)
+means the first visit has something to hear before it has anything to type,
+which is what makes a collapsed sheet defensible rather than obstructive.
+**These two items should be decided together.** `peek` as a default with an
+empty wheel behind it would be worse than what exists now.
+
+**Cost:** one line, plus a test. `tests/mobile.test.mjs` does not assert the
+default state at all today, so the change is currently unguarded — the diff
+should come with an assertion that the fallback is `peek` and that a stored
+value still wins over it.
+
+**Not verifiable here:** whether `peek` reads as "there is more below" or as
+"the controls are gone" on a real screen. That is the entire question and it
+needs a phone.
