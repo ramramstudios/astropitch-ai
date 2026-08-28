@@ -657,3 +657,82 @@ estimate, not a prototype.
 **Needs manual QA on device:** the min-content estimate, on the narrowest
 supported screen, in both themes, and with whatever mono the device actually
 resolves from `--mono`.
+
+---
+
+## Item 5 — First-run contextual hints (pinch/pan, sheet drag) — **recommendation: one hint, not two**
+
+**What is actually true today**
+
+- Nothing to extend. There is no first-run flag anywhere in `src/`. The only
+  `hint` element is `.readout-hint`, built in `clearReadout()` as a
+  `document.createElement('p')` swapped in with `replaceChildren` — the
+  pattern the roadmap points at, and a good one to copy: no markup to add, no
+  element to hide, and the thing it replaces is a placeholder nobody misses.
+- The trigger points exist and need no new plumbing. First pinch is the
+  two-pointer branch in `wheel.js`'s `_onViewPointerDown`, which sets
+  `this._pinch`; first sheet drag is the `drag.moved` flip in the handle's
+  `pointermove` — the same flip that now adds `.is-sheet-dragging`.
+- `stored()` is the right home for a "seen" flag: one `try/catch` around
+  `localStorage`, already shared by `SHEET_KEY` / `MODE_KEY` /
+  `ACTIVE_TAB_KEY`, degrading to a session-only no-op in private mode and on
+  `file://`.
+- The **How it works** modal is already re-enterable, closes on `Esc`, and
+  returns focus to its opener. Its `open()` is a closure inside its wiring
+  function, not exported, so anything wanting to link into it needs a small
+  hook — the same one-line `let openAbout = () => {}` pattern `app.js`
+  already uses for `setSheetMode`, `expandSheetIfPeeking`, `toggleTransport`
+  and `toggleFullscreen`.
+
+**Recommendation: ship at most one hint, and make it the sheet, not the pinch.**
+
+The roadmap proposes two: a first-pinch hint and a first-sheet-drag hint. Two
+is one too many, and the pinch one is the weaker of the pair.
+
+- **Drop the pinch hint.** A hint that fires *on* the first pinch teaches
+  nothing — the user has already discovered the gesture, and the tooltip
+  arrives to congratulate them while covering the thing they just zoomed. To
+  teach it you would have to show it *before* the first pinch, which is the
+  front-loaded modal the roadmap and this run both argue against. Pinch-to-zoom
+  on a large graphic is also the single most transferred gesture on a
+  touchscreen; it is close to the definition of an affordance that does not
+  need teaching.
+- **Keep the sheet hint, and point it at the tap, not the drag.** The handle
+  is a 36x4px grip. Dragging it is guessable; that a *tap* cycles
+  peek → half → full (`nextSheetState`) is not, and it is the cheaper
+  interaction on a phone. This becomes materially more valuable if item 1
+  ships: a sheet that defaults to `peek` needs to say once how to open it.
+  **Item 5 should be decided after item 1, and is close to unnecessary
+  without it.**
+
+*The diff, concretely:*
+
+- A `HINT_KEY = 'astropitch.hintsSeen'` alongside the other keys, read and
+  written through `stored()`.
+- In `wireSheet`, on the first `drag.moved` flip *or* the first tap-cycle,
+  set the flag. Show the hint on entering mobile mode when the flag is
+  absent: `handle.setAttribute('data-hint', 'Tap to open · drag to resize')`
+  and a CSS `::after` on `.sheet-handle[data-hint]` — no new element, no new
+  markup, and it disappears by removing one attribute.
+- Style it unmistakably as an annotation, not a control. The roadmap's own
+  warning is the operative one: a coachmark styled like a button gets tapped
+  like one. `--muted` text (now AA-compliant, per item 8), no border, no
+  background.
+- Re-entry is the existing **How it works** modal, via an exported `openAbout`
+  hook, so nothing new has to be re-findable.
+
+**Tradeoff.** Any first-run hint is a permanent piece of state and a
+permanent piece of UI that 100% of users see and ~0% need twice. It also
+introduces a failure mode this app does not currently have: in private
+browsing `stored()` silently no-ops, so the hint returns on *every* visit and
+becomes furniture. That is survivable for one line of muted text on a handle;
+it would not be for a multi-step tour, which is the strongest argument for
+capping this at one hint.
+
+**Coded far enough to check:** no. The trigger points and the `stored()`
+plumbing were read and confirmed to exist; nothing was written. The
+`::after`-on-the-handle approach is the part that most needs a device — the
+handle is 44px tall and full width, and whether a line of text fits above the
+grip without pushing the tab strip down is a layout question, not a code one.
+
+**Needs manual QA on device:** all of it, if built.
