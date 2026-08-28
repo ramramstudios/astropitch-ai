@@ -343,6 +343,7 @@ function boot() {
   // calculations read that class.
   wireTransportVisibility();
   wireLayoutMode();
+  wireFullscreen();
   wireKeyboard();
   wireAudioLifecycle();
   // Phase 5: native shells only — PWA keeps the service worker as sole owner.
@@ -1883,6 +1884,47 @@ function wireTransportVisibility() {
   apply(hidden);
 }
 
+let toggleFullscreen = () => {};
+let isFullscreenActive = () => false;
+
+function wireFullscreen() {
+  const btn = $('#fullscreenBtn');
+  const stage = $('#stage');
+  let active = false;
+
+  const apply = (next) => {
+    active = next;
+    document.body.classList.toggle('is-fullscreen', active);
+    btn.setAttribute('aria-pressed', String(active));
+    btn.title = active ? 'Exit full-screen (F)' : 'Enter full-screen (F)';
+    btn.textContent = active ? 'Exit full-screen' : 'Full-screen';
+    // The wheel's box changes size when the chrome around it is hidden or
+    // restored, so the starfield and scope canvas need to re-measure — same
+    // reason collapseSide's apply() does this.
+    requestAnimationFrame(onResize);
+  };
+
+  toggleFullscreen = () => apply(!active);
+  isFullscreenActive = () => active;
+
+  btn.addEventListener('click', (e) => {
+    // Without this, the same click bubbles up to the stage listener below,
+    // which — now that `active` is already true — reads it as a click on
+    // the background and immediately exits again.
+    e.stopPropagation();
+    toggleFullscreen();
+  });
+
+  // The visible exit affordance once every other control is hidden: click
+  // the background to leave. Clicks inside the wheel are excluded so sign,
+  // planet, and aspect selection still works while full-screen.
+  stage.addEventListener('click', (e) => {
+    if (!active) return;
+    if (e.target.closest('.wheel-holder')) return;
+    apply(false);
+  });
+}
+
 function wireKeyboard() {
   document.addEventListener('keydown', (e) => {
     const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
@@ -1903,6 +1945,14 @@ function wireKeyboard() {
     }
     if (e.key === ']') {
       toggleTransport();
+      return;
+    }
+    if (e.key.toLowerCase() === 'f') {
+      toggleFullscreen();
+      return;
+    }
+    if (e.key === 'Escape' && isFullscreenActive()) {
+      toggleFullscreen();
       return;
     }
     const mode = MODES.find((m) => m.key === e.key.toLowerCase());

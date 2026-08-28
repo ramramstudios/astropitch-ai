@@ -2158,4 +2158,68 @@ html[data-mode="mobile"] .verdict-title { font-size: 1.35rem; }
 }
 
 html[data-mode="mobile"] .designer-row { font-size: 0.58rem; }
+
+/* Full-screen: an app-level presentation mode (distinct from the browser's
+   native fullscreen API) that hides every chrome element and lets the wheel
+   fill the viewport. Independent of is-side-collapsed and is-transport-
+   hidden — both classes stay on <body>/.stage underneath and the layout they
+   describe resumes once full-screen exits. Selectors below are kept at the
+   end of the file and padded with the (structurally redundant) .stage class
+   so they out-rank the focus-mode rules nested under .stage.is-side-
+   collapsed earlier in this file — same specificity fight as the mobile
+   overrides above, resolved the same way: match or exceed, and win ties by
+   coming later in the file. */
+body.is-fullscreen .stage .side-rail,
+body.is-fullscreen .stage .side,
+body.is-fullscreen .stage.is-side-collapsed .side,
+body.is-fullscreen .stage .wheel-kicker,
+body.is-fullscreen .stage .readout,
+body.is-fullscreen .transport-rail {
+  display: none;
+}
+
+body.is-fullscreen footer.transport { display: none; }
+
+body.is-fullscreen .stage,
+body.is-fullscreen .stage.is-side-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "wheel";
+  /* The base rule sets align-items: start, which leaves the grid row sized
+     to its content — with only one short row now, min-height's extra space
+     would sit below it instead of around the wheel. Stretch the row to fill
+     that height so .wheel-panel's own flex centering has room to work. */
+  align-items: stretch;
+  min-height: 100vh;
+  max-width: 100vw;
+  padding:
+    max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+}
+
+body.is-fullscreen .stage .wheel-panel,
+body.is-fullscreen .stage.is-side-collapsed .wheel-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+/* 90 rather than 100 of each axis: a hard edge-to-edge circle reads as
+   cropped, so the wheel keeps a visible margin on every side. */
+body.is-fullscreen .stage .wheel-holder,
+body.is-fullscreen .stage.is-side-collapsed .wheel-holder {
+  max-width: min(90vh, 90vw, 1040px);
+  margin: 0;
+}
+
+/* Clicking the background is the exit affordance once the rest of the
+   chrome (including the button that opened full-screen) is hidden — see
+   the .stage click handler in wireFullscreen(). The pointer cursor is the
+   only visible hint that the background is clickable; .wheel-holder's own
+   children set their own cursor and are excluded from the exit handler, so
+   this doesn't suggest the wheel itself exits full-screen. */
+body.is-fullscreen .stage { cursor: pointer; }
+body.is-fullscreen .stage .wheel-holder { cursor: default; }
 html[data-mode="mobile"] .designer-switch .nm { flex: 1; }
