@@ -158,8 +158,18 @@ select:focus-visible,
 
 /* At 11px tall this is well under a comfortable tap target; padding grows
    the hit area around the same small link-styled text rather than enlarging
-   the text itself. */
-html[data-mode="mobile"] .chart-help { padding: 1.1rem 0.1rem; font-size: 0.56rem; }
+   the text itself. The vertical padding alone clears 44px; min-width is what
+   guarantees the other axis, because with 0.1rem of side padding the hit area
+   was otherwise just however wide the label's glyphs happened to render.
+   These three sit in a flex row, so min-width also stops them shrinking
+   under 44px when the row runs out of space (iOS HIG 44x44pt / WCAG 2.2
+   SC 2.5.5 AAA; SC 2.5.8 AA's weaker 24x24 bar is cleared either way). */
+html[data-mode="mobile"] .chart-help {
+  padding: 1.1rem 0.35rem;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 0.56rem;
+}
 
 /* The rail keeps its own column in both states, so the toggle never moves out
    from under the pointer when you use it. */
@@ -1470,10 +1480,13 @@ button.play.is-active {
   cursor: pointer;
 }
 
-/* 24px is under a comfortable tap size, but the transport's mobile .volume
-   row (below, under max-width:660px) is only 42px tall, so this goes as
-   large as that allows rather than the full 44px. */
-html[data-mode="mobile"] .volume-toggle { width: 2.5rem; height: 2.5rem; }
+/* 24px is under a comfortable tap size. The mobile .volume row was 42px
+   tall, which capped this at 40px; the row is now 44px (see the
+   html[data-mode="mobile"] .volume rule below) so the toggle can carry the
+   full 44x44pt iOS HIG target. The transport's own budget absorbs it:
+   --transport-h is 100px on mobile against .transport-main's 46px plus this
+   row's 44px. */
+html[data-mode="mobile"] .volume-toggle { width: 2.75rem; height: 2.75rem; }
 
 .volume-toggle:hover { background: var(--transport-hover); }
 .volume-toggle:focus-visible { outline: 1px solid var(--transport-fg); outline-offset: 2px; }
@@ -1890,6 +1903,13 @@ html[data-mode="mobile"] .wheel-holder {
 html[data-mode="mobile"] { --transport-h: 100px; }
 
 html[data-mode="mobile"] .wheel-kicker { font-size: 0.56rem; }
+
+/* Trading gap for .chart-help's side padding: 5.6px + 8px + 5.6px between
+   two buttons is the same 19.2px of separation the 1rem gap gave with
+   0.1rem padding, but the dead space is now inside the tap targets instead
+   of between them. Net cost to the row is 8px, not the 24px that growing
+   the padding alone would have taken off the ellipsised .chart-label. */
+html[data-mode="mobile"] .wheel-actions { gap: 0.5rem; }
 html[data-mode="mobile"] .angle-label { font-size: 18px; }
 html[data-mode="mobile"] .sign-name { font-size: 12px; }
 html[data-mode="mobile"] .sign-glyph { font-size: 24px; }
@@ -1940,10 +1960,12 @@ html[data-mode="mobile"] button.play {
 html[data-mode="mobile"] .play-name { font-size: 0.88rem; }
 html[data-mode="mobile"] .play-sub { display: none; }
 
+/* 44px, not 42, so .volume-toggle can be a full 44x44pt target. 46px
+   (.transport-main) + 44px still fits the 100px --transport-h. */
 html[data-mode="mobile"] .volume {
   align-self: center;
   width: min(280px, 86vw);
-  height: 42px;
+  height: 44px;
   padding: 0;
 }
 

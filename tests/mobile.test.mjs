@@ -418,5 +418,82 @@ console.log('\n--- native bridge: app.js and index.html stay wired ---');
     htmlSrc.includes('!window.__astropitchNativeShell'));
 }
 
+console.log('\n--- mobile touch targets clear 44x44pt ---');
+{
+  // No DOM here, so this reads the declarations straight out of styles.css.
+  // That is weaker than a real layout measurement — it cannot see the
+  // cascade, and it trusts the rem base to be 16px — but it does pin the
+  // numbers so a later edit cannot quietly drop a target back under 44px.
+  // Actual on-device tap sizing stays manual QA (see the file header).
+  const cssSrc = readFileSync(join(__dirname, '../src/styles.css'), 'utf8');
+
+  // Last matching rule wins, which is the cascade rule that matters here:
+  // every selector below is declared once, and a later redeclaration should
+  // be what gets asserted.
+  const ruleBody = (selector) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Anchored at a line start (every rule below is declared on its own
+    // line) so a preceding `*/` comment close does not hide the rule.
+    const re = new RegExp(`(?:^|[\\n;}])[\\t ]*${escaped}\\s*\\{([^}]*)\\}`, 'g');
+    let body = null;
+    for (const m of cssSrc.matchAll(re)) body = m[1];
+    return body;
+  };
+  const decl = (body, prop) => {
+    if (body === null) return null;
+    const m = body.match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;}]+)`));
+    return m ? m[1].trim() : null;
+  };
+  // Only the literal forms these rules actually use; anything else returns
+  // NaN and fails the check rather than silently passing.
+  const px = (v) => {
+    if (v === null) return NaN;
+    const m = String(v).match(/^(-?[\d.]+)(px|rem)$/);
+    if (!m) return NaN;
+    return m[2] === 'rem' ? parseFloat(m[1]) * 16 : parseFloat(m[1]);
+  };
+
+  const HIG = 44; // iOS HIG 44x44pt; also WCAG 2.2 SC 2.5.5 (AAA).
+
+  const toggle = ruleBody('html[data-mode="mobile"] .volume-toggle');
+  ok('styles.css still has a mobile .volume-toggle size rule', toggle !== null);
+  const tw = px(decl(toggle, 'width'));
+  const th = px(decl(toggle, 'height'));
+  ok('.volume-toggle is at least 44px wide on mobile', tw >= HIG, `${tw}px`);
+  ok('.volume-toggle is at least 44px tall on mobile', th >= HIG, `${th}px`);
+
+  // The toggle only fits if the row it sits in is at least as tall.
+  const volRow = ruleBody('html[data-mode="mobile"] .volume');
+  ok('styles.css still has a mobile .volume row rule', volRow !== null);
+  const rowH = px(decl(volRow, 'height'));
+  ok('the mobile .volume row is tall enough to hold the toggle',
+    rowH >= th, `row ${rowH}px vs toggle ${th}px`);
+
+  const help = ruleBody('html[data-mode="mobile"] .chart-help');
+  ok('styles.css still has a mobile .chart-help rule', help !== null);
+  // border-box is global (styles.css `* { box-sizing: border-box }`), so
+  // min-width/min-height are the whole target, padding included.
+  ok('.chart-help declares a >=44px min-width on mobile',
+    px(decl(help, 'min-width')) >= HIG, String(decl(help, 'min-width')));
+  ok('.chart-help declares a >=44px min-height on mobile',
+    px(decl(help, 'min-height')) >= HIG, String(decl(help, 'min-height')));
+
+  // The vertical padding was already carrying the height before min-height
+  // was added; keep it asserted so removing it is a deliberate act.
+  const helpPad = decl(help, 'padding');
+  const padY = px((helpPad || '').split(/\s+/)[0]);
+  ok('.chart-help keeps enough vertical padding to reach 44px without min-height',
+    padY * 2 >= 32, `${padY}px x2`);
+
+  // Targets can each clear 44px and still mis-tap if they abut. .wheel-actions
+  // is the only mobile row of three adjacent small targets.
+  const actions = ruleBody('html[data-mode="mobile"] .wheel-actions')
+    ?? ruleBody('.wheel-actions');
+  const gap = px(decl(actions, 'gap'));
+  const padX = px((helpPad || '').split(/\s+/)[1]);
+  ok('adjacent .chart-help targets keep visible separation',
+    gap + padX * 2 >= 16, `gap ${gap}px + 2x${padX}px padding`);
+}
+
 console.log(`\n${fails === 0 ? 'All mobile-mode checks passed.' : `${fails} FAILURE(S).`}`);
 process.exit(fails ? 1 : 0);
