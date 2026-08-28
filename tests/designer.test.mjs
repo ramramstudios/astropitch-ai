@@ -124,11 +124,15 @@ console.log('--- switching a body off takes it out of everything audible ---');
   ok('marked silent', p.silent === true);
   ok('casts no aspects', !designed.aspects.some((a) => a.a === 'jupiter' || a.b === 'jupiter'));
   ok('other aspects survive', designed.aspects.length > 0);
-  ok('drops out of the elemental balance',
-    designed.balance[p.element] === base.balance[p.element] - 1,
+  // Bodies carry different balance weights (Big Three 4, traditional planets 2,
+  // outers 1), so the drop is that body's weight, not a flat 1.
+  const weight = base.balance[p.element] - designed.balance[p.element];
+  ok('drops out of the elemental balance', weight > 0
+    && designed.balance[p.element] === base.balance[p.element] - weight,
     `${designed.balance[p.element]} vs ${base.balance[p.element]}`);
   ok('drops out of the modal balance',
-    designed.modal[p.modality] === base.modal[p.modality] - 1);
+    designed.modal[p.modality] === base.modal[p.modality] - weight,
+    `${designed.modal[p.modality]} vs ${base.modal[p.modality]}`);
   ok('switching it back on restores it',
     designChart(base, { jupiter: { enabled: true } }).byKey.jupiter.silent === false);
 }
