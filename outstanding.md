@@ -144,8 +144,6 @@ tight absolute-dB bound before assuming a code regression.
 `tests/mobile.test.mjs`, `tests/run-browser.mjs tests/stability.test.html 300`,
 `tests/run-browser.mjs tests/polyphony.test.html 2400`, `tests/run-browser.mjs tests/audio.test.html
 1800` (twice, post-fix). Phases 1–6 of `research/audio-stability-plan.md` are validated as complete.
-<<<<<<< Updated upstream
-=======
 
 ---
 
@@ -239,4 +237,3 @@ above had already used 300 s for the same suite, so 180 was optimistic before th
 **Confirmed green:** all ten node suites (`performer`, `engine`, `mobile`, `ui-state`, `designer`,
 `palettes`, `ephemeris`, `synastry`, `ota`, `native`) and all four browser suites
 (`audio.test.html` 1800, `polyphony.test.html` 2400, `bounce.test.html` 300, `stability.test.html` 600).
->>>>>>> Stashed changes
