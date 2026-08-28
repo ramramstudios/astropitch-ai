@@ -579,3 +579,81 @@ overlaps item 5 (first-run hints), so it belongs in the same decision.
 statistic over ~1,333 observations at ~49% one-handed grip, not a measurement
 of this layout on the owner's device and hand. Nothing here has been tried on
 a phone.
+
+---
+
+## Item 4 — Do all five tabs stay equally prominent? — **recommendation: keep five**
+
+**What is actually true today**
+
+- Five `role="tab"` buttons hand-written at `index.html:77-81`, paired with
+  five `.tabpanel` sections. `.tabs` is `grid-template-columns: repeat(5, 1fr)`
+  — the count is hardcoded in CSS as well as in the markup, so any change is
+  three places, not two.
+- `select()` already sets the contextual precedent the roadmap describes: it
+  drops the overlay merge when the Overlay tab loses focus. `state.activeTab`
+  persists to `ACTIVE_TAB_KEY` and is restored pre-paint by the `index.html`
+  bootstrap, whose whitelist `['placements','aspects','overlay','sound']` is a
+  second hardcoded copy of the tab list.
+- `html[data-mode="mobile"] .tabs { overflow-x: auto }` exists but does
+  nothing at any current width — see below.
+
+**Two corrections to the roadmap**
+
+1. *"Update the `nearestSheetState` cases in tests/mobile.test.mjs:104-111,
+   which currently hardcode `peek: 76`."* Those `76`s are a synthetic fixture
+   for the pure snap-state arithmetic; nothing in the suite derives them from
+   the live `.tabs` height. Changing the strip would not break them, and
+   changing them would not test anything about the strip. The real coupling
+   is `recomputeHeights()` measuring `.tabs` at runtime, which is untested
+   either way because it needs a DOM.
+2. The strip does not overflow. Estimating min-content from the mono advance
+   at 0.55rem with 0.055em tracking and 4px of side padding: CHART 37px,
+   PLACEMENTS 66px, ASPECTS 48px, OVERLAY 48px, SOUND 37px — 240px including
+   separators. At 375px each `1fr` column is 75px, above the widest label's
+   66px, so all five sit in equal columns with room; at 320px the tracks grow
+   to min-content and the strip still totals 240px inside 320px. The
+   `overflow-x: auto` never engages. **(Estimate, not a measurement — no
+   renderer here. It should be confirmed on a device, and it is font-stack
+   dependent: a fallback mono with a wider advance would change it.)**
+
+**Recommendation: keep all five, equally prominent. Change nothing.**
+
+- Five is *within* both specs, not over them. Apple says three to five tabs
+  on iPhone; Material says three to five destinations and don't use a
+  navigation bar above five. The roadmap is right that this is the ceiling
+  rather than a comfortable middle, but "at the documented maximum" is not a
+  defect, and neither platform's guidance improves by trading a compliant
+  five for a compliant four plus a level of indirection.
+- **Contextual hiding (only show Placements/Aspects once a chart exists) is
+  the option to reject outright.** It contradicts the platform guidance the
+  roadmap is otherwise citing — tab bars are meant to be a stable map of the
+  app, and destinations that appear and disappear move every other tab's tap
+  target underneath the user's thumb. It also creates exactly the
+  "persisted tab no longer exists" problem the roadmap identifies, in the one
+  place it is hardest to get right: the pre-paint bootstrap in `index.html`,
+  which runs before any module and has no access to whether a chart exists.
+- **A "More" overflow is the least-bad reduction, and still not worth it.**
+  Collapsing Overlay and Sound leaves Chart / Placements / Aspects / More —
+  four, comfortably inside both specs. But Sound is where the palette,
+  temperament and tuning live in an app whose entire point is that a chart
+  makes a sound. Putting it one level deeper to satisfy a guideline the app
+  already satisfies is a worse product for a better-looking audit.
+
+**What actually addresses the crowding.** The user's framing is "a clean
+screen without crowded tabs/obstructions/controls". The strip is ~90px of a
+~800px screen. The `half` sheet default is 52% of it. **Item 1 is the change
+that does the work here**; item 4 is a rounding error next to it, and should
+be decided after item 1 has been on a phone for a week. If the strip still
+reads as heavy then, the cheapest lever is the labels rather than the count —
+"PLACEMENTS" is the widest by 18px and the only one that is not already a
+single short word — but renaming a tab is a product decision with no
+technical case behind it, so it is not recommended here, only noted.
+
+**Coded far enough to check:** nothing. The recommendation is to make no
+change, and the two corrections above are a file read and an arithmetic
+estimate, not a prototype.
+
+**Needs manual QA on device:** the min-content estimate, on the narrowest
+supported screen, in both themes, and with whatever mono the device actually
+resolves from `--mono`.
