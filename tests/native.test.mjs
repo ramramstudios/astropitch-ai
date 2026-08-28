@@ -185,6 +185,43 @@ console.log('--- assets the launch screen and App Store need ---');
     existsSync(join(assets, 'AppIcon.appiconset', 'AppIcon-1024.png')));
 }
 
+console.log('--- the Swift shell answers the messages the page sends ---');
+{
+  const wvc = read(...IOS, 'WebViewController.swift');
+
+  // Rubber-banding at the edge of a full-screen wheel is the loudest "this is
+  // a web page" tell in the app.
+  ok('scroll bounce is off', /scrollView\.bounces = false/.test(wvc));
+  ok('neither axis bounces on its own',
+    /alwaysBounceVertical = false/.test(wvc) && /alwaysBounceHorizontal = false/.test(wvc));
+
+  // Kept from the existing shell: no browser chrome anywhere.
+  ok('the web view stays transparent over black',
+    /isOpaque = false/.test(wvc) && /backgroundColor = \.black/.test(wvc));
+  ok('no inset adjustment fighting the safe areas',
+    /contentInsetAdjustmentBehavior = \.never/.test(wvc));
+
+  ok('the handler reads the haptic key', /dict\["haptic"\] as\? String/.test(wvc));
+  ok('impact and selection both have a generator',
+    /UIImpactFeedbackGenerator/.test(wvc) && /UISelectionFeedbackGenerator/.test(wvc));
+  // A tick per whole degree means allocating per tick would stutter, and
+  // would defeat prepare().
+  ok('generators are stored properties, not per-tick allocations',
+    /private let impactGenerator = UIImpactFeedbackGenerator/.test(wvc)
+      && /private let selectionGenerator = UISelectionFeedbackGenerator/.test(wvc));
+  ok('each fired generator is re-prepared',
+    /impactOccurred\(\)\s*\n\s*impactGenerator\.prepare\(\)/.test(wvc)
+      && /selectionChanged\(\)\s*\n\s*selectionGenerator\.prepare\(\)/.test(wvc));
+
+  // Phase 3.3 is skipped along with background audio.
+  ok('no MediaPlayer import', !/import MediaPlayer/.test(wvc));
+  ok('no Now Playing info centre', !/MPNowPlayingInfoCenter|MPRemoteCommandCenter/.test(wvc));
+
+  // OTA bundles are re-downloadable content.
+  ok('the OTA directory is excluded from backup',
+    /isExcludedFromBackup = true/.test(read(...IOS, 'OtaUpdater.swift')));
+}
+
 console.log('--- OTA stays off for the first review ---');
 {
   // One fewer thing doing network I/O during review, and the shipped bundle is

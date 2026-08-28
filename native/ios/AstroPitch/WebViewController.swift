@@ -10,6 +10,12 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
   private var interruptionObserver: NSObjectProtocol?
   private var embeddedWww: URL?
 
+  // Built once. A designer drag asks for a tick per whole degree, and
+  // allocating a generator per tick would both stutter and defeat `prepare()`,
+  // which is what keeps the Taptic engine warm enough to fire on time.
+  private let impactGenerator = UIImpactFeedbackGenerator(style: .light)
+  private let selectionGenerator = UISelectionFeedbackGenerator()
+
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .black
@@ -28,7 +34,8 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
       forMainFrameOnly: true
     )
     config.userContentController.addUserScript(bootstrap)
-    // JS → native: playing + OTA. Does not expose AVFoundation / filesystem APIs.
+    // JS → native: playing, OTA, haptics. Does not expose AVFoundation /
+    // filesystem APIs.
     config.userContentController.add(self, name: "astropitch")
 
     let webView = WKWebView(frame: view.bounds, configuration: config)
@@ -37,6 +44,11 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
     webView.isOpaque = false
     webView.backgroundColor = .black
     webView.scrollView.contentInsetAdjustmentBehavior = .never
+    // Rubber-banding at the edge of a full-screen wheel is the loudest "this
+    // is a web page" tell in the app. There is nothing to scroll to anyway.
+    webView.scrollView.bounces = false
+    webView.scrollView.alwaysBounceVertical = false
+    webView.scrollView.alwaysBounceHorizontal = false
     view.addSubview(webView)
     self.webView = webView
 
@@ -109,15 +121,39 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
     didReceive message: WKScriptMessage
   ) {
     guard message.name == "astropitch" else { return }
-    if let dict = message.body as? [String: Any], dict["ota"] != nil {
+    guard let dict = message.body as? [String: Any] else { return }
+
+    if dict["ota"] != nil {
       OtaUpdater.handleMessage(message.body, embedded: embeddedWww) { [weak self] dir in
         let index = dir.appendingPathComponent("index.html")
         self?.webView.loadFileURL(index, allowingReadAccessTo: dir)
       }
       return
     }
-    // Playing-state ack; reserved for future Now Playing / session work.
-    _ = message.body
+
+    if let haptic = dict["haptic"] as? String {
+      fire(haptic: haptic)
+      return
+    }
+
+    // Playing-state ack; reserved for future session work.
+  }
+
+  /// The page decides *when* a tick is earned (a sign boundary, a whole
+  /// degree); this only decides how it feels. Light rather than medium: a wheel
+  /// detent should read as a click, and at one per degree a medium impact
+  /// becomes a rumble.
+  private func fire(haptic: String) {
+    switch haptic {
+    case "impact":
+      impactGenerator.impactOccurred()
+      impactGenerator.prepare()
+    case "selection":
+      selectionGenerator.selectionChanged()
+      selectionGenerator.prepare()
+    default:
+      break
+    }
   }
 
   // MARK: - WKNavigationDelegate

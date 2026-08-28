@@ -10,7 +10,7 @@ import { engine } from '../audio/engine.js';
 import { Performer } from '../audio/performer.js';
 import { MODES, DEFAULT_MODE_ID, modeButtonId } from '../audio/modes.js';
 import { AudioLifecycle } from '../audio/lifecycle.js';
-import { attachNativeBridge } from '../audio/native-bridge.js';
+import { attachNativeBridge, createHapticDrag } from '../audio/native-bridge.js';
 import { startOtaCheck } from '../ota/client.js';
 import { Wheel } from './wheel.js';
 import { Starfield } from './starfield.js';
@@ -1477,16 +1477,28 @@ function wireWheel() {
   wheel.on('hoverBody', (key) => (key == null ? clearReadout() : showBody(key)));
   wheel.on('hoverAspect', (a) => (a == null ? clearReadout() : showAspect(a)));
 
+  // Dragging a body past a sign boundary changes what it sounds like; on a
+  // phone that deserves to be felt, not just seen. No-ops in the browser.
+  const haptics = createHapticDrag();
+
   wheel.on('designerPress', () => { void performer.prepareDesignerPreview(); });
   wheel.on('designerDragStart', (key, longitude) => {
+    haptics.start(longitude);
     void performer.beginDesignerPreview(key, longitude);
     showBody(key);
   });
-  wheel.on('designerMove', previewDesign);
-  wheel.on('designerCommit', commitDesign);
+  wheel.on('designerMove', (key, longitude) => {
+    haptics.move(longitude);
+    previewDesign(key, longitude);
+  });
+  wheel.on('designerCommit', (key, longitude) => {
+    haptics.end();
+    commitDesign(key, longitude);
+  });
   // Nothing was written while the drag was live, so putting the body back is
   // just a redraw of what is already stored.
   wheel.on('designerCancel', (key) => {
+    haptics.end();
     performer.endDesignerPreview(key);
     render();
   });
@@ -1503,6 +1515,7 @@ function wireWheel() {
   });
   wheel.on('designerAnglePress', () => { void performer.prepareDesignerPreview(); });
   wheel.on('designerAngleDragStart', (key, longitude, startLongitude) => {
+    haptics.start(longitude);
     angleDrag = {
       key,
       startLongitude,
@@ -1512,9 +1525,18 @@ function wireWheel() {
     void performer.beginDesignerPreview(key, longitude);
     showBody(key);
   });
-  wheel.on('designerAngleMove', previewAngleDrag);
-  wheel.on('designerAngleCommit', commitAngleDrag);
+  // Turning the sky moves every body at once, so the angle itself is the thing
+  // to tick against — one detent per degree of rotation, not eleven.
+  wheel.on('designerAngleMove', (key, longitude) => {
+    haptics.move(longitude);
+    previewAngleDrag(key, longitude);
+  });
+  wheel.on('designerAngleCommit', (key, longitude) => {
+    haptics.end();
+    commitAngleDrag(key, longitude);
+  });
   wheel.on('designerAngleCancel', (key) => {
+    haptics.end();
     performer.endDesignerPreview(key);
     angleDrag = null;
     render();

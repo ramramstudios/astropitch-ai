@@ -23,6 +23,10 @@ import {
   dispatchNativeToLifecycle,
   attachNativeBridge,
   notifyNativePlaying,
+  notifyNativeHaptic,
+  hapticTicksForDrag,
+  createHapticDrag,
+  HAPTIC_KINDS,
   isNativeShell,
   NATIVE_EVENT,
   NATIVE_EVENT_TYPES,
@@ -416,6 +420,114 @@ console.log('\n--- native bridge: app.js and index.html stay wired ---');
     appSrc.includes('attachNativeBridge(lifecycle'));
   ok('index.html skips the service worker inside a native shell',
     htmlSrc.includes('!window.__astropitchNativeShell'));
+}
+
+console.log('--- designer haptics: one tick per degree, one per sign boundary ---');
+{
+  // The wheel emits at most one designerMove per animation frame, so these
+  // helpers see whole jumps, not pointer deltas. What they must never do is
+  // turn one jump into a tick per pointermove — or into a hundred ticks that
+  // outlive the gesture.
+  const ticks = (a, b) => hapticTicksForDrag(a, b).join(',');
+
+  ok('a sub-degree nudge earns nothing', ticks(10.2, 10.8) === '', ticks(10.2, 10.8));
+  ok('not moving earns nothing', ticks(10, 10) === '');
+  ok('one whole degree is a selection', ticks(10.2, 11.3) === HAPTIC_KINDS.selection);
+  ok('crossing into a new sign is an impact', ticks(29.5, 30.2) === HAPTIC_KINDS.impact);
+  ok('a boundary does not also fire its degree',
+    hapticTicksForDrag(29.5, 30.2).length === 1, ticks(29.5, 30.2));
+  ok('boundary then degree keeps travel order',
+    ticks(29.5, 31.2) === 'impact,selection', ticks(29.5, 31.2));
+
+  // 0° is Aries: the seam is a sign boundary, and the short way round has to
+  // be two degrees forward rather than 358 backwards.
+  ok('forward over the 0° seam', ticks(359.5, 1.5) === 'impact,selection', ticks(359.5, 1.5));
+  ok('backward over the 0° seam', ticks(1.5, 359.5) === 'selection,impact', ticks(1.5, 359.5));
+  ok('a backwards degree still ticks', ticks(11.3, 10.2) === HAPTIC_KINDS.selection);
+  ok('negative longitudes normalise to the same seam',
+    ticks(0.5, -0.5) === HAPTIC_KINDS.impact, ticks(0.5, -0.5));
+
+  // A flick covers a hundred degrees between two frames. Ticking each one
+  // would queue haptics that fire after the finger has already stopped.
+  const flick = hapticTicksForDrag(5, 120);
+  ok('a flick is capped', flick.length <= 4, String(flick.length));
+  ok('a flick keeps the sign changes, not the degrees',
+    flick.every((t) => t === HAPTIC_KINDS.impact), flick.join(','));
+  const halfSign = hapticTicksForDrag(5, 20);
+  ok('a fast drag inside one sign is still capped', halfSign.length <= 4, String(halfSign.length));
+
+  ok('nonsense earns nothing',
+    hapticTicksForDrag(NaN, 5).length === 0 && hapticTicksForDrag(5, undefined).length === 0);
+}
+
+console.log('--- a haptic drag only ticks on what changed since the last frame ---');
+{
+  const fired = [];
+  const drag = createHapticDrag({ send: (kind) => fired.push(kind) });
+
+  drag.start(10.0);
+  ok('starting a drag is silent', fired.length === 0);
+  drag.move(10.4);
+  ok('a sub-degree frame is silent', fired.length === 0);
+  drag.move(11.2);
+  ok('crossing a degree fires once', fired.join(',') === 'selection', fired.join(','));
+  drag.move(11.9);
+  ok('staying inside that degree does not re-fire', fired.length === 1, fired.join(','));
+  drag.move(30.1);
+  ok('the sign boundary fires an impact', fired.includes(HAPTIC_KINDS.impact), fired.join(','));
+
+  // Ending must clear the anchor, or the next drag's first frame would tick
+  // for the distance between two unrelated gestures.
+  drag.end();
+  const before = fired.length;
+  drag.start(200);
+  drag.move(200.2);
+  ok('a new drag does not tick for the gap since the last one',
+    fired.length === before, fired.slice(before).join(','));
+}
+
+console.log('--- haptics stay inside a native shell ---');
+{
+  ok('no shell, no message', notifyNativeHaptic('impact', {}) === false);
+  ok('an unknown kind is refused', notifyNativeHaptic('rumble', {}) === false);
+
+  const posted = [];
+  const win = { webkit: { messageHandlers: { astropitch: { postMessage: (m) => posted.push(m) } } } };
+  ok('impact reaches the shell', notifyNativeHaptic('impact', win) === true);
+  ok('selection reaches the shell', notifyNativeHaptic('selection', win) === true);
+  ok('the payload is the documented shape',
+    JSON.stringify(posted) === JSON.stringify([{ haptic: 'impact' }, { haptic: 'selection' }]),
+    JSON.stringify(posted));
+
+  // Android exposes only setPlaying / ota. A haptic must fall through to the
+  // webkit handler rather than being swallowed by either branch.
+  const both = [];
+  const androidish = {
+    AstroPitchShell: { setPlaying: () => both.push('setPlaying'), ota: () => both.push('ota') },
+    webkit: { messageHandlers: { astropitch: { postMessage: (m) => both.push(m.haptic) } } },
+  };
+  notifyNativeHaptic('impact', androidish);
+  ok('a haptic is not swallowed by the Android branches', both.join(',') === 'impact', both.join(','));
+  notifyNativePlaying(true, androidish);
+  ok('setPlaying still takes the Android path', both.join(',') === 'impact,setPlaying', both.join(','));
+}
+
+console.log('--- the designer drag actually asks for the haptics ---');
+{
+  const appSrc = readFileSync(join(__dirname, '..', 'src', 'ui', 'app.js'), 'utf8');
+  ok('app.js builds a haptic drag', appSrc.includes('createHapticDrag()'));
+  for (const event of ['designerDragStart', 'designerAngleDragStart']) {
+    ok(`${event} anchors the drag`,
+      new RegExp(`'${event}'[\\s\\S]{0,200}haptics\\.start`).test(appSrc));
+  }
+  for (const event of ['designerMove', 'designerAngleMove']) {
+    ok(`${event} advances it`,
+      new RegExp(`'${event}'[\\s\\S]{0,160}haptics\\.move`).test(appSrc));
+  }
+  for (const event of ['designerCommit', 'designerCancel', 'designerAngleCommit', 'designerAngleCancel']) {
+    ok(`${event} releases it`,
+      new RegExp(`'${event}'[\\s\\S]{0,160}haptics\\.end`).test(appSrc));
+  }
 }
 
 console.log(`\n${fails === 0 ? 'All mobile-mode checks passed.' : `${fails} FAILURE(S).`}`);
