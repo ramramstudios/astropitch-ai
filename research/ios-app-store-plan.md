@@ -5,6 +5,37 @@ this plan ships). Written 2026-08-27. Facts with a deadline attached are dated;
 re-check anything older than a couple of months against
 [Apple's upcoming-requirements page](https://developer.apple.com/news/upcoming-requirements/).
 
+> ## Status — 2026-08-28, branch `ios-ready`
+>
+> **Every engineering phase this repo can do without Xcode is built and
+> committed.** What is left needs a Mac with Xcode 26, a physical iPhone, or an
+> Apple Developer account.
+>
+> | Phase | State |
+> |---|---|
+> | 0.1 background audio | **Assumed, not measured** — branch two taken. Needs a device |
+> | 0.2 OTA at review time | **Done** — `updateUrl` stays `""` for 1.0 |
+> | 1 Xcode project | **Done** — `.xcodeproj` committed, graph verified |
+> | 2 Info.plist / privacy | **Done** — all six items |
+> | 3.1 launch, no chrome | **Done** |
+> | 3.2 haptics | **Done** |
+> | 3.3 Now Playing | **Skipped** — follows from 0.1 branch two |
+> | 3.4 share sheet | **Done** |
+> | 3.5 WAV bounce | **Done** — Bloom and Scalar only, by design |
+> | 3.6 App Intents / widgets | **Deferred** to post-1.0 |
+> | 4.1 test suites | **Done** — 10 node + 4 browser suites green |
+> | 4.2–4.3 device QA | **Blocked** — no device |
+> | 5 Developer Program | **Blocked** — human, and the longest lead |
+> | 6 metadata | **Drafted** in `research/ios-store-listing.md`, not uploaded |
+> | 7 submit | **Blocked** |
+>
+> Per-item detail, the reasoning behind each decision, and the morning
+> checklist: **`research/ios-overnight-status.md`**.
+>
+> Individual items below are marked ✅ done, ⚠️ assumed, ⏭️ skipped, or 🚧
+> blocked. Unmarked prose is the original reasoning, kept because it explains
+> *why* — do not re-litigate it from the checkmarks alone.
+
 ---
 
 ## 0. What this plan assumes, and where it departs from the generic checklist
@@ -50,7 +81,11 @@ surface that is genuinely worth having, not decoration.
 Both are measurements. Do them on a real device; neither can be answered from a
 simulator, and per `CLAUDE.md` the headless null sink is not a phone DAC.
 
-### 0.1 Does background audio actually survive on iOS 26?
+### 0.1 Does background audio actually survive on iOS 26? — ⚠️ **ASSUMED, NOT MEASURED**
+
+> Branch two was taken on the strength of the known WebKit behaviour: `UIBackgroundModes`
+> is removed and 3.3 skipped. **Nobody has timed it on a phone.** Do the spike below
+> before the first upload; if audio survives, the decision inverts.
 
 `native/ios/AstroPitch/Info.plist` currently declares `UIBackgroundModes: audio` with
 a comment saying to *"expect the ~27 s WKWebView freeze anyway."* That number is the
@@ -82,7 +117,9 @@ until `AudioContext.currentTime` stops advancing. Record the number.
 that stops working after half a minute; it is both a rejection risk and a bad first
 impression from the one review someone will actually leave.
 
-### 0.2 Is the OTA updater live at review time?
+### 0.2 Is the OTA updater live at review time? — ✅ **DONE**
+
+> `updateUrl` stays `""` for 1.0, as recommended. A test asserts it.
 
 `bundle.json` ships `"updateUrl": ""` and the client no-ops without it. Two options:
 
@@ -105,7 +142,7 @@ Today `native/ios/README.md` instructs a human to *"Create an Xcode iOS App proj
 and hand-copy sources in. There is no `.xcodeproj` in the repo, so no two builds are
 guaranteed identical and CI is impossible. Fix this first; every later phase assumes it.
 
-**1.1 Create and commit `native/ios/AstroPitch.xcodeproj`.**
+**1.1 Create and commit `native/ios/AstroPitch.xcodeproj`.** — ✅ **DONE**
 
 - Target: iOS App, Swift, no storyboard, no SwiftUI (matches the existing sources).
 - Bundle identifier: pick and freeze it now — it can never change after first upload.
@@ -118,14 +155,14 @@ guaranteed identical and CI is impossible. Fix this first; every later phase ass
   **28 April 2026**. Deployment target stays 16.0; the SDK requirement is about what you
   *build against*, not what you run on.
 
-**1.2 Add `www/` as a folder reference, not a group.**
+**1.2 Add `www/` as a folder reference, not a group.** — ✅ **DONE**
 
 `WebViewController.resolveEmbeddedWww()` looks for `www/index.html` and falls back to
 `index.html` in a `www` subdirectory. Both forms need the on-disk directory structure
 preserved — a yellow group flattens `src/audio/*.js` into the bundle root and the app
 launches to a blank screen. Use the blue folder reference.
 
-**1.3 Wire `sync-www.sh` into the build, not into a human's memory.**
+**1.3 Wire `sync-www.sh` into the build, not into a human's memory.** — ✅ **DONE**
 
 `native/ios/AstroPitch/www/**` is gitignored, so a fresh clone has an empty `www/`, and
 today the only thing standing between that and a shipped blank app is remembering to run
@@ -139,7 +176,11 @@ Uncheck the sandbox-friendly "based on dependency analysis" so it runs every bui
 Shipping a stale or empty `www/` is a Guideline **2.1** rejection (broken/incomplete app)
 and is the single most likely way to waste a review cycle here.
 
-**1.4 Keep the three version numbers in lockstep.**
+**1.4 Keep the three version numbers in lockstep.** — ✅ **DONE**
+
+> They were *not* in lockstep: `CFBundleShortVersionString` was `1.0` against
+> `bundle.json`'s `1.0.0`. All three now say `1.0.0` and `tests/native.test.mjs`
+> holds them together.
 
 `CFBundleShortVersionString` (Info.plist), `bundleVersion` (`bundle.json`), and
 `CACHE_NAME` (`sw.js`) are three hand-maintained copies of the same idea. The OTA policy
@@ -166,7 +207,7 @@ manual steps.
 Five concrete problems in the current `native/ios/AstroPitch/Info.plist`. All are
 cheap; three of them will otherwise bite during upload or review.
 
-**2.1 `UILaunchStoryboardName` is set to an empty string.**
+**2.1 `UILaunchStoryboardName` is set to an empty string.** — ✅ **FIXED**
 
 ```xml
 <key>UILaunchStoryboardName</key>
@@ -191,7 +232,7 @@ Add a `LaunchBackground` colour set to the asset catalogue with light `#f4f4f2` 
 `theme_color`, so the launch screen hands off to the web app without a flash. This is
 also the cheapest possible "not a browser" signal for a reviewer.
 
-**2.2 `UIRequiredDeviceCapabilities` says `armv7`.**
+**2.2 `UIRequiredDeviceCapabilities` says `armv7`.** — ✅ **FIXED** (key deleted)
 
 ```xml
 <array><string>armv7</string></array>
@@ -202,7 +243,7 @@ binary declaring an armv7 requirement is at best meaningless and at worst an ins
 eligibility bug. Change to `arm64`, or delete the key entirely — deleting is fine and is
 what most apps do.
 
-**2.3 No `ITSAppUsesNonExemptEncryption` key.**
+**2.3 No `ITSAppUsesNonExemptEncryption` key.** — ✅ **FIXED**
 
 Without it, every single upload lands in App Store Connect flagged **"Missing
 Compliance"** and cannot be submitted until you answer the questionnaire by hand. Set it
@@ -219,7 +260,7 @@ is explicitly exempt from export documentation. If you later link a third-party 
 does its own encryption, revisit this; a vendor SDK is the usual way this answer silently
 becomes wrong.
 
-**2.4 No `PrivacyInfo.xcprivacy`.**
+**2.4 No `PrivacyInfo.xcprivacy`.** — ✅ **FIXED**
 
 Required for App Store Connect uploads since **1 May 2024**. AstroPitch's is close to
 the minimum possible file, which is a nice position to be in — audit confirms no
@@ -243,7 +284,7 @@ This must stay consistent with the App Store Connect privacy nutrition label (Ph
 which will be **"Data Not Collected"** across the board. All chart data lives in
 `localStorage` on the device and never leaves it.
 
-**2.5 iPad: decide, don't drift.**
+**2.5 iPad: decide, don't drift.** — ✅ **DECIDED: iPhone-only**
 
 `UISupportedInterfaceOrientations` lists portrait and both landscapes, with no
 `~ipad` variant. If the target is left at "iPhone, iPad" — the Xcode default — you owe
@@ -255,7 +296,7 @@ looking at before deciding).
 **Recommendation: ship v1.0 iPhone-only.** It halves the screenshot work and the QA
 surface. Add iPad in 1.1 after looking at how the mobile sheet reads on a 13" screen.
 
-**2.6 OTA files should be excluded from iCloud backup.**
+**2.6 OTA files should be excluded from iCloud backup.** — ✅ **DONE**
 
 `OtaUpdater.root` writes downloaded bundles into Application Support. Apple's Data
 Storage Guidelines say re-downloadable content should not be backed up. Set
@@ -272,14 +313,18 @@ have, that an instrument genuinely wants.
 
 Ranked by value-per-effort. **3.1 and 3.2 are the v1.0 minimum.**
 
-**3.1 Native launch and no browser chrome.** Phase 2.1's launch screen, plus what the
+**3.1 Native launch and no browser chrome.** — ✅ **DONE**
+
+Phase 2.1's launch screen, plus what the
 shell already does right: `isOpaque = false`, black background, `contentInsetAdjustmentBehavior = .never`,
 and a navigation delegate that keeps file URLs inside and opens everything else in
 Safari. There is no address bar, no loading bar, no pull-to-refresh. Also **disable the
 scroll bounce** (`webView.scrollView.bounces = false`) — rubber-banding at the edge of a
 full-screen wheel is the single most "this is a web page" tell in the whole app.
 
-**3.2 Haptics on the designer wheel.** The Designer lets you drag planets around the
+**3.2 Haptics on the designer wheel.** — ✅ **DONE**
+
+The Designer lets you drag planets around the
 zodiac and press-drag the ASC/MC to turn the sky. On a phone, that gesture wants a
 `UIImpactFeedbackGenerator` tick as a body crosses a sign boundary, and a
 `.selection` tick on each degree step. Extend the existing message handler — it already
@@ -288,7 +333,9 @@ takes structured messages, so this is `{ haptic: 'impact' | 'selection' }` along
 No new permissions, no new privacy surface, and it makes the app feel materially better
 on device. This is the highest-value item in the phase.
 
-**3.3 Now Playing + remote commands.** *Conditional on Phase 0.1 branch one only.*
+**3.3 Now Playing + remote commands.** — ⏭️ **SKIPPED** (0.1 branch two)
+
+*Conditional on Phase 0.1 branch one only.*
 `MPNowPlayingInfoCenter` (chart name as title, transport mode as artist) and
 `MPRemoteCommandCenter` play/pause routed into the performer via the bridge. Note that
 WKWebView will put its own generic controls on the lock screen once media plays, so
@@ -296,23 +343,32 @@ this is partly about replacing something ugly rather than adding something absen
 **Skip entirely if background audio does not survive** — lock-screen controls for audio
 that has already stopped is worse than none.
 
-**3.4 Export a chart via the share sheet.** `wheel.js` already renders the chart as SVG;
+**3.4 Export a chart via the share sheet.** — ✅ **DONE**
+
+`wheel.js` already renders the chart as SVG;
 serialise it, rasterise to PNG, hand the bytes to native, present a
 `UIActivityViewController`. Sharing to Messages/Photos/Files is a capability the web app
 does not have and that people will actually use for a natal chart.
 
-**3.5 Bounce a performance to a WAV.** The most compelling native feature available, and
+**3.5 Bounce a performance to a WAV.** — ✅ **DONE, with one limit**
+
+> Bloom and Scalar only. Drone and Melodic are open-ended loops on an audio-clock
+> ticker an offline render never advances; rendering them would mean patching the
+> page's global timers under a live transport. They throw instead. See
+> `src/audio/bounce.js`. The most compelling native feature available, and
 most of it is already written: `tests/audio.test.html` renders arrangements through
 `OfflineAudioContext` today. Route that render to a WAV, hand it to native, save to
 Files or share. An offline render of your own chart is unambiguously an *app* feature.
 Ship in 1.1 if 1.0 is running long, but it is the strongest single answer to 4.2.
 
-**3.6 Post-1.0:** App Intents / Shortcuts ("play my chart"), a Home Screen widget
+**3.6 Post-1.0:** — ⏭️ **DEFERRED**, as planned.
+
+App Intents / Shortcuts ("play my chart"), a Home Screen widget
 showing today's sky. Real native surface, real work; not v1.0 blockers.
 
 ---
 
-## Phase 4 — Device QA
+## Phase 4 — Device QA — 🚧 **4.1 DONE, 4.2–4.3 BLOCKED**
 
 `CLAUDE.md` is explicit that the automated suites measure level and distortion, not
 whether something sounds good, and that mobile CSS, pointer/touch wiring, and the
@@ -357,7 +413,7 @@ strings can repeat across TestFlight builds.
 
 ---
 
-## Phase 5 — Apple Developer Program
+## Phase 5 — Apple Developer Program — 🚧 **BLOCKED** (human; longest lead)
 
 **Start this in parallel with Phase 1 — it is the longest-lead item and nothing else is
 blocked by it.**
@@ -376,7 +432,11 @@ blocked by it.**
 
 ---
 
-## Phase 6 — App Store Connect record and metadata
+## Phase 6 — App Store Connect record and metadata — 🚧 **DRAFTED, NOT UPLOADED**
+
+> Every field below is written out ready to paste in
+> `research/ios-store-listing.md`, with counted character limits. Nothing has
+> been entered into App Store Connect.
 
 Create the app record early — it can exist long before a build is uploaded, and some
 fields (the age questionnaire) gate submission.
@@ -430,7 +490,7 @@ Previews play with sound when the user taps.
 
 ---
 
-## Phase 7 — Submit
+## Phase 7 — Submit — 🚧 **BLOCKED**
 
 **7.1 Upload.** Archive in Xcode → Distribute App → App Store Connect. Transporter is
 the fallback if Xcode's upload flakes. Processing takes 5–30 minutes.
@@ -488,19 +548,34 @@ rather than by review.
 
 ## Appendix — file-by-file change list
 
-| File | Change | Phase |
-|---|---|---|
-| `native/ios/AstroPitch.xcodeproj` | **New** — committed, reproducible | 1.1 |
-| `native/ios/AstroPitch/Info.plist` | `UILaunchScreen` replaces empty `UILaunchStoryboardName`; `arm64` replaces `armv7`; add `ITSAppUsesNonExemptEncryption=false`; resolve `UIBackgroundModes` per 0.1 | 2.1–2.3, 0.1 |
-| `native/ios/AstroPitch/PrivacyInfo.xcprivacy` | **New** — no tracking, no collection, no required-reason APIs | 2.4 |
-| `native/ios/AstroPitch/Assets.xcassets` | **New** — app icon (1024 source), `LaunchBackground` colour set | 1.1, 2.1 |
-| `native/ios/AstroPitch/WebViewController.swift` | `scrollView.bounces = false`; haptic message case; Now Playing if 0.1 branch one | 3.1–3.3 |
-| `native/ios/AstroPitch/OtaUpdater.swift` | `isExcludedFromBackup` on `ota/` | 2.6 |
-| `src/audio/native-bridge.js` | `notifyNativeHaptic()` alongside `notifyNativePlaying()` | 3.2 |
-| `src/ui/app.js` | Fire haptics from designer drag / sign-boundary crossing | 3.2 |
-| `tests/native.test.mjs` | **New** — version lockstep, shell-version lockstep, plist key assertions | 1.4 |
-| `native/ios/README.md` | Rewrite: open the project, don't hand-build it | 1.1 |
-| `bundle.json` | Bump `bundleVersion` with each release; `updateUrl` stays empty for 1.0 | 0.2, 1.4 |
+What actually shipped on `ios-ready`, including the files the plan did not
+anticipate. ✅ landed, ⏭️ deliberately not done.
+
+| File | Change | Phase | |
+|---|---|---|---|
+| `native/ios/AstroPitch.xcodeproj/project.pbxproj` | **New** — one target, iPhone-only, folder-referenced `www/`, sync run-script phase | 1.1–1.3 | ✅ |
+| `native/ios/AstroPitch.xcodeproj/…/AstroPitch.xcscheme` | **New** — shared scheme, so Run/Archive work on a clean clone | 1.1 | ✅ |
+| `native/ios/AstroPitch/Info.plist` | `UILaunchScreen` replaces empty `UILaunchStoryboardName`; `armv7` key deleted; `ITSAppUsesNonExemptEncryption=false`; `UIBackgroundModes` removed; version `1.0` → `1.0.0` | 2.1–2.3, 0.1, 1.4 | ✅ |
+| `native/ios/AstroPitch/PrivacyInfo.xcprivacy` | **New** — no tracking, no collection, no required-reason APIs | 2.4 | ✅ |
+| `native/ios/AstroPitch/Assets.xcassets` | **New** — 1024 AppIcon from `favicon.png`, `LaunchBackground` colour set | 1.1, 2.1 | ✅ |
+| `native/ios/AstroPitch/WebViewController.swift` | `scrollView.bounces = false`; haptic case with prepared generators; share case presenting `UIActivityViewController` | 3.1, 3.2, 3.4 | ✅ |
+| `native/ios/AstroPitch/OtaUpdater.swift` | `isExcludedFromBackup` on `ota/` | 2.6 | ✅ |
+| `native/ios/README.md` | Rewrite: open the project, don't hand-build it | 1.5 | ✅ |
+| `src/audio/native-bridge.js` | `notifyNativeHaptic()`, `hapticTicksForDrag()`, `createHapticDrag()`, `notifyNativeShare()`; **fixed `postToNative` swallowing non-Android payloads** | 3.2, 3.4 | ✅ |
+| `src/ui/share.js` | **New** — SVG style baking, PNG rasterise, WAV delivery, share/download fallbacks | 3.4, 3.5 | ✅ |
+| `src/audio/bounce.js` | **New** — offline render, trim/fade, 16-bit WAV encode. Finite modes only | 3.5 | ✅ |
+| `src/ui/app.js` | Haptics on designer + angle drags; Share and Bounce controls | 3.2, 3.4, 3.5 | ✅ |
+| `index.html`, `src/styles.css` | Share and Bounce buttons in `.wheel-actions`; disabled state | 3.4, 3.5 | ✅ |
+| `sw.js` | `CACHE_NAME` → `astropitch-1.0.0`; `share.js` and `bounce.js` added to `SHELL_FILES` | 1.4, 3.4, 3.5 | ✅ |
+| `tests/native.test.mjs` | **New** — version + shell-version lockstep, plist keys, privacy manifest, project shape, Swift surface, `SHELL_FILES` coverage | 1.4 | ✅ |
+| `tests/mobile.test.mjs` | Haptic crossing math, share payload/filename, WAV header/clip/trim | 3.2, 3.4, 3.5 | ✅ |
+| `tests/bounce.test.html` | **New** — proves the bounce contains audio, which no pure test can | 3.5 | ✅ |
+| `tests/designer.test.mjs` | Balance assertions fixed (pre-existing red, unrelated to iOS) | — | ✅ |
+| `research/ios-store-listing.md` | **New** — all App Store Connect copy, counted | 6 | ✅ |
+| `docs/privacy.html` | **New** — real policy page. **Needs hosting** | 6.2 | ✅ |
+| `CLAUDE.md` | New suites documented; stability budget 180 → 600 s | 4.1 | ✅ |
+| `bundle.json` | `updateUrl` stays empty for 1.0 (unchanged) | 0.2 | ✅ |
+| *Now Playing / `MPRemoteCommandCenter`* | Not written; `MediaPlayer` deliberately not linked | 3.3 | ⏭️ |
 
 ## Appendix — sources
 

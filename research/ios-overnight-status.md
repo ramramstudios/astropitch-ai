@@ -1,10 +1,22 @@
-# iOS overnight status
-Updated: 2026-08-28
+# iOS status — what is done and what is left
 
-Everything in scope for the overnight run is done and committed, with all ten
-node suites and all four browser suites green. Nothing pushed. What remains
-needs a machine with Xcode, a phone, or an Apple Developer account — see
-**Morning checklist**.
+Branch `ios-ready` · updated 2026-08-28 · **the current state of AstroPitch's
+App Store preparation.** (Named "overnight" because that is the run that
+produced it; it is the live status document, not a session log.)
+
+Everything in scope is done and committed, with all ten node suites and all
+four browser suites green. Nothing is pushed. What remains needs a machine with
+Xcode, a phone, or an Apple Developer account — jump to
+**[What is left to do](#what-is-left-to-do)**.
+
+**Related documents**
+
+| | |
+|---|---|
+| Why each decision was made, with per-item status | `research/ios-app-store-plan.md` |
+| App Store Connect copy, ready to paste | `research/ios-store-listing.md` |
+| Build instructions, frozen settings, the JS↔native bridge | `native/ios/README.md` |
+| Per-phase done/waived log, in the repo's usual shape | `outstanding.md` |
 
 ---
 
@@ -244,7 +256,9 @@ for this machine; `CLAUDE.md` now says 600.
 
 ---
 
-## Morning checklist
+## What is left to do
+
+In order. Items 1–3 unblock everything else.
 
 1. **Enrol in the Apple Developer Program** if not already — $99/yr, and it is
    the longest-lead item. Individual avoids the D-U-N-S dependency entirely.

@@ -215,6 +215,12 @@ between visits.
 | `]` | hide or show the player |
 | `Esc` | cancel a designer drag, or close *How it works*/Settings |
 
+**Share** exports the wheel as a PNG. **Bounce** offline-renders the current
+arrangement to a WAV — Bloom and Scalar only, since Drone and Melodic are
+open-ended loops with no end to render to. Inside the iOS app both go to the
+system share sheet; in a browser they use Web Share, or fall back to a
+download.
+
 ## Run locally
 
 ES modules need a real origin, so `file://` will not work:
@@ -237,8 +243,10 @@ node tests/performer.test.mjs    # what the arrangements schedule
 node tests/designer.test.mjs     # hand-placed bodies, switches, moved angles
 node tests/palettes.test.mjs     # every palette builds every combination
 node tests/engine.test.mjs       # polyphony gain-staging arithmetic
-node tests/mobile.test.mjs       # pinch/pan math, bottom-sheet state
+node tests/mobile.test.mjs       # pinch/pan math, bottom-sheet state, export helpers
 node tests/ui-state.test.mjs     # overlay eligibility, audio-preference validation
+node tests/ota.test.mjs          # OTA policy, manifest parsing, rollout buckets
+node tests/native.test.mjs       # iOS shell: version lockstep, plist keys, project shape
 ```
 
 Everything else needs a real `AudioContext` or DOM, and runs headless in Chrome:
@@ -246,13 +254,68 @@ Everything else needs a real `AudioContext` or DOM, and runs headless in Chrome:
 ```sh
 node tests/run-browser.mjs tests/audio.test.html      # every sign x house x palette, OfflineAudioContext
 node tests/run-browser.mjs tests/polyphony.test.html  # the same chain with a transport left running
-node tests/run-browser.mjs tests/stability.test.html 180  # realtime AudioContext: underruns, dropped quanta, clock drift
+node tests/run-browser.mjs tests/stability.test.html 600  # realtime AudioContext: underruns, dropped quanta, clock drift
+node tests/run-browser.mjs tests/bounce.test.html 300 # the WAV bounce contains audio, not silence
 node tests/run-browser.mjs tests/overlay.test.html
 node tests/run-browser.mjs tests/audio-preferences.test.html
 ```
 
 These measure level and distortion, not whether it sounds good; manual
 listening is still required for audio changes.
+
+## Native shells
+
+The web app is the whole app; the shells are thin. Native code configures the
+platform audio session, forwards lifecycle events, presents the share sheet,
+fires haptics, and swaps OTA web bundles. All audio stays in JS.
+
+`native/sync-www.sh` copies the static bundle into each shell's `www/`. Those
+directories are gitignored — on iOS a build phase runs the script for you.
+
+### iOS — in progress
+
+**Branch `ios-ready` is being prepared for the App Store.** The Xcode project
+is committed and every engineering phase that does not require Xcode is done;
+what remains needs a Mac with Xcode 26, a physical iPhone, or an Apple
+Developer account.
+
+```sh
+open native/ios/AstroPitch.xcodeproj
+```
+
+Select the `AstroPitch` scheme and Run. No manual copy step — the "Sync www"
+build phase populates `www/` every build.
+
+| | |
+|---|---|
+| Bundle ID | `com.ramramstudios.astropitch` (frozen after first upload) |
+| Deployment target | iOS 16.0, iPhone only |
+| Build SDK | Xcode 26 / iOS 26 — required for App Store uploads |
+| Version | `1.0.0`, build `1` |
+
+Playback pauses when you leave the app: Web Audio does not survive WebContent
+suspension in WKWebView, so `UIBackgroundModes` is deliberately absent —
+declaring a background mode the app does not use is a Guideline 2.5.4
+rejection. **This is assumed from the known WebKit behaviour, not measured on
+a device.**
+
+Three copies of the version string must agree — `CFBundleShortVersionString`,
+`bundle.json`'s `bundleVersion`, and the suffix of `sw.js`'s `CACHE_NAME`.
+`node tests/native.test.mjs` holds them together, along with the Info.plist
+keys and the shape of the committed project.
+
+Where things are written down:
+
+| | |
+|---|---|
+| **What is done, assumed, skipped, and blocked — plus the checklist to finish** | `research/ios-overnight-status.md` |
+| Why each decision was made | `research/ios-app-store-plan.md` |
+| App Store Connect copy, ready to paste | `research/ios-store-listing.md` |
+| Build instructions and the JS↔native bridge | `native/ios/README.md` |
+
+### Android
+
+`native/android/` — same shape, not being prepared for release.
 
 ## Layout
 
@@ -269,8 +332,22 @@ src/
     palettes.js      the timbre and gesture tables the renderer reads
     tuning.js        longitude -> frequency, temperaments
     performer.js     bloom, scalar, drone, melodic
+    modes.js         the four transport modes and their schedules
+    scheduler.js     lookahead ticker on the audio clock
+    lifecycle.js     background / foreground / interruption handling
+    native-bridge.js JS <-> native shell messages
+    bounce.js        offline render -> WAV (finite modes only)
   ui/
     wheel.js         SVG chart wheel + circular oscilloscope
     app.js           wiring
     starfield.js
+    share.js         chart PNG and WAV export, to the share sheet or a download
+  ota/
+    policy.js        version compare, rollout buckets, update eligibility
+    client.js        the update check
+native/
+  sync-www.sh        copies the web bundle into each shell's www/
+  ios/               WKWebView shell + committed Xcode project
+  android/           WebView shell
+  ota/               bundle packing and validation scripts
 ```
