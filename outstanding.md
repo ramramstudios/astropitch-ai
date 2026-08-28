@@ -144,3 +144,99 @@ tight absolute-dB bound before assuming a code regression.
 `tests/mobile.test.mjs`, `tests/run-browser.mjs tests/stability.test.html 300`,
 `tests/run-browser.mjs tests/polyphony.test.html 2400`, `tests/run-browser.mjs tests/audio.test.html
 1800` (twice, post-fix). Phases 1–6 of `research/audio-stability-plan.md` are validated as complete.
+<<<<<<< Updated upstream
+=======
+
+---
+
+# iOS App Store — `ios-ready`
+
+Companion log for `research/ios-app-store-plan.md`. The full account — every decision, the reasoning,
+and the checklist to finish — is `research/ios-overnight-status.md`. This section is the summary in the
+same done/waived shape as the audio phases above.
+
+## Hold (decided 2026-08-28)
+
+**`ios-ready` will not merge into `master` until mobile mode on `master` is where we want it.** The
+native shell wraps mobile mode as it exists today; locking that in for the iOS conversion before mobile
+mode is settled means either redoing native-side adjustments later or shipping a first release around a
+UI that's about to change under it.
+
+**This pause covers the whole remaining checklist, not just the merge** — Xcode/device/App Store work
+(items 1–11 in `research/ios-overnight-status.md`'s "What is left to do") is paused too. Those steps cost
+real time and, in the case of Developer Program enrolment, money; doing them against a mobile mode that
+may still change risks wasted effort in the same way the merge would. Resume from the top of that list
+once mobile mode is settled on `master`.
+
+## Run of 2026-08-28 — Phases 0.2, 1, 2, 3.1, 3.2, 3.4, 3.5, 4.1, 6 — **done**
+
+Ten commits on `ios-ready`, nothing pushed. The machine was macOS 12.7.6 with no Xcode, no Simulator,
+and no device, which is what every waiver below comes down to.
+
+**Completed**
+
+- **Phase 1** — `native/ios/AstroPitch.xcodeproj` committed: one target, iPhone-only, iOS 16.0,
+  `com.ramramstudios.astropitch`, checked-in Info.plist, shared scheme. `www/` is a folder reference; a
+  group would flatten `src/audio/*.js` into the bundle root and launch to a blank screen. A "Sync www"
+  run-script phase with `alwaysOutOfDate = 1` sits ahead of Copy Bundle Resources.
+- **Phase 2** — `UILaunchScreen` dict, `armv7` key deleted, `ITSAppUsesNonExemptEncryption = false`,
+  `UIBackgroundModes` removed, `PrivacyInfo.xcprivacy`, asset catalogue with a real 1024 icon, OTA
+  directory excluded from iCloud backup.
+- **Version drift found and fixed.** `CFBundleShortVersionString` was `1.0` against `bundle.json`'s
+  `1.0.0`. All three copies now say `1.0.0` (`sw.js` `CACHE_NAME` is `astropitch-1.0.0`) and
+  `tests/native.test.mjs` holds them together — this was exactly the drift Phase 1.4 existed to catch.
+- **Phase 3.1** — scroll bounce off on both axes.
+- **Phase 3.2** — haptics: `impact` on a sign boundary, `selection` per whole degree, wrap-safe, capped
+  at 4 ticks per frame so a flick cannot queue haptics that outlive the gesture. Prepared generators as
+  stored properties on the Swift side.
+- **Latent bridge bug found and fixed.** `postToNative` matched only the Android `setPlaying` / `ota`
+  branches, so a haptic (or share) payload fell through both without reaching the webkit handler — i.e.
+  silently dead on the one platform with a Taptic engine. Now covered by a test.
+- **Phase 3.4** — chart PNG to `UIActivityViewController`. The wheel is styled entirely from
+  `styles.css`, so the substance is baking computed styles onto the clone; only the ~19 properties a
+  static SVG can act on, since whole computed styles across a few hundred nodes is megabytes of layout
+  the image ignores.
+- **Phase 3.5** (the stretch item) — WAV bounce, Bloom and Scalar only. See the waiver below.
+- **Phase 6** — `research/ios-store-listing.md` with counted character limits; `docs/privacy.html`.
+- `CLAUDE.md`, `README.md`, `native/ios/README.md`, and `research/ios-app-store-plan.md` all updated to
+  match what shipped.
+
+**Measured** — `tests/bounce.test.html`, the check no pure test can make: Bloom 18.63 s, peak 0.950,
+94 % of samples above the floor; Scalar 18.48 s, peak 0.962, 94 %. Both start and end at digital
+silence, neither clips, and the shared engine never acquires a context.
+
+**Waived**
+
+- **Nothing has been through a Swift compiler.** No Xcode on this machine. The project graph is verified
+  by `plutil -lint` plus a walk (29 unique ids, no dangling references, phases in order, every file
+  reference resolving on disk) and by `tests/native.test.mjs` — but that is text and plist assertions,
+  not a build. Treat the first Xcode build as the real check.
+- **Phase 0.1 was assumed, not measured.** Background audio is taken to die at ~30 s on the strength of
+  the known WKWebView behaviour (WebKit bug 203293). Needs a device. If audio survives, the decision
+  inverts: restore `UIBackgroundModes` *and* add Phase 3.3.
+- **Drone and Melodic cannot be bounced.** They are open-ended loops on a 25 ms audio-clock ticker that
+  an offline render never advances. Rendering them means shimming the page's global `setInterval` /
+  `setTimeout` and draining a queue from `ctx.suspend()` — which `tests/polyphony.test.html` does
+  because a test harness may own the page's globals. An app patching global timers underneath a live
+  transport to produce a file is not a trade worth making, so they throw instead and the button names
+  the mode it will render.
+- **Share and Bounce have had no manual QA.** Covered by pure-logic tests, and the bounce by a real
+  offline render, but nobody has tapped either button in a browser, let alone on a phone.
+- **The app icon has not been seen at icon size.** It is real artwork (the AP monogram from the repo's
+  own `favicon.png`, 1024², sRGB, no alpha), not a placeholder — but it has never been on a home screen.
+- Phases 4.2–4.3 (device QA), 5 (enrolment), 6.4–6.5 and 7 (screenshots, upload, submit): all need a
+  device, a developer account, or App Store Connect. Out of scope for this run by design.
+
+**Note on the stability suite.** It first came back red against the 180 s budget `CLAUDE.md` documented,
+having reached "Voice and node census: 20 enter/exit cycles" with `drops 0` and `ratio 1.000` on every
+check printed before the cut. Re-run at 600 s it passes clean: polyphony never exceeded 24/24 across
+five hide/show, interrupt/resume and rebuild cycles, live node count flat (baseline 26, max 28, slack
+8). Not a regression — this work touches none of `engine.js`, `voices.js`, `performer.js`,
+`scheduler.js`, `palettes.js`, or `tuning.js`, the suite's entire subject. The audio-stability run
+above had already used 300 s for the same suite, so 180 was optimistic before this branch existed;
+`CLAUDE.md` now says 600.
+
+**Confirmed green:** all ten node suites (`performer`, `engine`, `mobile`, `ui-state`, `designer`,
+`palettes`, `ephemeris`, `synastry`, `ota`, `native`) and all four browser suites
+(`audio.test.html` 1800, `polyphony.test.html` 2400, `bounce.test.html` 300, `stability.test.html` 600).
+>>>>>>> Stashed changes
