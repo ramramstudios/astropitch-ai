@@ -736,3 +736,130 @@ handle is 44px tall and full width, and whether a line of text fits above the
 grip without pushing the tab strip down is a layout question, not a code one.
 
 **Needs manual QA on device:** all of it, if built.
+
+---
+
+## Item 9 — "First meaningful win" for a fresh mobile visitor — **recommendation**
+
+**What a cold load actually shows** — the roadmap's first bullet said to
+establish this before designing around it, so:
+
+`boot()` branches on `savedChartConfig`. With no `localStorage`, it takes the
+first branch: `state.subject = makeEmptyChart()` with descriptor
+`{ kind: 'cleared' }`, then `render()` and `clearReadout()`. `makeEmptyChart()`
+returns empty `placements`, `byKey`, `aspects` and `anglePoints`, so **the
+wheel arrives with no bodies on it at all.** The Chart tab is active from the
+markup and its form is blank. Play-on-arrival does not work today, and the
+roadmap's "cheapest win is one tap on an already-populated wheel" is
+predicated on a populated wheel that does not exist.
+
+That branch is a *deliberate* decision with a comment on it: "a blank wheel
+and blank form, not somebody else's sample birth data pre-filled in." Any
+recommendation here has to answer that objection rather than step over it.
+
+**The defect worth fixing regardless of what is decided**
+
+On that first load, `clearReadout()` puts up *"Select any sign, planet, or
+aspect to read and hear it."* — on a wheel with no signs, planets or aspects
+on it. **The first sentence a new user reads is an instruction that cannot be
+followed**, and it names no way forward. This is a copy bug, not a design
+question, and it is the single cheapest thing on this list:
+
+```
+ function clearReadout() {
+   const hint = document.createElement('p');
+   hint.className = 'readout-hint';
+-  hint.textContent = 'Select any sign, planet, or aspect to read and hear it.';
++  hint.textContent = state.subject?.placements?.length
++    ? 'Select any sign, planet, or aspect to read and hear it.'
++    : 'Nothing cast yet — try "Sky right now" under Chart, or enter a birth time.';
+   $('#readout').replaceChildren(hint);
+ }
+```
+
+It also covers the same state after the Clear button, where the old wording
+is equally unfollowable. **Recommended unconditionally.**
+
+**Recommendation on the seed itself: seed the sky, but not the way `#nowBtn`
+does it.**
+
+`#nowBtn` ("Sky right now") already casts the current transiting sky, so the
+machinery exists. But its handler also writes `#birthDate`, `#birthTime` and
+`#utcOffset`, calls `syncPlacePresetSelect`, and ends with
+`saveChartConfig()`. Calling it at boot would recreate exactly the objection
+the existing comment raises — the Chart form would arrive pre-filled with a
+date and place the user never typed — and would persist that on the first
+load, so the deliberate blank-first-visit state could never occur again.
+
+The seed should be the cast **only**:
+
+```
+   if (!savedChartConfig) {
+-    state.subject = makeEmptyChart();
+-    state.subjectDescriptor = { kind: 'cleared' };
+-    render();
+-    clearReadout();
++    // The sky right now is nobody's chart, so this is not "somebody else's
++    // birth data pre-filled" — the form stays blank and nothing is saved,
++    // so the next visit re-seeds a fresh sky rather than inheriting this one.
++    const chart = chartFromSkyNow();
++    setSubject(chart, makeChartDescriptor('sky', chart, 'primary'));
++    clearReadout();
+     updateRevertAvailability();
+   }
+```
+
+(`chartFromSkyNow()` being the cast `#nowBtn`'s handler already performs
+before it starts writing form fields; that handler should be refactored to
+call it rather than the logic being duplicated.)
+
+Why this shape:
+
+- **It answers the existing comment rather than overriding it.** The sky
+  right now belongs to nobody. No birth data is pre-filled, the form is left
+  blank, and the Chart tab remains an empty invitation rather than a filled
+  one.
+- **Nothing is persisted.** `saveChartConfig()` is not called, so a reload
+  re-seeds a fresh sky rather than inheriting a stale one, and the first
+  thing the user actually *saves* is still their own chart.
+- **Play-on-arrival then works with no new UI.** `DEFAULT_MODE_ID` is
+  `'bloom'` and the four `button.play` buttons are already in the thumb zone,
+  so the first meaningful action is one tap on a control that is already
+  there.
+- **It survives the two things the roadmap flagged.** `wheel._resetView()`
+  resets only `{ scale, x, y }` and the pointer/pinch/pan state — it does not
+  touch the chart. `applyMode()` calls `setInteractionMode`, `setSheetMode`,
+  `syncSidebarMode` and `onResize`, none of which touch `state.subject`. So
+  the seeded chart survives both the mode flip and a view reset. It is also
+  seeded in `boot()`, before and independent of any mode branch, so it is not
+  a mobile-only state that vanishes when someone uses the Settings layout
+  switch — which was the roadmap's specific worry.
+
+**Tradeoffs, stated plainly**
+
+1. It overrides a deliberate product decision that has a comment defending
+   it. The comment's stated objection is met, but the owner may have meant
+   something broader — "a new user should see that they have not done
+   anything yet" — and if so this is the wrong change and the copy fix above
+   is the whole answer. **This is the part that needs the owner, and it is
+   why nothing here is shipped.**
+2. `chartFromSkyNow` needs an ephemeris computation on the boot path, before
+   first paint. Not measured here.
+3. A seeded chart means `Clear` now produces a state the user can no longer
+   get back to by reloading. Minor, but it is a state transition that did not
+   previously exist.
+4. It weakly undercuts item 1's argument in one direction and strengthens it
+   in another: a populated wheel makes a `peek` default defensible (there is
+   something to look at and hear), but it also means the Chart tab is no
+   longer the obvious first destination. **Decide items 1 and 9 together.**
+
+**Coded far enough to check:** the call graph was traced — `setSubject`,
+`makeChartDescriptor`, `_resetView`, `applyMode`, `boot`'s branch and
+`#nowBtn`'s handler were all read to confirm the seed survives and that the
+form-write and persist can be separated from the cast. No code was written or
+kept.
+
+**Needs manual QA on device:** whether an unexplained populated wheel on a
+first visit reads as "here is something to play with" or as "someone else's
+chart is already here", which is the entire question and is not answerable
+from the source.
